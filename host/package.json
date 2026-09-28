@@ -1,0 +1,14 @@
+{
+  "name": "@manhunt/host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./webrtc": "./src/transport/webrtc.ts"
+  },
+  "dependencies": {
+    "@manhunt/shared": "*",
+    "peerjs": "1.5.5"
+  }
+}
