@@ -2,6 +2,8 @@
 export class Input {
   private readonly down = new Set<string>();
   private readonly pressedOnce = new Set<string>();
+  /** Presses since the last fixed input step (so short taps between steps aren't lost). */
+  private readonly latched = new Set<string>();
   mouseX = 0;
   mouseY = 0;
   readonly buttons = [false, false, false];
@@ -11,7 +13,7 @@ export class Input {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
-    target.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mousemove', this.onMouseMove);
     target.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
     target.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -24,7 +26,10 @@ export class Input {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (this.isTyping(e) || !this.enabled) return;
-    if (!this.down.has(e.code)) this.pressedOnce.add(e.code);
+    if (!this.down.has(e.code)) {
+      this.pressedOnce.add(e.code);
+      this.latched.add(e.code);
+    }
     this.down.add(e.code);
     if (['Space', 'Tab'].includes(e.code)) e.preventDefault();
   };
@@ -48,6 +53,7 @@ export class Input {
     if (!this.enabled) return;
     if (e.button < 3) this.buttons[e.button] = true;
     this.pressedOnce.add(`Mouse${e.button}`);
+    this.latched.add(`Mouse${e.button}`);
   };
 
   private onMouseUp = (e: MouseEvent): void => {
@@ -67,6 +73,13 @@ export class Input {
     this.pressedOnce.clear();
   }
 
+  /** Returns and clears the presses latched since the previous call. */
+  takeLatched(): Set<string> {
+    const out = new Set(this.enabled ? this.latched : []);
+    this.latched.clear();
+    return out;
+  }
+
   axis(): { x: number; y: number } {
     let x = 0;
     let y = 0;
@@ -83,7 +96,7 @@ export class Input {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
     window.removeEventListener('mouseup', this.onMouseUp);
-    this.target.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mousemove', this.onMouseMove);
     this.target.removeEventListener('mousedown', this.onMouseDown);
   }
 }

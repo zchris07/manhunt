@@ -47,6 +47,7 @@ export const BALANCE = {
     walk: 120,
     run: 190,
     crouch: 70,
+    crawl: 32,
     /** Speed burst after being hit (DBD-style), multiplier and duration. */
     hitHasteMul: 1.35,
     hitHasteTime: 1.8,
@@ -142,6 +143,19 @@ export const BALANCE = {
     flaresPerSurvivor: 0.75,
     bottlesPerSurvivor: 1.0,
     batteriesPerSurvivor: 0.75,
+  },
+
+  /** Interaction reach (centre-to-centre distance). */
+  reach: {
+    teammate: 70,
+    generator: 78,
+    gate: 58,
+    loot: 48,
+    hide: 58,
+    barricade: 80,
+    window: 50,
+    stake: 78,
+    pickup: 68,
   },
 
   trails: {

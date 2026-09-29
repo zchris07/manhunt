@@ -1,9 +1,4 @@
-import { Application } from 'pixi.js';
+import './ui/styles.css';
+import { App } from './app/App';
 
-async function boot(): Promise<void> {
-  const app = new Application();
-  await app.init({ background: '#050605', resizeTo: window, preference: 'webgl' });
-  document.getElementById('game')!.appendChild(app.canvas);
-}
-
-void boot();
+void new App().start();
