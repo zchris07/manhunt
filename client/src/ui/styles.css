@@ -135,8 +135,11 @@ input[type='text']:focus {
 
 .title {
   font-family: var(--title);
-  font-size: clamp(48px, 10vw, 92px);
-  letter-spacing: 0.18em;
+  font-size: clamp(36px, 8.5vw, 74px);
+  letter-spacing: 0.14em;
+  /* letter-spacing adds space after the last letter; indent by the same to stay centred */
+  text-indent: 0.14em;
+  white-space: nowrap;
   color: #c9c0aa;
   text-shadow:
     0 0 18px rgba(155, 28, 22, 0.55),
@@ -195,6 +198,10 @@ input[type='text']:focus {
 
 .field {
   margin: 12px 0;
+}
+
+.field > input[type='text'] {
+  width: 100%;
 }
 
 .field label {
