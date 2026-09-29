@@ -10,7 +10,7 @@ export function updateSenses(w: World, dt: number): void {
 
   for (const p of w.order) {
     if (p.role === 'hunter') {
-      p.noise = p.gait === Gait.Idle ? 120 : BALANCE.hunter.noise;
+      p.noise = p.gait === Gait.Idle ? BALANCE.noise.hunterIdle : BALANCE.hunter.noise;
       continue;
     }
     if (p.role !== 'survivor') continue;
@@ -20,9 +20,9 @@ export function updateSenses(w: World, dt: number): void {
       else noise = p.gait === Gait.Run ? S.noise.run : p.gait === Gait.Walk ? S.noise.walk : p.gait === Gait.Crouch ? S.noise.crouch : S.noise.idle;
       if (p.action === Action.Repair) noise = Math.max(noise, BALANCE.objectives.repairNoise);
       if (p.action === Action.OpenGate) noise = Math.max(noise, BALANCE.objectives.gateNoise);
-      if (p.health === Health.Wounded && p.hideState === 0) noise = Math.max(noise, 110);
+      if (p.health === Health.Wounded && p.hideState === 0) noise = Math.max(noise, BALANCE.noise.woundedMin);
     } else if (p.health === Health.Downed) {
-      noise = 140;
+      noise = BALANCE.noise.downed;
     }
     p.noise = noise;
 
@@ -90,14 +90,14 @@ export function updateSenses(w: World, dt: number): void {
       p.breath = Math.max(0, p.breath - dt / HD.breathMax);
       if (p.breath <= 0) {
         p.holdingBreath = false;
-        p.gaspCd = 2;
+        p.gaspCd = HD.gaspCooldown;
         w.noise(p.move.x, p.move.y, HD.gaspNoise, 'gasp', true);
       }
     } else {
       p.holdingBreath = false;
       p.breath = Math.min(1, p.breath + (HD.breathRegen * dt) / HD.breathMax);
     }
-    if (p.hideState === 2 && !p.holdingBreath && Math.floor(w.time / 1.5) !== Math.floor((w.time - dt) / 1.5)) {
+    if (p.hideState === 2 && !p.holdingBreath && Math.floor(w.time / HD.breathingIntervalSec) !== Math.floor((w.time - dt) / HD.breathingIntervalSec)) {
       for (const h of hunters) {
         if (Math.hypot(h.move.x - p.move.x, h.move.y - p.move.y) < HD.breathingHearRadius) {
           w.emit([h.id], { k: 'breath', x: Math.round(p.move.x), y: Math.round(p.move.y) });

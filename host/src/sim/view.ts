@@ -30,7 +30,7 @@ export function visionFor(w: World, v: SimPlayer): { cone: ViewCone; prox: numbe
   if (v.role === 'hunter') {
     const hv = BALANCE.hunter.vision;
     const blind = v.blindT > 0 ? BALANCE.tools.flare.visionMul : 1;
-    return { cone: { x, y, dir: v.facing, halfAngle: hv.coneHalfAngleDeg * DEG, range: hv.range * blind }, prox: hv.proximity * (blind < 1 ? 0.5 : 1) };
+    return { cone: { x, y, dir: v.facing, halfAngle: hv.coneHalfAngleDeg * DEG, range: hv.range * blind }, prox: hv.proximity * (blind < 1 ? BALANCE.hunter.blindProximityMul : 1) };
   }
   if (v.hideState === 2 && v.hideSpot >= 0) {
     const spot = w.map.hidingSpots[v.hideSpot];
@@ -38,7 +38,7 @@ export function visionFor(w: World, v: SimPlayer): { cone: ViewCone; prox: numbe
     return { cone: { x, y, dir: spot.facing, halfAngle: pk.coneHalfAngleDeg * DEG, range: pk.range }, prox: pk.proximity };
   }
   const sv = BALANCE.survivor.vision;
-  const k = v.health === Health.Downed ? 0.6 : 1;
+  const k = v.health === Health.Downed ? BALANCE.survivor.downedVisionMul : 1;
   return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG, range: sv.range * k }, prox: sv.proximity };
 }
 
@@ -179,7 +179,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     let flags = 0;
     if (g.repaired) flags |= GenFlag.Repaired;
     const def = w.map.generators[i];
-    const known = survivorSide || (v ? Math.hypot(def.x - v.move.x, def.y - v.move.y) < 750 : false);
+    const known = survivorSide || (v ? Math.hypot(def.x - v.move.x, def.y - v.move.y) < BALANCE.hunter.genKnownRadius : false);
     if (!known) return { progress: g.repaired ? 1 : 0, flags };
     flags |= GenFlag.Known;
     if (g.workers > 0) flags |= GenFlag.BeingRepaired;

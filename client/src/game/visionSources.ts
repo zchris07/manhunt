@@ -56,7 +56,7 @@ export class VisionSources {
       }
     } else {
       const cfg = v.hunter ? BALANCE.hunter.vision : BALANCE.survivor.vision;
-      const k = v.blind ? BALANCE.tools.flare.visionMul : v.downed ? 0.6 : 1;
+      const k = v.blind ? BALANCE.tools.flare.visionMul : v.downed ? BALANCE.survivor.downedVisionMul : 1;
       const range = cfg.range * k;
       own.push({
         poly: this.vis.compute({ x: v.x, y: v.y, dir: v.facing, halfAngle: cfg.coneHalfAngleDeg * DEG, range }, []),
@@ -64,7 +64,7 @@ export class VisionSources {
         oy: v.y,
         range,
       });
-      const prox = cfg.proximity * (v.blind ? 0.5 : 1);
+      const prox = cfg.proximity * (v.blind ? BALANCE.hunter.blindProximityMul : 1);
       own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: prox }, []), ox: v.x, oy: v.y, range: prox, intensity: 0.8 });
     }
 

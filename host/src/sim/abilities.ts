@@ -29,7 +29,7 @@ export function tryPulse(w: World, h: SimPlayer): void {
   }
   w.emit(hunterAudience(w, h), { k: 'pulse', echoes });
   // Survivors nearby hear the ping: fair warning.
-  w.noise(h.move.x, h.move.y, 900, 'pulse', false);
+  w.noise(h.move.x, h.move.y, BALANCE.noise.pulse, 'pulse', false);
 }
 
 /** Bloodhound: footprints and blood trails become visible to Zach for a few seconds. */
@@ -38,7 +38,7 @@ export function tryBloodhound(w: World, h: SimPlayer): void {
   h.bloodhoundCd = H.bloodhound.cooldown;
   h.bloodhoundT = H.bloodhound.duration;
   sendTrail(w, h);
-  w.noise(h.move.x, h.move.y, 300, 'sniff', false);
+  w.noise(h.move.x, h.move.y, BALANCE.noise.sniff, 'sniff', false);
 }
 
 function sendTrail(w: World, h: SimPlayer): void {
@@ -61,16 +61,16 @@ export function tryVaultSmash(w: World, h: SimPlayer): void {
   if (bi >= 0) {
     w.setBarricade(bi, BarricadeState.Broken);
     const b = w.map.barricades[bi];
-    w.noise(b.x, b.y, 700, 'smash', false);
+    w.noise(b.x, b.y, BALANCE.noise.smash, 'smash', false);
     h.smashCd = H.vaultSmash.cooldown;
     h.move.slowT = Math.max(h.move.slowT, H.vaultSmash.time);
-    h.move.slowMul = Math.min(h.move.slowMul, 0.6);
+    h.move.slowMul = Math.min(h.move.slowMul, H.smashBreakSlowMul);
     return;
   }
   const wi = nearbyWindow(w, h);
   if (wi >= 0 && startVault(w, h, wi, null, true)) {
     h.smashCd = H.vaultSmash.cooldown;
-    w.noise(w.map.windows[wi].x, w.map.windows[wi].y, 650, 'smash', false);
+    w.noise(w.map.windows[wi].x, w.map.windows[wi].y, BALANCE.noise.windowSmash, 'smash', false);
   }
 }
 

@@ -1,7 +1,16 @@
 import { resolveBalance, type AssignedRole, type LobbySettings, type RolePref } from '@manhunt/shared';
 import type { GameClient, LobbyView } from '../net/GameClient';
 import { inviteLink } from '../net/config';
+import { readMatchLog } from '../net/matchLog';
+import { summarize } from '@manhunt/host';
 import { $, el, esc } from './dom';
+
+/** One-line summary of the host's stored match log (telemetry). */
+function logSummary(): string {
+  const s = summarize(readMatchLog());
+  if (!s.matches) return 'No matches logged yet.';
+  return `${s.matches} match${s.matches === 1 ? '' : 'es'} logged · Zach won ${Math.round(s.hunterWinRate * 100)}% ·`;
+}
 
 export interface LobbyHandlers {
   onLeave(): void;
@@ -64,7 +73,7 @@ export class LobbyScreen {
           <div class="error" id="err"></div>
           <div class="row" style="justify-content:space-between;margin-top:6px">
             <button id="leave">Leave</button>
-            ${this.isHost ? '<button class="linklike" id="log">Download match log</button>' : ''}
+            ${this.isHost ? `<span class="note">${logSummary()} <button class="linklike" id="log">Download match log</button></span>` : ''}
           </div>
         </div>
         <div class="panel" style="width:auto">

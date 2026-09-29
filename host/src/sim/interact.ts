@@ -132,8 +132,10 @@ function survivorPrompts(w: World, p: SimPlayer): void {
     const gi = nearestIndex(w.map.generators, x, y, R.generator, (_g, i) => !w.gens[i].repaired);
     if (gi >= 0) {
       const g = w.gens[gi];
-      if (!g.fuel) set(p.fuel > 0 ? Prompt.InstallFuel : Prompt.NeedParts, gi);
-      else if (!g.wire) set(p.wire > 0 ? Prompt.InstallWire : Prompt.NeedParts, gi);
+      // Parts go in in any order.
+      if (!g.fuel && p.fuel > 0) set(Prompt.InstallFuel, gi);
+      else if (!g.wire && p.wire > 0) set(Prompt.InstallWire, gi);
+      else if (!g.fuel || !g.wire) set(Prompt.NeedParts, gi);
       else if (w.gate.powered) set(Prompt.None, -1);
       else set(Prompt.Repair, gi);
     }
@@ -246,7 +248,7 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         w.startAction(p, Action.Search, H.searchTime, p.promptTarget);
         const occupant = w.players.get(w.hiding[p.promptTarget]);
         if (occupant) occupant.slamWindow = BALANCE.hiding.slamWindow;
-        w.noise(w.map.hidingSpots[p.promptTarget].x, w.map.hidingSpots[p.promptTarget].y, 250, 'search', false);
+        w.noise(w.map.hidingSpots[p.promptTarget].x, w.map.hidingSpots[p.promptTarget].y, BALANCE.noise.search, 'search', false);
         break;
       }
       case Prompt.DamageGen:
@@ -331,7 +333,7 @@ export function startVault(w: World, p: SimPlayer, target: number, cmd: InputCmd
   p.vault = { fx: p.move.x, fy: p.move.y, tx, ty, t: 0, dur };
   w.startAction(p, Action.Vault, dur, target);
   const loud = p.role === 'hunter' || dur <= BALANCE.survivor.fastVaultTime;
-  w.noise(def.x, def.y, loud ? 420 : 160, 'vault', p.role === 'survivor');
+  w.noise(def.x, def.y, loud ? BALANCE.noise.vaultFast : BALANCE.noise.vaultSlow, 'vault', p.role === 'survivor');
   return true;
 }
 
@@ -383,7 +385,7 @@ export function updateInteractions(w: World, dt: number): void {
             g.wire = true;
             p.wire--;
           }
-          w.noise(w.map.generators[p.actionTarget].x, w.map.generators[p.actionTarget].y, 200, 'install', true);
+          w.noise(w.map.generators[p.actionTarget].x, w.map.generators[p.actionTarget].y, BALANCE.noise.install, 'install', true);
           p.action = Action.None;
         }
         continue;
@@ -497,7 +499,7 @@ export function updateInteractions(w: World, dt: number): void {
         if (w.barricades[p.actionTarget] === BarricadeState.Down) {
           w.setBarricade(p.actionTarget, BarricadeState.Broken);
           const b = w.map.barricades[p.actionTarget];
-          w.noise(b.x, b.y, 700, 'smash', false);
+          w.noise(b.x, b.y, BALANCE.noise.smash, 'smash', false);
         }
         continue;
       }
@@ -511,7 +513,7 @@ export function updateInteractions(w: World, dt: number): void {
           g.regressing = true;
           p.stats.gensDamaged++;
           const def = w.map.generators[p.actionTarget];
-          w.noise(def.x, def.y, 500, 'gen_kick', false);
+          w.noise(def.x, def.y, BALANCE.noise.genKick, 'gen_kick', false);
         }
         continue;
       }

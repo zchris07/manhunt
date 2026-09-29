@@ -52,6 +52,7 @@ export const BALANCE = {
     hitHasteMul: 1.35,
     hitHasteTime: 1.8,
     vision: { coneHalfAngleDeg: 50, range: 620, proximity: 95 },
+    downedVisionMul: 0.6,
     /** Hearing radius of each movement mode: how far away others can hear you. */
     noise: { idle: 0, crouch: 45, walk: 170, run: 430 },
     wiggleTime: 16,
@@ -95,6 +96,14 @@ export const BALANCE = {
     stakeTime: 1.2,
     chaseRange: 520,
     chaseLoseSec: 5,
+    windupSlowMul: 0.85,
+    hitSlowFraction: 0.75,
+    missSlowTime: 0.45,
+    wiggleStun: 1.5,
+    smashBreakSlowMul: 0.6,
+    /** Hunters only learn generator progress within this distance. */
+    genKnownRadius: 750,
+    blindProximityMul: 0.5,
   },
 
   hiding: {
@@ -110,11 +119,13 @@ export const BALANCE = {
     slamStun: 1.5,
     peek: { coneHalfAngleDeg: 28, range: 420, proximity: 40 },
     grassPeek: { coneHalfAngleDeg: 180, range: 150, proximity: 150 },
+    breathingIntervalSec: 1.5,
+    gaspCooldown: 2,
   },
 
   tools: {
     flare: { radius: 190, blind: 3, burnTime: 10, lightRadius: 320, visionMul: 0.3 },
-    flash: { holdTime: 2.0, range: 360, halfAngleDeg: 14, blind: 2.5 },
+    flash: { holdTime: 2.0, range: 360, halfAngleDeg: 14, blind: 2.5, decayPerSec: 0.5 },
     barricade: { stun: 4, slamRadius: 60, breakTime: 2.2, dropTime: 0.2 },
     bottle: { maxRange: 420, flightTime: 0.7, noiseRadius: 900, decaySec: 4 },
     stunImmunity: 6,
@@ -128,7 +139,21 @@ export const BALANCE = {
     repairNoise: 520,
     regressPerSec: 0.25 / 60,
     damageRegressInstant: 0.08,
-    skillCheck: { chancePerSec: 0.1, needleTime: 1.1, zoneSize: 0.14, greatSize: 0.04, greatBonus: 0.02, failPenalty: 0.1, failNoise: 1100, responseGraceMs: 1500 },
+    skillCheck: {
+      chancePerSec: 0.1,
+      warnMs: 650,
+      needleTime: 1.1,
+      zoneStart: [0.4, 0.82] as readonly [number, number],
+      zoneSize: 0.14,
+      greatSize: 0.04,
+      greatBonus: 0.02,
+      failPenalty: 0.1,
+      failNoise: 1100,
+      responseGraceMs: 1500,
+      /** Answers faster than this fraction of the needle sweep (minus latency slack) are rejected. */
+      minAnswerFraction: 0.3,
+      latencySlackMs: 250,
+    },
     gateOpenTime: 20,
     gateNoise: 900,
     extraGenerators: 2,
@@ -143,6 +168,29 @@ export const BALANCE = {
     flaresPerSurvivor: 0.75,
     bottlesPerSurvivor: 1.0,
     batteriesPerSurvivor: 0.75,
+  },
+
+  /** Hearing radius of discrete sound events (how far a noise event carries). */
+  noise: {
+    pulse: 900,
+    sniff: 300,
+    smash: 700,
+    windowSmash: 650,
+    swing: 220,
+    scream: 850,
+    grunt: 500,
+    search: 250,
+    vaultFast: 420,
+    vaultSlow: 160,
+    install: 200,
+    genKick: 500,
+    genDone: 2600,
+    gateOpen: 3000,
+    barricade: 750,
+    flare: 520,
+    hunterIdle: 120,
+    downed: 140,
+    woundedMin: 110,
   },
 
   /** Interaction reach (centre-to-centre distance). */

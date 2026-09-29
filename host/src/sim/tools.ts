@@ -56,7 +56,7 @@ export function dropBarricade(w: World, p: SimPlayer, bi: number): void {
     if (d2 < (T.barricade.slamRadius + h.radius) ** 2) stunned.push(h);
   }
   w.setBarricade(bi, BarricadeState.Down);
-  w.noise(b.x, b.y, 750, 'barricade', true);
+  w.noise(b.x, b.y, BALANCE.noise.barricade, 'barricade', true);
   for (const h of stunned) {
     if (stunHunter(w, h, T.barricade.stun, 'barricade', p)) w.feed(`${p.name} slammed a barricade on ${h.name}`);
   }
@@ -77,7 +77,7 @@ export function useTool(w: World, p: SimPlayer, cmd: InputCmd): void {
   if (p.tool === ToolKind.None || p.toolCount <= 0 || p.action !== Action.None) return;
   if (p.tool === ToolKind.Flare) {
     w.flares.push({ id: w.allocEntityId(), x: p.move.x, y: p.move.y, t: T.flare.burnTime, owner: p.id });
-    w.noise(p.move.x, p.move.y, 520, 'flare', true);
+    w.noise(p.move.x, p.move.y, BALANCE.noise.flare, 'flare', true);
     for (const h of w.order) {
       if (h.role !== 'hunter') continue;
       if (Math.hypot(h.move.x - p.move.x, h.move.y - p.move.y) > T.flare.radius) continue;
@@ -134,7 +134,7 @@ export function updateTools(w: World, dt: number): void {
       break;
     }
     if (!target) {
-      p.flashHold = Math.max(0, p.flashHold - dt * 0.5);
+      p.flashHold = Math.max(0, p.flashHold - dt * T.flash.decayPerSec);
       continue;
     }
     p.flashTarget = target.id;

@@ -8,9 +8,9 @@ const O = BALANCE.objectives;
 function issueSkillCheck(w: World, p: SimPlayer): void {
   const sc = O.skillCheck;
   const id = w.skillSeq++;
-  const delayMs = 650;
+  const delayMs = sc.warnMs;
   const needleMs = sc.needleTime * 1000;
-  const zone = w.rng.range(0.4, 0.82);
+  const zone = w.rng.range(sc.zoneStart[0], sc.zoneStart[1]);
   p.skill = { id, issued: w.time, deadline: w.time + (delayMs + needleMs + sc.responseGraceMs) / 1000 };
   w.emit([p.id], { k: 'skill', id, delayMs, zone, size: sc.zoneSize, great: sc.greatSize, needleMs });
 }
@@ -20,7 +20,8 @@ export function skillCheckResult(w: World, p: SimPlayer, id: number, result: 'mi
   if (!p.skill || p.skill.id !== id) return;
   // Reject answers that arrive before the needle could have reached the zone.
   const elapsed = (w.time - p.skill.issued) * 1000;
-  if (result !== 'miss' && elapsed < 650 + O.skillCheck.needleTime * 1000 * 0.3 - 250) result = 'miss';
+  const sc = O.skillCheck;
+  if (result !== 'miss' && elapsed < sc.warnMs + sc.needleTime * 1000 * sc.minAnswerFraction - sc.latencySlackMs) result = 'miss';
   p.skill = null;
   if (p.action !== Action.Repair || p.actionTarget < 0) return;
   const g = w.gens[p.actionTarget];
@@ -60,7 +61,7 @@ export function updateObjectives(w: World, dt: number): void {
       g.regressing = false;
       for (const p of w.order) if (p.action === Action.Repair && p.actionTarget === gi) w.cancelAction(p);
       w.emit('all', { k: 'genDone', id: gi });
-      w.noise(def.x, def.y, 2600, 'gen_done', false);
+      w.noise(def.x, def.y, BALANCE.noise.genDone, 'gen_done', false);
       const repaired = w.gens.filter((x) => x.repaired).length;
       w.feed(`Generator restored (${Math.min(repaired, w.balance.requiredGenerators)}/${w.balance.requiredGenerators})`);
       if (repaired >= w.balance.requiredGenerators && !w.gate.powered) {
@@ -92,7 +93,7 @@ export function updateObjectives(w: World, dt: number): void {
         w.geo.setDynamicActive(w.map.gate.dyn, false);
         for (const p of openers) w.cancelAction(p);
         w.emit('all', { k: 'gateOpen' });
-        w.noise(w.map.gate.x, w.map.gate.y, 3000, 'gate_open', false);
+        w.noise(w.map.gate.x, w.map.gate.y, BALANCE.noise.gateOpen, 'gate_open', false);
         w.feed('The gate is open. RUN.');
       }
     }

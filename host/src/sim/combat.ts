@@ -11,7 +11,7 @@ export function attemptAttack(_w: World, h: SimPlayer): void {
   h.attackFromLunge = h.move.lungeT > 0;
   if (!h.attackFromLunge) {
     h.move.slowT = Math.max(h.move.slowT, H.attack.windup);
-    h.move.slowMul = Math.min(h.move.slowMul, 0.85);
+    h.move.slowMul = Math.min(h.move.slowMul, H.windupSlowMul);
   }
 }
 
@@ -45,15 +45,15 @@ function resolveAttack(w: World, h: SimPlayer): void {
   if (best) {
     damageSurvivor(w, best, h);
     h.attackCd = H.attack.hitCooldown;
-    h.move.slowT = H.attack.hitCooldown * 0.75;
+    h.move.slowT = H.attack.hitCooldown * H.hitSlowFraction;
     h.move.slowMul = H.attack.hitSlowMul;
     h.move.lungeT = 0;
     h.lungeHit = true;
   } else {
     h.attackCd = H.attack.missCooldown;
-    h.move.slowT = Math.max(h.move.slowT, 0.45);
+    h.move.slowT = Math.max(h.move.slowT, H.missSlowTime);
     h.move.slowMul = Math.min(h.move.slowMul, H.attack.missSlowMul);
-    w.noise(h.move.x, h.move.y, 220, 'swing', false);
+    w.noise(h.move.x, h.move.y, BALANCE.noise.swing, 'swing', false);
   }
 }
 
@@ -63,7 +63,7 @@ export function damageSurvivor(w: World, q: SimPlayer, h: SimPlayer): void {
   if (q.action !== Action.Vault) w.cancelAction(q);
   h.stats.hits++;
   w.emit('all', { k: 'hit', victim: q.id, by: h.id, x: Math.round(q.move.x), y: Math.round(q.move.y) });
-  w.noise(q.move.x, q.move.y, 850, 'scream', true);
+  w.noise(q.move.x, q.move.y, BALANCE.noise.scream, 'scream', true);
   if (q.health === Health.Healthy) {
     q.health = Health.Wounded;
     q.move.hasteT = BALANCE.survivor.hitHasteTime;
@@ -83,7 +83,7 @@ export function carrySurvivor(w: World, h: SimPlayer, q: SimPlayer): void {
   q.carriedBy = h.id;
   q.wiggle = 0;
   h.carrying = q.id;
-  w.noise(h.move.x, h.move.y, 500, 'grunt', false);
+  w.noise(h.move.x, h.move.y, BALANCE.noise.grunt, 'grunt', false);
 }
 
 /** Drops the carried survivor (wiggle free, stun, blind). They get a burst of speed. */
@@ -177,7 +177,7 @@ export function updateCombat(w: World, dt: number): void {
       if (p.lastCmd.moveX || p.lastCmd.moveY) p.wiggle += dt / BALANCE.survivor.wiggleTime;
       if (p.wiggle >= 1) {
         dropCarried(w, h);
-        h.stunT = Math.max(h.stunT, 1.5);
+        h.stunT = Math.max(h.stunT, H.wiggleStun);
         h.stats.stunnedTimes++;
         w.emit('all', { k: 'stun', target: h.id, kind: 'wiggle' });
       }

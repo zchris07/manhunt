@@ -15,6 +15,7 @@ import {
 } from '@manhunt/shared';
 import { World } from '../sim/World';
 import { skillCheckResult } from '../sim/objectives';
+import { canSee } from '../sim/view';
 import type { SimPlayer } from '../sim/player';
 
 /**
@@ -33,11 +34,16 @@ interface BotState {
   stuckFor: number;
   seq: number;
   wander: { x: number; y: number } | null;
+  lastButtons: number;
+  /** Chase target the hunter gave up on (unreachable) and until when. */
+  ignore: { id: number; until: number } | null;
+  progressAt: { x: number; y: number; t: number };
 }
 
 export class BotDirector {
   private readonly nav: NavGrid;
   private readonly bots = new Map<number, BotState>();
+  private readonly lastSeen = new Map<number, number>();
   private readonly rng: Rng;
 
   constructor(
@@ -45,14 +51,28 @@ export class BotDirector {
     seed: number,
     private readonly skill = { good: 0.8, great: 0.08 },
   ) {
-    this.nav = new NavGrid(w.geo, 30, 17);
+    this.nav = new NavGrid(w.geo, 25, 15);
     this.rng = new Rng(seed);
   }
 
   private bot(p: SimPlayer): BotState {
     let b = this.bots.get(p.id);
     if (!b) {
-      b = { path: [], pathIdx: 0, goalX: p.move.x, goalY: p.move.y, repathAt: 0, lastX: p.move.x, lastY: p.move.y, stuckFor: 0, seq: 0, wander: null };
+      b = {
+        path: [],
+        pathIdx: 0,
+        goalX: p.move.x,
+        goalY: p.move.y,
+        repathAt: 0,
+        lastX: p.move.x,
+        lastY: p.move.y,
+        stuckFor: 0,
+        seq: 0,
+        wander: null,
+        lastButtons: 0,
+        ignore: null,
+        progressAt: { x: p.move.x, y: p.move.y, t: 0 },
+      };
       this.bots.set(p.id, b);
     }
     return b;
@@ -66,7 +86,7 @@ export class BotDirector {
     if (goalMoved || t >= b.repathAt || b.pathIdx * 2 >= b.path.length) {
       b.goalX = x;
       b.goalY = y;
-      b.path = this.nav.findPath(p.move.x, p.move.y, x, y, 30000) ?? [x, y];
+      b.path = this.nav.findPath(p.move.x, p.move.y, x, y, 70000) ?? [x, y];
       b.pathIdx = 0;
       b.repathAt = t + 1.2 + this.rng.next() * 0.6;
     }
@@ -133,12 +153,13 @@ export class BotDirector {
   survivorInput(p: SimPlayer): Omit<InputCmd, 'seq'> {
     const w = this.w;
     // Answer skill checks with human-like timing (instant answers are rejected by the host).
-    if (p.skill && w.time - p.skill.issued > 0.65 + BALANCE.objectives.skillCheck.needleTime * 0.6) {
+    if (p.skill && w.time - p.skill.issued > BALANCE.objectives.skillCheck.warnMs / 1000 + BALANCE.objectives.skillCheck.needleTime * 0.6) {
       const r = this.rng.next();
       skillCheckResult(w, p, p.skill.id, r < this.skill.great ? 'great' : r < this.skill.great + this.skill.good ? 'good' : 'miss');
     }
     if (p.health === Health.Carried) return { buttons: 0, moveX: this.rng.range(-1, 1), moveY: 1, aim: 0, aimDist: 0 };
     if (p.health !== Health.Healthy && p.health !== Health.Wounded && p.health !== Health.Downed) return { buttons: 0, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
+    if (p.hideState === 2) return { buttons: p.terror < 0.2 && this.rng.chance(0.05) ? Btn.Interact : Btn.HoldBreath, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
     if (p.hideState !== 0) return { buttons: 0, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
     const hunter = this.nearest(p, this.hunters().map((h) => ({ x: h.move.x, y: h.move.y, h })));
     const hd = hunter ? Math.hypot(hunter.x - p.move.x, hunter.y - p.move.y) : Infinity;
@@ -155,6 +176,16 @@ export class BotDirector {
       if (hd < 150 && p.prompt2 === Prompt.DropBarricade) return { buttons: Btn.Vault, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
       if (hd < 200 && p.prompt2 === Prompt.Vault && this.rng.chance(0.5)) return { buttons: Btn.Vault | Btn.Run, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
       if (hd < 180 && p.tool !== 0 && this.rng.chance(0.3)) return { buttons: Btn.UseItem, moveX: 0, moveY: 0, aim: Math.atan2(hunter.y - p.move.y, hunter.x - p.move.x), aimDist: 200 };
+      // Loop: head for a window or standing barricade that isn't toward Zach.
+      const loops = [
+        ...w.map.windows.map((o) => ({ x: o.x, y: o.y })),
+        ...w.map.barricades.filter((_o, i) => w.barricades[i] === 0).map((o) => ({ x: o.x, y: o.y })),
+      ].filter((o) => {
+        const dp = Math.hypot(o.x - p.move.x, o.y - p.move.y);
+        return dp < 380 && dp > 25 && Math.hypot(o.x - hunter.x, o.y - hunter.y) > dp + 120;
+      });
+      const loopTarget = this.nearest(p, loops);
+      if (loopTarget && hd < 380) return this.goTo(p, loopTarget.x, loopTarget.y, Btn.Run, 20, Btn.Vault | Btn.Run);
       const b = this.bot(p);
       if (!b.wander || Math.hypot(b.wander.x - p.move.x, b.wander.y - p.move.y) < 80 || this.rng.chance(0.01)) {
         const a = Math.atan2(p.move.y - hunter.y, p.move.x - hunter.x) + this.rng.range(-0.9, 0.9);
@@ -162,12 +193,25 @@ export class BotDirector {
       }
       return this.goTo(p, b.wander.x, b.wander.y, Btn.Run);
     }
-    // Help teammates.
+    // Heartbeat but not spotted: stop what you're doing, hide if a spot is close, otherwise
+    // crouch away from the hunter.
+    if (hunter && p.terror > 0.3 && (p.action === Action.None || p.action === Action.Repair || p.action === Action.Install)) {
+      const spots = w.map.hidingSpots.filter((h, i) => w.hiding[i] === 0 && Math.hypot(h.exitX - p.move.x, h.exitY - p.move.y) < 220);
+      const spot = this.nearest(p, spots.map((h) => ({ x: h.exitX, y: h.exitY })));
+      if (spot) return this.goTo(p, spot.x, spot.y, Btn.Crouch, 20, Btn.Interact);
+      const a = Math.atan2(p.move.y - hunter.y, p.move.x - hunter.x);
+      return this.goTo(p, clampMap(p.move.x + Math.cos(a) * 300), clampMap(p.move.y + Math.sin(a) * 300), Btn.Crouch);
+    }
+    // Help teammates: the nearest free survivor goes for a rescue.
     for (const q of this.survivors()) {
       if (q === p) continue;
       if (q.health === Health.Staked || q.health === Health.Downed) {
-        const danger = this.hunters().some((h) => Math.hypot(h.move.x - q.move.x, h.move.y - q.move.y) < 350);
-        if (!danger && Math.hypot(q.move.x - p.move.x, q.move.y - p.move.y) < 1800) {
+        const danger = this.hunters().some((h) => Math.hypot(h.move.x - q.move.x, h.move.y - q.move.y) < 300);
+        const myD = Math.hypot(q.move.x - p.move.x, q.move.y - p.move.y);
+        const closer = this.survivors().some(
+          (o) => o !== p && o !== q && (o.health === Health.Healthy || o.health === Health.Wounded) && Math.hypot(q.move.x - o.move.x, q.move.y - o.move.y) < myD,
+        );
+        if (!danger && !closer && myD < 4000) {
           const holding = p.action === Action.Unstake || p.action === Action.Revive;
           return this.goTo(p, q.move.x, q.move.y, Btn.Run, holding ? 999 : 45, Btn.Interact);
         }
@@ -214,11 +258,25 @@ export class BotDirector {
     const prey = this.survivors()
       .filter((q) => (q.health === Health.Healthy || q.health === Health.Wounded) && q.hideState !== 2)
       .map((q) => ({ x: q.move.x, y: q.move.y, q }));
-    // Hunts what it can plausibly perceive: nearby, or noisy (repairing) targets.
+    // Hunts only what a player in its place could perceive: its vision cone, lit areas and
+    // anything loud enough to hear. It remembers the last sighting for a few seconds.
+    const mem = this.bot(h);
     const known = prey.filter((t) => {
+      if (mem.ignore && mem.ignore.id === t.q.id && w.time < mem.ignore.until) return false;
       const d = Math.hypot(t.x - h.move.x, t.y - h.move.y);
-      return (d < 600 && w.geo.hasLineOfSight(h.move.x, h.move.y, t.x, t.y)) || d < t.q.noise;
+      return canSee(w, h, t.x, t.y) || d < t.q.noise;
     });
+    // No real progress for 3 s while chasing: the target is unreachable for now.
+    if (w.time - mem.progressAt.t > 3) {
+      const moved = Math.hypot(h.move.x - mem.progressAt.x, h.move.y - mem.progressAt.y);
+      if (moved < 60 && known.length) mem.ignore = { id: this.nearest(h, known)!.q.id, until: w.time + 6 };
+      mem.progressAt = { x: h.move.x, y: h.move.y, t: w.time };
+    }
+    if (known.length) {
+      const t = this.nearest(h, known)!;
+      mem.wander = { x: t.x, y: t.y };
+      this.lastSeen.set(h.id, w.time);
+    }
     const target = this.nearest(h, known);
     if (target) {
       const d = Math.hypot(target.x - h.move.x, target.y - h.move.y);
@@ -241,15 +299,22 @@ export class BotDirector {
       const pick = busy.length ? this.rng.pick(busy) : this.rng.pick(w.map.generators);
       b.wander = { x: pick.x + this.rng.range(-60, 60), y: pick.y + this.rng.range(-60, 60) };
     }
-    return this.goTo(h, b.wander.x, b.wander.y, 0, 60);
+    const cmd = this.goTo(h, b.wander.x, b.wander.y, 0, 60);
+    return { ...cmd, aim: cmd.aim + Math.sin(w.time * 1.7 + h.id) * 0.9 };
   }
 
   /** Feeds one input to every player and advances the world one tick. */
   step(): void {
+    const EDGE = Btn.Vault | Btn.UseItem | Btn.Attack | Btn.Ability1 | Btn.Ability2 | Btn.Ability3;
     for (const p of this.w.order) {
       const b = this.bot(p);
       const cmd = p.role === 'hunter' ? this.hunterInput(p) : p.role === 'survivor' ? this.survivorInput(p) : { buttons: 0, moveX: 0, moveY: 0, aim: 0, aimDist: 0 };
-      this.w.enqueueInputs(p.id, [{ seq: ++b.seq, ...cmd }]);
+      // Presses only count on the edge: bots release a held button every other tick,
+      // except Interact while an interaction is running (those are hold-to-act).
+      const mask = EDGE | (p.action === Action.None ? Btn.Interact : 0);
+      const buttons = cmd.buttons & ~(b.lastButtons & mask);
+      b.lastButtons = buttons;
+      this.w.enqueueInputs(p.id, [{ seq: ++b.seq, ...cmd, buttons }]);
     }
     this.w.step();
     this.w.events.length = 0;
