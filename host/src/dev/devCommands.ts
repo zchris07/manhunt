@@ -27,6 +27,12 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       p.fuel = 1;
       p.wire = 1;
       break;
+    case 'give':
+      // args: [toolKind (1 flare, 2 bottle), count, batteries]
+      p.tool = (args[0] ?? 0) as typeof p.tool;
+      p.toolCount = args[1] ?? 1;
+      p.flashCharges = Math.max(p.flashCharges, args[2] ?? 0);
+      break;
     case 'gens':
       // Nearly finish the required generators; the objective system completes them next tick.
       for (let i = 0; i < w.balance.requiredGenerators; i++) {

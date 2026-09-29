@@ -32,7 +32,10 @@ export function updateSenses(w: World, dt: number): void {
       if (p.gait === Gait.Run && w.time - p.lastPrint >= BALANCE.trails.footprintEvery) {
         p.lastPrint = w.time;
         w.trails.push({ x: p.move.x, y: p.move.y, t: w.time, kind: 0 });
-        if (Math.floor(w.time * 2) !== Math.floor((w.time - dt) * 2)) w.noises.push({ x: p.move.x, y: p.move.y, t: w.time, kind: 'run', survivor: true });
+      }
+      // Running is loud: Stalker's Pulse hears it twice a second.
+      if (p.gait === Gait.Run && Math.floor(w.time * 2) !== Math.floor((w.time - dt) * 2)) {
+        w.noises.push({ x: p.move.x, y: p.move.y, t: w.time, kind: 'run', survivor: true });
       }
       if ((p.health === Health.Wounded || p.health === Health.Downed) && w.time - p.lastBlood >= BALANCE.trails.bloodEvery) {
         p.lastBlood = w.time;
