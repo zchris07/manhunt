@@ -1,9 +1,15 @@
 // Local PeerJS signaling server for offline/LAN play and end-to-end tests.
-// Usage: node scripts/signal-server.mjs [--port 9000]
+// Usage: node scripts/signal-server.mjs [--port 9000] [--host 0.0.0.0]
 import { PeerServer } from 'peer';
 
-const portArg = process.argv.indexOf('--port');
-const port = portArg > -1 ? Number(process.argv[portArg + 1]) : Number(process.env.PORT ?? 9000);
+function arg(name, fallback) {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > -1 ? process.argv[i + 1] : fallback;
+}
 
-PeerServer({ port, path: '/', allow_discovery: false, proxied: false });
-console.log(`[signal] PeerJS signaling server listening on :${port}`);
+const port = Number(arg('port', process.env.PORT ?? 9000));
+const host = arg('host', process.env.HOST ?? '0.0.0.0');
+
+PeerServer({ port, host, path: '/', allow_discovery: false, proxied: false }, () => {
+  console.log(`[signal] PeerJS signaling server listening on ${host}:${port}`);
+});
