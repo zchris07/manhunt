@@ -101,7 +101,9 @@ export type ClientMessage =
   | { t: 'chat'; text: string }
   | { t: 'skill'; id: number; result: 'miss' | 'good' | 'great' }
   | { t: 'spectate'; dir: 1 | -1 }
-  | { t: 'mapReq' };
+  | { t: 'mapReq' }
+  /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
+  | { t: 'dev'; cmd: string; args: number[] };
 
 /** Messages from the host to a client. */
 export type HostMessage =
@@ -201,6 +203,10 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isInt(v.id, 0, 1e9) && (v.result === 'miss' || v.result === 'good' || v.result === 'great') ? { t: 'skill', id: v.id, result: v.result } : null;
     case 'spectate':
       return v.dir === 1 || v.dir === -1 ? { t: 'spectate', dir: v.dir } : null;
+    case 'dev':
+      return isStr(v.cmd, 16) && Array.isArray(v.args) && v.args.length <= 4 && v.args.every((a) => isNum(a, -1e6, 1e6))
+        ? { t: 'dev', cmd: v.cmd, args: v.args as number[] }
+        : null;
     default:
       return null;
   }

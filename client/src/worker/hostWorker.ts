@@ -19,6 +19,7 @@ scope.addEventListener('message', (e: MessageEvent) => {
       room: m.room,
       now: () => performance.now(),
       handicapMs: m.handicapMs,
+      dev: m.dev === true,
       telemetry: (entry) => scope.postMessage({ type: 'telemetry', entry }),
     });
   } catch (err) {

@@ -213,9 +213,13 @@ function hunterPrompts(w: World, p: SimPlayer): void {
 }
 
 /** Edge-triggered button handling for one input. */
+const HOLD_PROMPTS: readonly Prompt[] = [Prompt.Repair, Prompt.InstallFuel, Prompt.InstallWire, Prompt.Heal, Prompt.Revive, Prompt.Unstake, Prompt.OpenGate];
+
 export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: number): void {
   if (p.role === 'survivor') {
-    if (pressed & Btn.Interact) survivorInteract(w, p);
+    // Holding E starts hold-to-act interactions as soon as they become available.
+    const heldStart = cmd.buttons & Btn.Interact && p.action === Action.None && p.hideState === 0 && HOLD_PROMPTS.includes(p.prompt);
+    if (pressed & Btn.Interact || heldStart) survivorInteract(w, p);
     if (pressed & Btn.Vault && canAct(p) && p.action === Action.None) {
       if (p.prompt2 === Prompt.DropBarricade) dropBarricade(w, p, p.prompt2Target);
       else if (p.prompt2 === Prompt.Vault) startVault(w, p, p.prompt2Target, cmd);

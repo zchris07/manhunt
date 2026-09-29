@@ -31,8 +31,9 @@ export async function hostGame(name: string, token?: string): Promise<Session> {
   const bridge = new HostBridge(worker, transport);
   bridge.onTelemetry((entry) => appendMatchLog(entry));
   bridge.onError((m) => console.error('[host]', m));
-  const handicap = new URLSearchParams(location.search).get('handicap');
-  bridge.init(room, handicap === null ? null : Number(handicap));
+  const params = new URLSearchParams(location.search);
+  const handicap = params.get('handicap');
+  bridge.init(room, handicap === null ? null : Number(handicap), params.get('dev') === '1');
   const client = new GameClient({ transport: maybeLag(bridge.localGuest()), now: () => performance.now(), name, token });
   await client.connect(room);
   return {

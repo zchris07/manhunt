@@ -400,7 +400,7 @@ input[type='text']:focus {
 }
 
 .ability {
-  width: 64px;
+  width: 78px;
   height: 64px;
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid #3a3528;
@@ -409,7 +409,8 @@ input[type='text']:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: -0.02em;
   text-align: center;
   overflow: hidden;
 }

@@ -6,7 +6,7 @@ import { LOCAL_PEER, type GuestTransport, type HostTransport } from './types';
  * GuestTransport that reaches the worker without touching the network.
  */
 export type BridgeToWorker =
-  | { type: 'init'; room: string; handicapMs: number | null }
+  | { type: 'init'; room: string; handicapMs: number | null; dev?: boolean }
   | { type: 'join'; peer: string }
   | { type: 'leave'; peer: string }
   | { type: 'msg'; peer: string; data: Uint8Array };
@@ -97,8 +97,8 @@ export class HostBridge {
     this.worker.postMessage(m);
   }
 
-  init(room: string, handicapMs: number | null): void {
-    this.post({ type: 'init', room, handicapMs });
+  init(room: string, handicapMs: number | null, dev = false): void {
+    this.post({ type: 'init', room, handicapMs, dev });
   }
 
   /** The lobby owner's own connection to the host (no network involved). */

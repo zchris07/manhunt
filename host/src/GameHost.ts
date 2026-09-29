@@ -37,6 +37,7 @@ import { buildView } from './sim/view';
 import { cycleSpectate, skillCheckResult } from './sim/objectives';
 import { createPlayer } from './sim/player';
 import { matchLogEntry, type MatchLogEntry } from './telemetry';
+import { devCommand } from './dev/devCommands';
 
 export interface GameHostOptions {
   transport: HostTransport;
@@ -47,6 +48,8 @@ export interface GameHostOptions {
   handicapMs?: number | null;
   telemetry?: (entry: MatchLogEntry) => void;
   random?: () => number;
+  /** Accept dev/test commands (teleport, finish generators...). Never enable for real games. */
+  dev?: boolean;
 }
 
 interface PeerState {
@@ -291,6 +294,9 @@ export class GameHost {
       }
       case 'mapReq':
         this.sendMap(ps.id);
+        break;
+      case 'dev':
+        if (this.opts.dev && this.world) devCommand(this.world, lp.id, msg.cmd, msg.args);
         break;
     }
   }
