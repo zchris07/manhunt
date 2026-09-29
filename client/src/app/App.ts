@@ -63,6 +63,10 @@ export class App {
     return this.session?.client ?? null;
   }
 
+  get audioStats() {
+    return this.audio?.stats() ?? null;
+  }
+
   get state(): Screen {
     return this.screen;
   }

@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import type { MapData, WallSeg } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import { ChunkedLayer } from './ChunkedLayer';
+import { lightFlicker } from './flicker';
 
 export type BarricadeVisual = 'up' | 'down' | 'broken';
 
@@ -22,7 +23,7 @@ export class MapRenderer {
   private readonly generatorGlows: Sprite[] = [];
   private readonly barricadeSprites: Sprite[] = [];
   private readonly gateSprite: Sprite;
-  private readonly glows: { sprite: Sprite; seed: number; kind: string; base: number }[] = [];
+  private readonly glows: { sprite: Sprite; index: number; kind: string; base: number }[] = [];
 
   constructor(
     readonly map: MapData,
@@ -213,7 +214,7 @@ export class MapRenderer {
       glow.blendMode = 'add';
       glow.alpha = 0.3;
       this.high.add(glow, l.x, l.y);
-      this.glows.push({ sprite: glow, seed: i * 17.3, kind: l.kind, base: 0.3 });
+      this.glows.push({ sprite: glow, index: i, kind: l.kind, base: 0.3 });
     });
   }
 
@@ -250,9 +251,7 @@ export class MapRenderer {
   update(camX: number, camY: number, w: number, h: number, time: number): void {
     this.low.cull(camX, camY, w, h);
     this.high.cull(camX, camY, w, h);
-    for (const g of this.glows) {
-      g.sprite.alpha = g.kind === 'campfire' ? g.base + 0.08 * Math.sin(time * 9 + g.seed) * Math.sin(time * 3.3 + g.seed) : g.base;
-    }
+    for (const g of this.glows) g.sprite.alpha = g.base * lightFlicker(g.kind, time, g.index) * 1.1;
   }
 
   showAll(): void {

@@ -50,7 +50,7 @@ export class VisionSources {
         const step = (half * 2) / SLATS;
         for (let i = 0; i < SLATS; i++) {
           const a = dir - half + step * (i + 0.5);
-          own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: a, halfAngle: step * 0.32, range: pk.range }, []), ox: v.x, oy: v.y, range: pk.range, intensity: 0.9 });
+          own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: a, halfAngle: step * 0.22, range: pk.range }, []), ox: v.x, oy: v.y, range: pk.range, intensity: 1 });
         }
         own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: pk.proximity }, []), ox: v.x, oy: v.y, range: pk.proximity, intensity: 0.5 });
       }

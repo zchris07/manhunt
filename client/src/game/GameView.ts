@@ -24,6 +24,8 @@ import { EntityLayer, type RenderPlayer } from './EntityLayer';
 import { Overlays } from './Overlays';
 import { VisionSources, type LightInfo, type ViewerInfo } from './visionSources';
 import { FogLayer } from './FogLayer';
+import { Particles } from './Particles';
+import { lightFlicker } from '../render/flicker';
 
 const STEP_MS = TICK_DT * 1000;
 
@@ -65,6 +67,12 @@ export class GameView {
   private lastAim = -Math.PI / 2;
   private lastAimDist = 0;
   private renderPos = { x: 0, y: 0 };
+  private readonly particles: Particles;
+  private readonly footTimers = new Map<number, number>();
+  private selfStepT = 0;
+  private readonly lastSelfPos = { x: 0, y: 0 };
+  private shake = 0;
+  private chaseOn = false;
   private readonly resize = (w: number, h: number): void => this.vision.resize(w, h);
   private readonly roleIsHunter: boolean;
 
@@ -76,7 +84,8 @@ export class GameView {
     this.fog = new FogLayer(o.assets, m.map.width, m.map.height);
     this.entities = new EntityLayer(o.assets, m.map, m.players, this.roleIsHunter);
     this.world.addChild(this.mapRenderer.root, this.overlays.decals, this.fog.root);
-    this.entityWorld.addChild(this.entities.root);
+    this.particles = new Particles(o.assets);
+    this.entityWorld.addChild(this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
     this.senses.addChild(this.overlays.senses);
@@ -211,14 +220,21 @@ export class GameView {
         this.overlays.addBlood(e.x, e.y);
         if (e.victim === me) {
           this.damage = 1;
+          this.shake = Math.max(this.shake, 14);
           a.play('hit.self');
-        } else a.play('hit', at(e.x, e.y));
+        } else {
+          a.play('hit', at(e.x, e.y));
+          if (Math.hypot(e.x - this.renderPos.x, e.y - this.renderPos.y) < 300) this.shake = Math.max(this.shake, 6);
+        }
         break;
       case 'down':
         if (e.victim === me) this.hud.center('You are down. Crawl, and wait for help.', 4000);
         break;
       case 'stun':
-        if (e.target === me) this.hud.center(e.kind === 'flash' || e.kind === 'flare' ? 'BLINDED' : 'STUNNED', 1500);
+        if (e.target === me) {
+          this.hud.center(e.kind === 'flash' || e.kind === 'flare' ? 'BLINDED' : 'STUNNED', 1500);
+          this.shake = Math.max(this.shake, 10);
+        }
         a.play(e.kind === 'flash' || e.kind === 'flare' ? 'stun.blind' : 'stun.hit');
         break;
       case 'staked':
@@ -247,7 +263,8 @@ export class GameView {
         a.play('gate.open');
         break;
       case 'chase':
-        if (e.on && !this.roleIsHunter) a.play('stinger');
+        if (e.on && !this.chaseOn && !this.roleIsHunter) a.play('stinger');
+        this.chaseOn = e.on;
         break;
       case 'skill':
         this.skill.begin(e.id, e.delayMs, e.needleMs, e.zone, e.size, e.great, now);
@@ -267,9 +284,16 @@ export class GameView {
         this.overlays.addBreath(e.x, e.y, now);
         a.play('breath', at(e.x, e.y));
         break;
-      case 'noise':
-        a.play(e.s, at(e.x, e.y));
+      case 'noise': {
+        const where = at(e.x, e.y);
+        a.play(e.s, { ...where, radius: e.r });
+        if (e.s === 'gen_explode' || e.s === 'gen_kick') this.particles.burst(e.x, e.y - 10, 40, { speed: 260, life: 0.7 });
+        else if (e.s === 'glass') this.particles.burst(e.x, e.y, 18, { speed: 140, life: 0.4, tint: 0xd8f0e0, size: 0.7 });
+        else if (e.s === 'smash' || e.s === 'barricade') this.particles.burst(e.x, e.y, 14, { speed: 120, life: 0.5, tint: 0x8a6a40, size: 1.2 });
+        const d = Math.hypot(e.x - this.renderPos.x, e.y - this.renderPos.y);
+        if ((e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash') && d < 450) this.shake = Math.max(this.shake, 7 * (1 - d / 450));
         break;
+      }
     }
   }
 
@@ -307,6 +331,66 @@ export class GameView {
     if (s.action === Action.Vault) state |= EF.Vaulting;
     state |= (Gait.Walk & 3) << EF.GaitShift;
     return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0 };
+  }
+
+  private surfaceStep(x: number, y: number): string {
+    return `step.${this.o.client.match!.mw.surfaceAt(x, y)}`;
+  }
+
+  /** Footsteps for everyone audible, generator hums, chase music. */
+  private updateSounds(dt: number, ents: ReturnType<GameClient['interpolated']>, ws: WorldState, s: SelfState, spect: boolean): void {
+    const a = this.o.audio;
+    const m = this.o.client.match!;
+    const geo = m.mw.geo;
+    const lx = this.renderPos.x;
+    const ly = this.renderPos.y;
+    const seen = new Set<number>();
+    for (const e of ents) {
+      if (e.kind !== 0 || e.id === s.id) continue;
+      seen.add(e.id);
+      const gait = (e.state & EF.GaitMask) >> EF.GaitShift;
+      const hunter = (e.state & EF.Hunter) !== 0;
+      if (gait === Gait.Idle) {
+        this.footTimers.set(e.id, 0);
+        continue;
+      }
+      const interval = hunter ? 0.5 : gait === Gait.Run ? 0.3 : gait === Gait.Crouch ? 0.75 : 0.48;
+      const t = (this.footTimers.get(e.id) ?? 0) - dt;
+      if (t <= 0) {
+        const vol = hunter ? 1 : gait === Gait.Run ? 0.75 : gait === Gait.Crouch ? 0.2 : 0.45;
+        const occluded = !geo.hasLineOfSight(lx, ly, e.x, e.y);
+        a.play(hunter ? 'step.heavy' : this.surfaceStep(e.x, e.y), { x: e.x, y: e.y, volume: vol, occluded, radius: hunter ? BALANCE.hunter.noise + 200 : 600 });
+        this.footTimers.set(e.id, interval);
+      } else this.footTimers.set(e.id, t);
+    }
+    for (const id of this.footTimers.keys()) if (!seen.has(id)) this.footTimers.delete(id);
+
+    // Own footsteps from how fast we actually moved.
+    if (!spect && s.health !== Health.Carried && s.hideState === 0) {
+      const speed = Math.hypot(lx - this.lastSelfPos.x, ly - this.lastSelfPos.y) / Math.max(dt, 1e-3);
+      this.selfStepT -= dt;
+      if (speed > 25 && speed < 1000 && this.selfStepT <= 0) {
+        const run = speed > 150;
+        a.play(this.roleIsHunter ? 'step.heavy' : this.surfaceStep(lx, ly), { volume: this.roleIsHunter ? 0.55 : run ? 0.45 : speed < 90 ? 0.12 : 0.28 });
+        this.selfStepT = this.roleIsHunter ? 0.5 : run ? 0.3 : speed < 90 ? 0.75 : 0.48;
+      }
+    }
+    this.lastSelfPos.x = lx;
+    this.lastSelfPos.y = ly;
+
+    // Generators: hum when restored, rattle while someone repairs.
+    ws.gens.forEach((g, i) => {
+      const d = m.map.generators[i];
+      const dist = Math.hypot(d.x - lx, d.y - ly);
+      const repaired = (g.flags & 1) !== 0;
+      const busy = (g.flags & 2) !== 0;
+      const id = dist > 1100 ? null : repaired ? 'gen.hum' : busy ? 'gen.repair' : null;
+      a.loop(`gen${i}`, id, { x: d.x, y: d.y, volume: repaired ? 0.5 : 0.8, occluded: !geo.hasLineOfSight(lx, ly, d.x, d.y), radius: 1000 });
+    });
+
+    // Chase music.
+    const chasing = this.chaseOn && !spect && s.health !== Health.Eliminated && s.health !== Health.Escaped;
+    a.loop('chase', chasing ? 'chase' : null, { volume: this.roleIsHunter ? 0.25 : 0.5 });
   }
 
   frame(dtMs: number, now: number): void {
@@ -379,6 +463,11 @@ export class GameView {
     const sw = this.o.app.screen.width;
     const sh = this.o.app.screen.height;
     const cam = this.camera(sw, sh);
+    this.shake = Math.max(0, this.shake - dt * 30);
+    if (this.shake > 0.3) {
+      cam.x += Math.round((Math.random() - 0.5) * this.shake);
+      cam.y += Math.round((Math.random() - 0.5) * this.shake);
+    }
     this.world.position.set(-cam.x, -cam.y);
     this.entityWorld.position.set(-cam.x, -cam.y);
     this.senses.position.set(-cam.x, -cam.y);
@@ -392,7 +481,7 @@ export class GameView {
       x: l.x,
       y: l.y,
       radius: l.radius,
-      intensity: l.kind === 'campfire' ? 0.85 + 0.15 * Math.sin(this.time * BALANCE.lights.flickerSpeed + i * 2.1) * Math.sin(this.time * 3.1 + i) : 0.9,
+      intensity: lightFlicker(l.kind, this.time, i),
       static: true,
     }));
     ws.gens.forEach((g, i) => {
@@ -421,9 +510,13 @@ export class GameView {
     if (this.skill.isActive && s.action !== Action.Repair) this.skill.cancel();
     this.hud.update(s, ws);
 
-    // Audio listener, heartbeat, ambience.
+    this.particles.update(dt);
+    for (const e of ents) if (e.kind === 1 && Math.random() < dt * 25) this.particles.burst(e.x, e.y, 1, { speed: 60, life: 0.5, tint: 0xff5a30 });
+
+    // Audio listener, heartbeat, ambience, footsteps and loops.
     const a = this.o.audio;
     a.setListener(this.renderPos.x, this.renderPos.y);
+    this.updateSounds(dt, ents, ws, s, spect);
     a.setHeartbeat(this.roleIsHunter && !spect ? 0 : s.terror);
     a.setAmbience(c.match!.mw.inWarehouse(this.renderPos.x, this.renderPos.y), true);
     a.update(dt);
