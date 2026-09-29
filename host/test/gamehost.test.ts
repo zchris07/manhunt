@@ -125,6 +125,16 @@ describe('GameHost over an in-memory transport (Node)', () => {
     expect(h.host.world!.players.get(id)!.health).not.toBe(Health.Eliminated);
   });
 
+  it('a refreshed tab (new connection, same token) takes over instead of duplicating', async () => {
+    const h = await createHarness(['Owner', 'Refresher']);
+    const old = h.clients[1];
+    const again = await h.join('Refresher', old.token);
+    h.run(300);
+    expect(again.you).toBe(old.you);
+    expect(h.clients[0].lobby!.players.filter((p) => p.name.startsWith('Refresher')).length).toBe(1);
+    expect(h.clients[0].lobby!.players.find((p) => p.id === old.you)!.connected).toBe(true);
+  });
+
   it('caps the lobby at 10 players and makes late joiners spectators', async () => {
     const names = Array.from({ length: 10 }, (_, i) => `P${i}`);
     const h = await createHarness(names);

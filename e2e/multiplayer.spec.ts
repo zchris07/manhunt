@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { createLobby, joinLobby, newPlayer, readyUp, state, waitForMatch, walk } from './mp';
+import { closePlayers, createLobby, joinLobby, newPlayer, readyUp, state, waitForMatch, walk } from './mp';
+
+test.afterEach(closePlayers);
 
 test('two browsers join a room by code and move in a shared match', async ({ browser }) => {
   const host = await newPlayer(browser);

@@ -1,4 +1,4 @@
-import { expect, type Browser, type Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 export interface ClientState {
   state: string;
@@ -41,8 +41,16 @@ export async function state(p: Page): Promise<ClientState> {
   });
 }
 
-export async function newPlayer(browser: Browser, path = '/'): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 960, height: 600 } });
+const open: BrowserContext[] = [];
+
+/** Closes every player context opened by the current test (call from test.afterEach). */
+export async function closePlayers(): Promise<void> {
+  await Promise.all(open.splice(0).map((c) => c.close().catch(() => undefined)));
+}
+
+export async function newPlayer(browser: Browser, path = '/', viewport = { width: 960, height: 600 }): Promise<Page> {
+  const ctx = await browser.newContext({ viewport });
+  open.push(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
   await page.goto(path);

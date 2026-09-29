@@ -8,6 +8,7 @@ declare global {
     __sandbox: {
       fps: number;
       cpuMs: number;
+      visionMs: number;
       setPlayer(x: number, y: number, facing: number): void;
       setEnemy(x: number, y: number): void;
       freezeEffects: boolean;
@@ -39,9 +40,11 @@ test('vision sandbox: entities are visible in the cone and culled outside it', a
   expect(Math.max(...behind)).toBeLessThan(70);
 
   expect(errors).toEqual([]);
-  const cpu = await page.evaluate(() => window.__sandbox.cpuMs);
-  // CPU budget per frame (vision + scene updates) must leave room for 60 fps.
-  expect(cpu).toBeLessThan(12);
+  // The per-frame visibility work (cone, proximity, 360-degree line of sight, lights) must
+  // leave plenty of a 16.7 ms frame for rendering. (Whole-frame time isn't meaningful here:
+  // headless Chromium renders WebGL in software.)
+  const visionMs = await page.evaluate(() => window.__sandbox.visionMs);
+  expect(visionMs).toBeLessThan(4);
 });
 
 test('game page serves a canvas', async ({ page }) => {

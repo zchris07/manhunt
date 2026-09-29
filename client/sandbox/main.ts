@@ -199,6 +199,9 @@ async function boot(): Promise<void> {
     get cpuMs() {
       return cpuMs;
     },
+    get visionMs() {
+      return visMs;
+    },
     get player() {
       return { ...pos, facing };
     },

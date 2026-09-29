@@ -314,12 +314,17 @@ export class GameHost {
     }
     const now = this.opts.now();
     let lp = token ? this.lobby.byToken(token) : undefined;
-    if (lp && !lp.connected) {
-      lp.connected = true;
+    if (lp) {
+      // Rejoin with a session token. If the old connection hasn't been detected as dropped
+      // yet (e.g. a page refresh), the new connection takes over.
       const old = this.byPlayer.get(lp.id);
-      if (old) this.peers.delete(old);
+      if (old && old !== ps.id) {
+        this.peers.delete(old);
+        this.opts.transport.disconnect(old);
+      }
+      lp.connected = true;
+      lp.leftAt = 0;
     } else {
-      lp = undefined;
       const connected = [...this.lobby.players.values()].filter((p) => p.connected).length;
       if (connected >= BALANCE.net.maxPlayers) {
         this.kick(ps.id, 'The lobby is full (10 players)');

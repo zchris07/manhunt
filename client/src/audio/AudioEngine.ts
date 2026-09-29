@@ -136,7 +136,7 @@ export class AudioEngine {
         l.setOrientation(0, 0, -1, 0, 1, 0);
       }
       // Warm the buffers used constantly.
-      for (const id of ['step.forest', 'step.dirt', 'heartbeat', 'amb.wind', 'amb.indoor']) this.buffer(id);
+      for (const id of ['step.forest', 'step.dirt', 'heartbeat', 'amb.wind', 'amb.indoor']) this.getSound(id);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -154,8 +154,12 @@ export class AudioEngine {
     this.applyVolumes();
   }
 
-  /** Returns the buffer for an id: a loaded file from the manifest, or the procedural one. */
-  private buffer(id: string): AudioBuffer | null {
+  /**
+   * getSound(id): the file named in assets/manifest.json once it has loaded, otherwise the
+   * procedural version (the counterpart of AssetManager.getTexture). Null before the audio
+   * context exists (browsers need a user gesture first).
+   */
+  getSound(id: string): AudioBuffer | null {
     const ctx = this.ctx;
     if (!ctx) return null;
     const cached = this.buffers.get(id);
@@ -220,7 +224,7 @@ export class AudioEngine {
       const d = Math.hypot(o.x - this.listener.x, o.y - this.listener.y);
       if (d > (o.radius ?? 1400)) return;
     }
-    const b = this.buffer(id);
+    const b = this.getSound(id);
     if (!b) return;
     const src = ctx.createBufferSource();
     src.buffer = b;
@@ -278,7 +282,7 @@ export class AudioEngine {
       return;
     }
     if (cur) this.loop(key, null);
-    const b = this.buffer(id);
+    const b = this.getSound(id);
     if (!b) return;
     const src = ctx.createBufferSource();
     src.buffer = b;

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { createLobby, joinLobby, newPlayer, readyUp, state, waitForMatch } from './mp';
+import { closePlayers, createLobby, joinLobby, newPlayer, readyUp, state, waitForMatch } from './mp';
+
+test.afterEach(closePlayers);
 
 const dev = (page: import('@playwright/test').Page, cmd: string, args: number[] = []): Promise<void> =>
   page.evaluate(([cmd, args]) => window.__manhunt.client!.send({ t: 'dev', cmd, args }), [cmd, args] as const);
