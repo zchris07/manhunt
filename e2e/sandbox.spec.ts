@@ -19,7 +19,7 @@ test('vision sandbox: entities are visible in the cone and culled outside it', a
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto('/sandbox/');
+  await page.goto('/sandbox/?arena=1');
   await page.waitForFunction(() => !!window.__sandbox);
   await page.evaluate(() => {
     window.__sandbox.freezeEffects = true;
@@ -47,4 +47,15 @@ test('vision sandbox: entities are visible in the cone and culled outside it', a
 test('game page serves a canvas', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('canvas')).toHaveCount(1);
+});
+
+test('sandbox renders a generated map without errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.goto('/sandbox/?seed=42');
+  await page.waitForFunction(() => !!window.__sandbox);
+  await page.waitForTimeout(1500);
+  await expect(page.locator('#hud')).toContainText('map seed 42');
+  expect(errors).toEqual([]);
 });
