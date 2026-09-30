@@ -2,17 +2,17 @@ import { Rng } from '@manhunt/shared';
 import { noise1D, tileFbm } from './noise';
 
 /**
- * Procedural texture generators. Each returns a canvas. The look is a bright, saturated
- * comic-book style: flat cel-shaded colours, a highlight tone and a thin dark outline.
- * Characters are drawn top-down facing +x (right); trees and props are drawn from above
- * with a hint of their side so they read at a glance. Darkness comes from the vision shader.
+ * Procedural texture generators. Each returns a canvas. The look follows Darkwood: dark,
+ * desaturated, realistic top-down art where everything is seen from straight above and
+ * casts a soft shadow down and to the right, so the flat sprites read like a 3D scene.
+ * Characters face +x (right). Colours are graded down by AssetManager (see gradeCanvas).
  */
 
 export type CanvasGen = (variant: number) => HTMLCanvasElement;
 
-/** Outline colour and width used by every sprite (thin, but always visible). */
-const INK = 'rgba(24,16,36,0.95)';
-const INK_W = 1.6;
+/** Soft dark edge on sprites (no comic outlines). */
+const INK = 'rgba(6,6,6,0.5)';
+const INK_W = 1;
 
 function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
@@ -92,9 +92,12 @@ function blob(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
 
 /** Soft drop shadow ellipse. */
 function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, a = 0.35): void {
-  ctx.fillStyle = `rgba(10,6,24,${a})`;
-  ellipse(ctx, x, y, rx, ry);
+  ctx.save();
+  ctx.filter = 'blur(3px)';
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(1, a * 1.6)})`;
+  ellipse(ctx, x + 3, y + 4, rx, ry);
   ctx.fill();
+  ctx.restore();
 }
 
 /** Fills a tile from a noise field mapped between two colours, with extra grain. */
@@ -104,9 +107,7 @@ function noiseTile(size: number, period: number, seed: number, dark: RGB, light:
   const img = ctx.createImageData(size, size);
   const rng = new Rng(seed ^ 0xabcdef);
   for (let i = 0; i < n.length; i++) {
-    // Posterise a little for the flat, painted look.
-    const t = Math.round(n[i] * 6) / 6;
-    const col = mix(dark, light, t);
+    const col = mix(dark, light, n[i]);
     const g = (rng.next() - 0.5) * grain;
     img.data[i * 4] = col[0] + g;
     img.data[i * 4 + 1] = col[1] + g;
@@ -130,123 +131,116 @@ function wrapDraw(size: number, x: number, y: number, r: number, draw: (x: numbe
 }
 
 // ---------------------------------------------------------------------------------------
-// Ground
+// Ground (Darkwood-like: murky, low-contrast, realistic detail)
 // ---------------------------------------------------------------------------------------
+
+/** Scatters small marks over a seamless tile. */
+function scatter(size: number, n: number, rng: Rng, draw: (x: number, y: number, i: number) => void, r = 12): void {
+  for (let i = 0; i < n; i++) {
+    const x = rng.range(0, size);
+    const y = rng.range(0, size);
+    wrapDraw(size, x, y, r, (px, py) => draw(px, py, i));
+  }
+}
 
 export const groundForest: CanvasGen = () => {
   const size = 512;
-  const [c, ctx] = noiseTile(size, 6, 11, [54, 112, 46], [92, 158, 64], 10);
-  const rng = new Rng(77);
-  // Darker moss hollows.
-  const moss = tileFbm(size, 4, 3, 99);
+  const [c, ctx] = noiseTile(size, 6, 11, [30, 32, 27], [56, 55, 44], 9);
+  const rng = new Rng(12);
+  // Mossy and muddy patches.
+  const moss = tileFbm(size, 4, 3, 13);
   const img = ctx.getImageData(0, 0, size, size);
   for (let i = 0; i < moss.length; i++) {
-    const m = Math.max(0, moss[i] - 0.58) * 2.2;
-    img.data[i * 4] = img.data[i * 4] * (1 - m) + 36 * m;
-    img.data[i * 4 + 1] = img.data[i * 4 + 1] * (1 - m) + 88 * m;
-    img.data[i * 4 + 2] = img.data[i * 4 + 2] * (1 - m) + 52 * m;
+    const m = Math.max(0, moss[i] - 0.55) * 1.8;
+    img.data[i * 4] -= m * 10;
+    img.data[i * 4 + 1] += m * 6;
+    img.data[i * 4 + 2] -= m * 8;
   }
   ctx.putImageData(img, 0, 0);
   // Leaf litter.
-  const leaves = ['#c9782f', '#e0a33d', '#a8522a', '#7aa33a'];
-  for (let i = 0; i < 420; i++) {
-    const x = rng.range(0, size);
-    const y = rng.range(0, size);
-    const a = rng.range(0, Math.PI * 2);
-    const l = rng.range(2.5, 5);
-    ctx.fillStyle = leaves[rng.int(0, leaves.length - 1)];
-    wrapDraw(size, x, y, 8, (px, py) => {
-      ellipse(ctx, px, py, l, l * 0.5, a);
-      ctx.fill();
-    });
-  }
-  // Grass tufts.
-  for (let i = 0; i < 700; i++) {
-    const x = rng.range(0, size);
-    const y = rng.range(0, size);
-    ctx.strokeStyle = rng.chance(0.5) ? '#8fcf55' : '#6fb048';
-    ctx.lineWidth = 1.3;
-    wrapDraw(size, x, y, 6, (px, py) => {
-      for (let k = 0; k < 4; k++) {
-        const a = -Math.PI / 2 + rng.range(-0.8, 0.8);
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + Math.cos(a) * 5.5, py + Math.sin(a) * 5.5);
-        ctx.stroke();
-      }
-    });
-  }
-  // A few wildflowers.
-  const petals = ['#ffd84a', '#ff7ab8', '#ffffff', '#9f8bff'];
-  for (let i = 0; i < 70; i++) {
-    const x = rng.range(0, size);
-    const y = rng.range(0, size);
-    const col = petals[rng.int(0, petals.length - 1)];
-    wrapDraw(size, x, y, 5, (px, py) => {
-      ctx.fillStyle = col;
-      for (let k = 0; k < 5; k++) {
-        const a = (k / 5) * Math.PI * 2;
-        circle(ctx, px + Math.cos(a) * 1.8, py + Math.sin(a) * 1.8, 1.4);
-        ctx.fill();
-      }
-      ctx.fillStyle = '#f7a12a';
-      circle(ctx, px, py, 1.1);
-      ctx.fill();
-    });
-  }
+  const leaves: RGB[] = [
+    [74, 60, 42],
+    [58, 50, 38],
+    [44, 48, 34],
+    [82, 70, 50],
+    [36, 34, 28],
+  ];
+  scatter(size, 2600, rng, (x, y, i) => {
+    const col = leaves[i % leaves.length];
+    ctx.fillStyle = rgb(col[0], col[1], col[2], 0.55);
+    ellipse(ctx, x, y, 2 + (i % 3), 1 + (i % 2), (i * 1.7) % Math.PI);
+    ctx.fill();
+  });
+  // Twigs and needles.
+  scatter(size, 220, rng, (x, y, i) => {
+    const a = (i * 2.4) % Math.PI;
+    const l = 6 + (i % 5) * 3;
+    ctx.strokeStyle = i % 3 ? 'rgba(30,24,18,0.55)' : 'rgba(92,80,60,0.45)';
+    ctx.lineWidth = i % 4 ? 0.8 : 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+    ctx.stroke();
+  }, 30);
+  // Pebbles.
+  scatter(size, 90, rng, (x, y, i) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ellipse(ctx, x + 1, y + 1.5, 2.5 + (i % 3), 2 + (i % 2));
+    ctx.fill();
+    ctx.fillStyle = `rgba(${96 + (i % 4) * 6},${94 + (i % 4) * 6},${86 + (i % 4) * 6},0.8)`;
+    ellipse(ctx, x, y, 2.5 + (i % 3), 2 + (i % 2));
+    ctx.fill();
+  });
   return c;
 };
 
 export const groundPath: CanvasGen = () => {
   const size = 256;
-  const [c, ctx] = noiseTile(size, 8, 21, [170, 118, 66], [214, 164, 102], 12);
-  const rng = new Rng(5);
-  for (let i = 0; i < 140; i++) {
-    const x = rng.range(0, size);
-    const y = rng.range(0, size);
-    const r = rng.range(1.5, 3.5);
-    const light = rng.chance(0.5);
-    wrapDraw(size, x, y, 5, (px, py) => {
-      circle(ctx, px, py, r);
-      ctx.fillStyle = light ? '#e6c48e' : '#9c6a3c';
-      ctx.fill();
-      ctx.lineWidth = 0.8;
-      ctx.strokeStyle = 'rgba(70,40,20,0.6)';
-      ctx.stroke();
-    });
-  }
+  const [c, ctx] = noiseTile(size, 5, 21, [50, 44, 36], [78, 70, 56], 12);
+  const rng = new Rng(22);
+  scatter(size, 30, rng, (x, y, i) => {
+    ctx.fillStyle = 'rgba(20,18,14,0.22)';
+    ellipse(ctx, x, y, 10 + (i % 4) * 5, 6 + (i % 3) * 3, i);
+    ctx.fill();
+  }, 30);
+  scatter(size, 220, rng, (x, y, i) => {
+    ctx.fillStyle = `rgba(${110 + (i % 5) * 8},${104 + (i % 5) * 7},${92 + (i % 5) * 6},0.55)`;
+    ellipse(ctx, x, y, 1.2 + (i % 3) * 0.6, 1 + (i % 2) * 0.6);
+    ctx.fill();
+  });
   return c;
 };
 
 export const groundConcrete: CanvasGen = () => {
   const size = 256;
-  const [c, ctx] = noiseTile(size, 8, 31, [138, 142, 152], [176, 180, 190], 8);
-  const stains = tileFbm(size, 4, 3, 32);
-  const img = ctx.getImageData(0, 0, size, size);
-  for (let i = 0; i < stains.length; i++) {
-    const s = Math.max(0, stains[i] - 0.55) * 1.4;
-    img.data[i * 4] *= 1 - s * 0.35;
-    img.data[i * 4 + 1] *= 1 - s * 0.35;
-    img.data[i * 4 + 2] *= 1 - s * 0.3;
-  }
-  ctx.putImageData(img, 0, 0);
-  ctx.strokeStyle = 'rgba(70,72,84,0.7)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, size - 2, size - 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  const [c, ctx] = noiseTile(size, 7, 31, [58, 58, 56], [86, 85, 80], 14);
+  const rng = new Rng(32);
+  // Water stains and oil.
+  scatter(size, 14, rng, (x, y, i) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 20 + (i % 4) * 10);
+    g.addColorStop(0, 'rgba(20,20,18,0.3)');
+    g.addColorStop(1, 'rgba(20,20,18,0)');
+    ctx.fillStyle = g;
+    circle(ctx, x, y, 20 + (i % 4) * 10);
+    ctx.fill();
+  }, 60);
+  // Slab seams.
+  ctx.fillStyle = 'rgba(18,18,16,0.45)';
+  ctx.fillRect(0, 0, size, 2);
+  ctx.fillRect(0, 0, 2, size);
+  // Cracks.
+  ctx.strokeStyle = 'rgba(16,16,14,0.5)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(3, 3, size - 6, size - 6);
-  // Hazard paint stripe fragments.
-  const rng = new Rng(8);
-  ctx.strokeStyle = 'rgba(80,80,92,0.5)';
-  for (let i = 0; i < 5; i++) {
+  for (let k = 0; k < 6; k++) {
     let x = rng.range(10, size - 10);
     let y = rng.range(10, size - 10);
+    let a = rng.range(0, Math.PI * 2);
     ctx.beginPath();
     ctx.moveTo(x, y);
-    for (let k = 0; k < 5; k++) {
-      x += rng.range(-14, 14);
-      y += rng.range(-14, 14);
+    for (let s = 0; s < 7; s++) {
+      a += rng.range(-0.7, 0.7);
+      x += Math.cos(a) * 7;
+      y += Math.sin(a) * 7;
       ctx.lineTo(x, y);
     }
     ctx.stroke();
@@ -256,413 +250,349 @@ export const groundConcrete: CanvasGen = () => {
 
 export const groundWood: CanvasGen = () => {
   const size = 256;
-  const [c, ctx] = noiseTile(size, 16, 41, [156, 94, 48], [204, 136, 74], 8);
-  const plank = 32;
-  for (let y = 0; y < size; y += plank) {
-    ctx.fillStyle = 'rgba(70,34,14,0.85)';
+  const [c, ctx] = canvas(size);
+  const rng = new Rng(41);
+  const H = 32;
+  for (let y = 0; y < size; y += H) {
+    const base = 58 + rng.range(-6, 8);
+    ctx.fillStyle = rgb(base + 14, base, base - 14);
+    ctx.fillRect(0, y, size, H);
+    // Grain.
+    for (let k = 0; k < 9; k++) {
+      ctx.strokeStyle = `rgba(30,20,12,${rng.range(0.12, 0.3)})`;
+      ctx.lineWidth = rng.range(0.6, 1.4);
+      const gy = y + rng.range(3, H - 3);
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      for (let x = 0; x <= size; x += 32) ctx.lineTo(x, gy + Math.sin(x * 0.05 + k) * 1.2);
+      ctx.stroke();
+    }
+    // Gaps and butt joints.
+    ctx.fillStyle = 'rgba(10,8,6,0.75)';
     ctx.fillRect(0, y, size, 2);
-    ctx.fillStyle = 'rgba(255,220,170,0.25)';
-    ctx.fillRect(0, y + 2, size, 1);
-    const off = ((y / plank) % 2) * 96;
-    ctx.fillStyle = 'rgba(70,34,14,0.85)';
-    ctx.fillRect((off + 60) % size, y, 2, plank);
-    ctx.fillRect((off + 188) % size, y, 2, plank);
-  }
-  const rng = new Rng(3);
-  ctx.strokeStyle = 'rgba(110,56,24,0.45)';
-  for (let i = 0; i < 70; i++) {
-    const y = rng.range(0, size);
-    const x = rng.range(0, size);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + rng.range(20, 60), y + rng.range(-1, 1));
-    ctx.stroke();
+    const jx = rng.range(20, size - 20);
+    ctx.fillRect(jx, y, 2, H);
+    ctx.fillStyle = 'rgba(20,16,12,0.8)';
+    circle(ctx, jx - 5, y + 6, 1.2);
+    ctx.fill();
+    circle(ctx, jx + 7, y + H - 6, 1.2);
+    ctx.fill();
   }
   return c;
 };
 
 export const groundWater: CanvasGen = () => {
   const size = 256;
-  const [c, ctx] = noiseTile(size, 4, 51, [28, 100, 178], [64, 158, 228], 5);
-  const rng = new Rng(6);
-  ctx.lineWidth = 1.6;
-  for (let i = 0; i < 34; i++) {
-    const x = rng.range(0, size);
-    const y = rng.range(0, size);
-    const w = rng.range(8, 22);
-    ctx.strokeStyle = rng.chance(0.5) ? 'rgba(255,255,255,0.5)' : 'rgba(170,230,255,0.45)';
-    wrapDraw(size, x, y, 30, (px, py) => {
-      ctx.beginPath();
-      ctx.moveTo(px - w, py);
-      ctx.quadraticCurveTo(px - w / 2, py - 3, px, py);
-      ctx.quadraticCurveTo(px + w / 2, py + 3, px + w, py);
-      ctx.stroke();
-    });
-  }
+  const [c, ctx] = noiseTile(size, 4, 51, [14, 20, 22], [30, 40, 42], 5);
+  ctx.strokeStyle = 'rgba(120,140,140,0.08)';
+  ctx.lineWidth = 1;
+  const rng = new Rng(52);
+  scatter(size, 24, rng, (x, y, i) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, 10 + (i % 4) * 6, 3 + (i % 3), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }, 40);
   return c;
 };
 
-// ---------------------------------------------------------------------------------------
-// Vegetation and rocks
-// ---------------------------------------------------------------------------------------
-
+/** Tall grass tuft seen from straight above: blades radiating from the root. */
 export const tallGrass: CanvasGen = (variant) => {
   const size = 128;
   const [c, ctx] = canvas(size);
-  const rng = new Rng(600 + variant);
-  shadow(ctx, 66, 68, 50, 44, 0.25);
-  const greens = ['#4f9e3a', '#67b845', '#86cc52', '#a3db62'];
-  for (let i = 0; i < 230; i++) {
-    const x = rng.range(14, size - 14);
-    const y = rng.range(14, size - 14);
-    if (Math.hypot(x - size / 2, y - size / 2) > size / 2 - 10) continue;
+  const rng = new Rng(300 + variant);
+  softShadow(ctx, () => {
+    circle(ctx, 70, 72, 40);
+    ctx.fill();
+  }, 0.45, 10);
+  for (let i = 0; i < 90; i++) {
     const a = rng.range(0, Math.PI * 2);
-    const l = rng.range(8, 18);
-    ctx.strokeStyle = greens[rng.int(0, greens.length - 1)];
-    ctx.lineWidth = rng.range(1.4, 2.6);
+    const l = rng.range(18, 52);
+    const bend = rng.range(-0.5, 0.5);
+    const t = rng.next();
+    ctx.strokeStyle = rgb(44 + t * 40, 52 + t * 38, 30 + t * 20, 0.9);
+    ctx.lineWidth = rng.range(1.2, 2.6);
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + 3, y + Math.sin(a) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l);
+    const x0 = 64 + rng.range(-6, 6);
+    const y0 = 64 + rng.range(-6, 6);
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(x0 + Math.cos(a) * l * 0.6, y0 + Math.sin(a) * l * 0.6, x0 + Math.cos(a + bend) * l, y0 + Math.sin(a + bend) * l);
     ctx.stroke();
   }
   return c;
 };
 
-const LEAF_PALETTES: [string, string, string][] = [
-  ['#2f7d3a', '#44a34a', '#7ed05c'],
-  ['#2c7a4a', '#3f9e5c', '#78d17a'],
-  ['#3a8a2e', '#5bb03a', '#a4dd55'],
-  ['#2a6e44', '#3c9458', '#6fcf80'],
-];
+// ---------------------------------------------------------------------------------------
+// Trees and props: seen from straight above (no trunks), with soft cast shadows
+// ---------------------------------------------------------------------------------------
 
-/** Pine seen from above: stacked, star-shaped tiers of needles around a visible trunk. */
+/** Draws `shape` as a blurred shadow offset down and to the right. */
+function softShadow(ctx: CanvasRenderingContext2D, shape: () => void, alpha = 0.6, blur = 14, dx = 10, dy = 14): void {
+  ctx.save();
+  ctx.shadowColor = `rgba(0,0,0,${alpha})`;
+  ctx.shadowBlur = blur;
+  ctx.shadowOffsetX = dx + 4000;
+  ctx.shadowOffsetY = dy;
+  ctx.translate(-4000, 0);
+  ctx.fillStyle = '#000';
+  shape();
+  ctx.restore();
+}
+
+/** Canopy radius (px) in the tree textures; MapRenderer scales trees from it. */
+export const CANOPY_PX = 100;
+
+function leafSpecks(ctx: CanvasRenderingContext2D, rng: Rng, cx: number, cy: number, r: number, n: number, light: RGB, dark: RGB): void {
+  for (let i = 0; i < n; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const d = Math.sqrt(rng.next()) * r;
+    const x = cx + Math.cos(a) * d;
+    const y = cy + Math.sin(a) * d;
+    // Lighter toward the upper left, darker toward the lower right.
+    const lit = Math.max(0, Math.min(1, 0.5 - ((x - cx) + (y - cy)) / (r * 2.6)));
+    const col = mix(dark, light, lit * rng.range(0.6, 1));
+    ctx.fillStyle = rgb(col[0], col[1], col[2], 0.85);
+    ellipse(ctx, x, y, rng.range(1.5, 3.6), rng.range(1, 2.2), rng.range(0, Math.PI));
+    ctx.fill();
+  }
+}
+
+/** Conifer from above: layered rings of needle spikes around the crown. */
 export const treePine: CanvasGen = (variant) => {
-  const W = 170;
-  const Hh = 190;
-  const [c, ctx] = canvas(W, Hh);
-  const rng = new Rng(100 + variant);
-  const pal = LEAF_PALETTES[variant % LEAF_PALETTES.length];
-  const cx = W / 2;
-  const base = 150; // trunk base (anchor)
-  shadow(ctx, cx + 16, base - 22, 64, 40, 0.3);
-  // Trunk and roots peeking out below the lowest tier.
-  ctx.fillStyle = '#7a4a26';
-  for (const [dx, a] of [
-    [-10, 2.6],
-    [10, 0.5],
-    [0, 1.6],
-  ] as const) {
-    ellipse(ctx, cx + dx * 0.6, base + 2, 7, 3.5, a);
-    fillInk(ctx, '#6b3f20');
-  }
-  roundRect(ctx, cx - 7, base - 34, 14, 36, 4);
-  fillInk(ctx, '#8a552c');
-  ctx.fillStyle = '#b07440';
-  ctx.fillRect(cx - 4, base - 32, 3, 30);
-  // Tiers, largest at the bottom, lighter toward the top.
-  const tiers = [
-    { y: base - 50, r: 70, pts: 11 },
-    { y: base - 76, r: 56, pts: 10 },
-    { y: base - 100, r: 42, pts: 9 },
-    { y: base - 120, r: 27, pts: 7 },
-  ];
-  tiers.forEach((t, i) => {
-    const n = noise1D(variant * 31 + i * 7);
-    const star = (r: number, oy: number): void => {
-      ctx.beginPath();
-      for (let k = 0; k <= t.pts * 2; k++) {
-        const a = (k / (t.pts * 2)) * Math.PI * 2 + i * 0.35;
-        const rr = k % 2 === 0 ? r * (0.9 + n(k * 0.7) * 0.18) : r * 0.64;
-        const x = cx + Math.cos(a) * rr;
-        const y = t.y + oy + Math.sin(a) * rr * 0.72;
-        if (k === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-    };
-    star(t.r, 0);
-    fillInk(ctx, i === 0 ? shade(pal[0], -0.15) : pal[0]);
-    // Lit upper-left half.
-    ctx.save();
-    star(t.r, 0);
-    ctx.clip();
-    ctx.fillStyle = pal[1];
-    ellipse(ctx, cx - t.r * 0.25, t.y - t.r * 0.28, t.r * 0.8, t.r * 0.55);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  const rng = new Rng(340 + variant);
+  const cx = 120;
+  const cy = 118;
+  const R = CANOPY_PX * rng.range(0.88, 1);
+  const star = (r: number, spikes: number, depth: number, rot: number): void => {
+    ctx.beginPath();
+    for (let i = 0; i <= spikes * 2; i++) {
+      const a = rot + (i / (spikes * 2)) * Math.PI * 2;
+      const rr = i % 2 === 0 ? r : r * (1 - depth) * rng.range(0.9, 1.08);
+      const x = cx + Math.cos(a) * rr;
+      const y = cy + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  };
+  softShadow(ctx, () => {
+    circle(ctx, cx, cy, R * 0.92);
     ctx.fill();
-    ctx.fillStyle = pal[2];
-    ellipse(ctx, cx - t.r * 0.4, t.y - t.r * 0.42, t.r * 0.36, t.r * 0.2, -0.3);
+  }, 0.75, 22, 16, 22);
+  const layers = 4;
+  for (let k = 0; k < layers; k++) {
+    const r = R * (1 - k * 0.21);
+    const t = k / (layers - 1);
+    const col = mix([20, 28, 22], [44, 56, 40], t);
+    star(r, 16 + k * 2, 0.3, rng.range(0, 1));
+    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    g.addColorStop(0, rgb(col[0] + 14, col[1] + 16, col[2] + 10));
+    g.addColorStop(1, rgb(col[0] - 6, col[1] - 6, col[2] - 6));
+    ctx.fillStyle = g;
     ctx.fill();
-    // Needle strokes.
-    ctx.strokeStyle = shade(pal[0], -0.3);
+    ctx.strokeStyle = 'rgba(8,12,8,0.35)';
     ctx.lineWidth = 1;
-    for (let k = 0; k < 18; k++) {
+    ctx.stroke();
+    // Needles along the spikes.
+    ctx.strokeStyle = rgb(col[0] + 20, col[1] + 24, col[2] + 14, 0.45);
+    ctx.lineWidth = 0.9;
+    for (let i = 0; i < 70; i++) {
       const a = rng.range(0, Math.PI * 2);
-      const r0 = rng.range(t.r * 0.25, t.r * 0.85);
-      const x = cx + Math.cos(a) * r0;
-      const y = t.y + Math.sin(a) * r0 * 0.72;
+      const d0 = r * rng.range(0.3, 0.8);
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(a) * 5, y + Math.sin(a) * 3.6);
+      ctx.moveTo(cx + Math.cos(a) * d0, cy + Math.sin(a) * d0);
+      ctx.lineTo(cx + Math.cos(a) * (d0 + r * 0.22), cy + Math.sin(a) * (d0 + r * 0.22));
       ctx.stroke();
     }
-    ctx.restore();
-  });
-  // Tip.
-  circle(ctx, cx - 2, base - 128, 4);
-  fillInk(ctx, pal[2], 1.2);
+  }
+  circle(ctx, cx, cy, 4);
+  ctx.fillStyle = 'rgba(70,84,60,0.9)';
+  ctx.fill();
   return c;
 };
 
-/** Broadleaf tree: a rounded canopy of leaf clumps above a short trunk and roots. */
+/** Broadleaf from above: overlapping leaf clumps, lit from the upper left. */
 export const treeOak: CanvasGen = (variant) => {
-  const W = 180;
-  const Hh = 190;
-  const [c, ctx] = canvas(W, Hh);
-  const rng = new Rng(150 + variant);
-  const pal = LEAF_PALETTES[(variant + 2) % LEAF_PALETTES.length];
-  const cx = W / 2;
-  const base = 150;
-  shadow(ctx, cx + 18, base - 26, 70, 44, 0.3);
-  // Trunk with two forks and roots.
-  for (const [dx, a] of [
-    [-12, 2.8],
-    [12, 0.3],
-  ] as const) {
-    ellipse(ctx, cx + dx * 0.7, base + 1, 8, 3.5, a);
-    fillInk(ctx, '#6a3e1e');
-  }
-  ctx.beginPath();
-  ctx.moveTo(cx - 9, base);
-  ctx.lineTo(cx - 7, base - 40);
-  ctx.lineTo(cx - 16, base - 58);
-  ctx.lineTo(cx - 9, base - 60);
-  ctx.lineTo(cx, base - 46);
-  ctx.lineTo(cx + 10, base - 62);
-  ctx.lineTo(cx + 16, base - 58);
-  ctx.lineTo(cx + 7, base - 40);
-  ctx.lineTo(cx + 9, base);
-  ctx.closePath();
-  fillInk(ctx, '#8d5a30');
-  ctx.fillStyle = '#b37a46';
-  ctx.fillRect(cx - 5, base - 38, 3, 36);
-  // Canopy: overlapping clumps; one silhouette pass, then shading.
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  const rng = new Rng(420 + variant);
+  const cx = 120;
+  const cy = 118;
+  const R = CANOPY_PX * rng.range(0.85, 1);
   const clumps: [number, number, number][] = [];
-  const cy = base - 88;
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + variant;
-    const d = i === 0 ? 0 : rng.range(26, 40);
-    clumps.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.78, rng.range(26, 34)]);
+  const n = 8 + (variant % 3);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const d = R * rng.range(0.38, 0.55);
+    clumps.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, R * rng.range(0.38, 0.5)]);
   }
-  clumps.push([cx, cy, 40]);
-  const path = (grow: number): void => {
-    ctx.beginPath();
+  clumps.push([cx, cy, R * 0.55]);
+  softShadow(ctx, () => {
     for (const [x, y, r] of clumps) {
-      ctx.moveTo(x + r + grow, y);
-      ctx.arc(x, y, r + grow, 0, Math.PI * 2);
+      circle(ctx, x, y, r);
+      ctx.fill();
     }
-  };
-  path(1.2);
-  ctx.fillStyle = INK;
-  ctx.fill();
-  path(0);
-  ctx.fillStyle = pal[0];
-  ctx.fill();
-  // Each clump gets a lit cap toward the upper-left.
+  }, 0.75, 22, 16, 22);
+  const n1 = noise1D(variant * 13 + 5);
   for (const [x, y, r] of clumps) {
-    ctx.fillStyle = pal[1];
-    ellipse(ctx, x - r * 0.2, y - r * 0.22, r * 0.75, r * 0.62);
+    blob(ctx, x, y, r, n1, 7, 0.12, x);
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    g.addColorStop(0, 'rgb(64,70,44)');
+    g.addColorStop(0.6, 'rgb(40,46,30)');
+    g.addColorStop(1, 'rgb(24,28,20)');
+    ctx.fillStyle = g;
     ctx.fill();
-  }
-  for (const [x, y, r] of clumps) {
-    ctx.fillStyle = pal[2];
-    ellipse(ctx, x - r * 0.38, y - r * 0.4, r * 0.32, r * 0.2, -0.4);
-    ctx.fill();
-  }
-  // Leaf flecks and inner shadows between clumps.
-  ctx.strokeStyle = shade(pal[0], -0.35);
-  ctx.lineWidth = 1.1;
-  for (const [x, y, r] of clumps) {
-    ctx.beginPath();
-    ctx.arc(x + 2, y + 3, r * 0.85, 0.2, 1.4);
+    ctx.strokeStyle = 'rgba(8,10,6,0.35)';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-  }
-  for (let i = 0; i < 40; i++) {
-    const a = rng.range(0, Math.PI * 2);
-    const d = rng.range(0, 60);
-    ctx.fillStyle = rng.chance(0.5) ? shade(pal[2], 0.25) : shade(pal[0], -0.2);
-    ellipse(ctx, cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.78, 2.4, 1.3, a);
-    ctx.fill();
-  }
-  // A few fruit or blossoms on some variants.
-  if (variant % 2 === 1) {
-    for (let i = 0; i < 7; i++) {
-      const a = rng.range(0, Math.PI * 2);
-      const d = rng.range(10, 55);
-      circle(ctx, cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.78, 2.6);
-      fillInk(ctx, variant % 4 === 1 ? '#ff5a4a' : '#ffd54a', 1);
-    }
+    leafSpecks(ctx, rng, x, y, r * 0.9, 90, [86, 90, 58], [26, 30, 20]);
   }
   return c;
 };
 
-/** Dead tree: a gnarled trunk whose bare branches spread out from above. */
+/** Dead tree from above: a bare crown of branches forking out from the trunk top. */
 export const treeDead: CanvasGen = (variant) => {
-  const W = 150;
-  const Hh = 170;
-  const [c, ctx] = canvas(W, Hh);
-  const rng = new Rng(200 + variant);
-  const cx = W / 2;
-  const base = 140;
-  shadow(ctx, cx + 12, base - 18, 46, 26, 0.25);
+  const size = 256;
+  const [c, ctx] = canvas(size);
+  const rng = new Rng(510 + variant);
+  const cx = 120;
+  const cy = 118;
+  const R = CANOPY_PX * 0.9;
   const segs: [number, number, number, number, number][] = [];
-  const branch = (x: number, y: number, a: number, len: number, w: number, depth: number): void => {
-    if (depth === 0 || len < 5) return;
+  const grow = (x: number, y: number, a: number, len: number, w: number, depth: number): void => {
     const ex = x + Math.cos(a) * len;
-    const ey = y + Math.sin(a) * len * 0.8;
+    const ey = y + Math.sin(a) * len;
     segs.push([x, y, ex, ey, w]);
-    const kids = rng.int(1, 3);
-    for (let k = 0; k < kids; k++) branch(ex, ey, a + rng.range(-0.7, 0.7), len * rng.range(0.55, 0.75), w * 0.62, depth - 1);
+    if (depth <= 0) return;
+    const forks = depth > 2 ? 2 : rng.int(1, 2);
+    for (let i = 0; i < forks; i++) grow(ex, ey, a + rng.range(-0.6, 0.6), len * rng.range(0.55, 0.75), w * 0.62, depth - 1);
   };
-  // Trunk goes up; branches fan out from its top.
-  const topY = base - 60;
-  segs.push([cx, base, cx + rng.range(-4, 4), topY, 12]);
-  const count = rng.int(4, 6);
-  for (let i = 0; i < count; i++) branch(cx, topY, -Math.PI / 2 + ((i / (count - 1)) - 0.5) * 2.6 + rng.range(-0.2, 0.2), rng.range(22, 34), 7, 4);
-  const stroke = (grow: number, color: string): void => {
-    ctx.strokeStyle = color;
+  const main = 6 + (variant % 3);
+  for (let i = 0; i < main; i++) grow(cx, cy, (i / main) * Math.PI * 2 + rng.range(-0.2, 0.2), R * rng.range(0.32, 0.42), 7, 3);
+  const stroke = (col: string, dx: number, dy: number, wMul: number): void => {
+    ctx.strokeStyle = col;
     for (const [x0, y0, x1, y1, w] of segs) {
-      ctx.lineWidth = w + grow;
+      ctx.lineWidth = Math.max(0.7, w * wMul);
       ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
+      ctx.moveTo(x0 + dx, y0 + dy);
+      ctx.lineTo(x1 + dx, y1 + dy);
       ctx.stroke();
     }
   };
-  stroke(2.4, INK);
-  stroke(0, '#8a7560');
-  ctx.strokeStyle = '#b8a288';
-  for (const [x0, y0, x1, y1, w] of segs) {
-    if (w < 3) continue;
-    ctx.lineWidth = w * 0.3;
-    ctx.beginPath();
-    ctx.moveTo(x0 - w * 0.2, y0);
-    ctx.lineTo(x1 - w * 0.2, y1);
-    ctx.stroke();
-  }
-  // Roots.
-  for (const a of [2.7, 0.4, 1.6]) {
-    ellipse(ctx, cx + Math.cos(a) * 8, base + 1, 7, 3, a);
-    fillInk(ctx, '#7a6450');
-  }
+  ctx.save();
+  ctx.filter = 'blur(3px)';
+  stroke('rgba(0,0,0,0.55)', 12, 17, 1.1);
+  ctx.restore();
+  stroke('rgb(40,34,28)', 0, 0, 1);
+  stroke('rgba(104,94,80,0.55)', -0.8, -0.8, 0.45);
+  circle(ctx, cx, cy, 8);
+  ctx.fillStyle = 'rgb(52,44,36)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,16,12,0.8)';
+  ctx.lineWidth = 1;
+  circle(ctx, cx, cy, 5);
+  ctx.stroke();
   return c;
 };
 
 export const boulder: CanvasGen = (variant) => {
-  const size = 128;
+  const size = 112;
   const [c, ctx] = canvas(size);
-  const n = noise1D(300 + variant);
-  const cx = size / 2;
-  const cy = size / 2;
-  shadow(ctx, cx + 8, cy + 10, 46, 38, 0.3);
-  blob(ctx, cx, cy, 44, n, 6, 0.14);
-  fillInk(ctx, '#7c8496', 2);
-  ctx.save();
-  blob(ctx, cx, cy, 44, n, 6, 0.14);
-  ctx.clip();
-  ctx.fillStyle = '#9aa3b6';
-  blob(ctx, cx - 7, cy - 8, 36, n, 6, 0.14, 2);
-  ctx.fill();
-  ctx.fillStyle = '#c3cadb';
-  ellipse(ctx, cx - 16, cy - 18, 14, 8, -0.5);
-  ctx.fill();
-  // Moss on the shaded side.
-  const rng = new Rng(variant + 9);
-  for (let i = 0; i < 8; i++) {
-    circle(ctx, cx + rng.range(4, 30), cy + rng.range(6, 30), rng.range(3, 8));
-    ctx.fillStyle = rng.chance(0.5) ? '#5caa42' : '#77c24e';
+  const rng = new Rng(560 + variant);
+  const n = noise1D(variant * 7 + 3);
+  const cx = 52;
+  const cy = 52;
+  softShadow(ctx, () => {
+    blob(ctx, cx, cy, 38, n, 5, 0.18, variant);
     ctx.fill();
+  }, 0.7, 12, 8, 11);
+  blob(ctx, cx, cy, 38, n, 5, 0.18, variant);
+  const g = ctx.createRadialGradient(cx - 14, cy - 16, 4, cx, cy, 44);
+  g.addColorStop(0, 'rgb(112,110,102)');
+  g.addColorStop(0.55, 'rgb(76,75,70)');
+  g.addColorStop(1, 'rgb(42,42,40)');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  // Facets, cracks and moss.
+  for (let i = 0; i < 5; i++) {
+    ctx.strokeStyle = 'rgba(20,20,18,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let x = cx + rng.range(-25, 25);
+    let y = cy + rng.range(-25, 25);
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 4; s++) {
+      x += rng.range(-9, 9);
+      y += rng.range(-9, 9);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
   }
-  // Cracks.
-  ctx.strokeStyle = 'rgba(40,44,60,0.6)';
-  ctx.lineWidth = 1.3;
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy - 30);
-  ctx.lineTo(cx - 2, cy - 12);
-  ctx.lineTo(cx + 8, cy - 8);
-  ctx.stroke();
+  leafSpecks(ctx, rng, cx + 10, cy + 12, 22, 60, [70, 82, 50], [38, 46, 30]);
   ctx.restore();
   return c;
 };
 
 export const logProp: CanvasGen = () => {
   const [c, ctx] = canvas(160, 48);
-  shadow(ctx, 84, 30, 74, 14, 0.3);
-  roundRect(ctx, 8, 9, 142, 28, 12);
-  fillInk(ctx, '#8a5530');
-  ctx.fillStyle = '#b3743e';
-  ctx.fillRect(14, 12, 130, 8);
-  ctx.strokeStyle = 'rgba(70,36,16,0.7)';
-  ctx.lineWidth = 1.2;
-  for (let x = 18; x < 142; x += 11) {
+  const rng = new Rng(598);
+  softShadow(ctx, () => {
+    roundRect(ctx, 8, 12, 144, 24, 12);
+    ctx.fill();
+  }, 0.7, 10, 6, 9);
+  roundRect(ctx, 8, 12, 144, 24, 12);
+  const g = ctx.createLinearGradient(0, 12, 0, 36);
+  g.addColorStop(0, 'rgb(96,82,64)');
+  g.addColorStop(0.45, 'rgb(66,54,42)');
+  g.addColorStop(1, 'rgb(30,24,18)');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,14,10,0.55)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 18; i++) {
+    const y = rng.range(15, 33);
+    const x = rng.range(14, 120);
     ctx.beginPath();
-    ctx.moveTo(x, 22);
-    ctx.quadraticCurveTo(x + 4, 28, x + 2, 35);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + rng.range(10, 26), y + rng.range(-1, 1));
     ctx.stroke();
   }
-  ellipse(ctx, 149, 23, 6, 14);
-  fillInk(ctx, '#e0b77a');
-  ctx.strokeStyle = '#a0703c';
-  ctx.lineWidth = 1;
-  ellipse(ctx, 149, 23, 3, 8);
-  ctx.stroke();
-  // A mushroom or two.
-  circle(ctx, 60, 10, 4);
-  fillInk(ctx, '#ff5a4a', 1.2);
-  ctx.fillStyle = '#fff';
-  circle(ctx, 59, 9, 1);
+  // Cut end with rings.
+  ellipse(ctx, 148, 24, 6, 11.5);
+  ctx.fillStyle = 'rgb(120,102,78)';
   ctx.fill();
+  ctx.strokeStyle = 'rgba(60,46,32,0.7)';
+  for (const r of [3, 6, 9]) {
+    ellipse(ctx, 148, 24, r * 0.5, r);
+    ctx.stroke();
+  }
   return c;
 };
 
 export const bush: CanvasGen = (variant) => {
-  const size = 96;
+  const size = 104;
   const [c, ctx] = canvas(size);
-  const rng = new Rng(400 + variant);
-  const pal = LEAF_PALETTES[(variant + 1) % LEAF_PALETTES.length];
-  shadow(ctx, 52, 54, 36, 30, 0.25);
+  const rng = new Rng(630 + variant);
   const clumps: [number, number, number][] = [];
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    clumps.push([48 + Math.cos(a) * 16, 48 + Math.sin(a) * 14, rng.range(13, 18)]);
-  }
-  clumps.push([48, 48, 18]);
-  ctx.beginPath();
-  for (const [x, y, r] of clumps) {
-    ctx.moveTo(x + r + 1.2, y);
-    ctx.arc(x, y, r + 1.2, 0, Math.PI * 2);
-  }
-  ctx.fillStyle = INK;
-  ctx.fill();
-  ctx.beginPath();
-  for (const [x, y, r] of clumps) {
-    ctx.moveTo(x + r, y);
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-  }
-  ctx.fillStyle = pal[0];
-  ctx.fill();
-  for (const [x, y, r] of clumps) {
-    ctx.fillStyle = pal[1];
-    ellipse(ctx, x - 3, y - 3, r * 0.7, r * 0.6);
-    ctx.fill();
-    ctx.fillStyle = pal[2];
-    ellipse(ctx, x - 6, y - 6, r * 0.28, r * 0.18, -0.4);
-    ctx.fill();
-  }
-  if (variant !== 1) {
-    for (let i = 0; i < 6; i++) {
-      circle(ctx, 48 + rng.range(-20, 20), 48 + rng.range(-18, 18), 2.4);
-      fillInk(ctx, variant === 0 ? '#e0304a' : '#6a5cff', 1);
+  for (let i = 0; i < 6; i++) clumps.push([48 + rng.range(-16, 16), 48 + rng.range(-16, 16), rng.range(13, 22)]);
+  softShadow(ctx, () => {
+    for (const [x, y, r] of clumps) {
+      circle(ctx, x, y, r);
+      ctx.fill();
     }
+  }, 0.65, 10, 7, 10);
+  const n = noise1D(variant * 5 + 1);
+  for (const [x, y, r] of clumps) {
+    blob(ctx, x, y, r, n, 6, 0.15, x);
+    const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 1, x, y, r);
+    g.addColorStop(0, 'rgb(62,68,42)');
+    g.addColorStop(1, 'rgb(24,30,20)');
+    ctx.fillStyle = g;
+    ctx.fill();
+    leafSpecks(ctx, rng, x, y, r * 0.85, 30, [80, 86, 54], [26, 30, 20]);
   }
   return c;
 };
@@ -1599,13 +1529,34 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
 };
 
 /**
- * Default anchor (pivot) per generator: trees stand on their trunk base, which sits below
- * the middle of the canvas. Everything else is centred. The manifest may override it.
+ * Default anchor (pivot) per generator: trees and rocks pivot on their crown (the canvas has
+ * extra room for the cast shadow). Everything else is centred. The manifest may override it.
  */
+
+/**
+ * Darkwood grade: pulls every sprite toward flat, desaturated, dim colours. Ground tiles are
+ * already painted in that palette; effects (glows, gas, blood) keep their colour.
+ */
+export function gradeCanvas(c: HTMLCanvasElement, saturation = 0.5, brightness = 0.86): HTMLCanvasElement {
+  const ctx = c.getContext('2d');
+  if (!ctx || !c.width || !c.height) return c;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    // A faint warm-olive cast, like the screenshots.
+    d[i] = (l + (d[i] - l) * saturation) * brightness * 1.02;
+    d[i + 1] = (l + (d[i + 1] - l) * saturation) * brightness;
+    d[i + 2] = (l + (d[i + 2] - l) * saturation) * brightness * 0.9;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
 export const TEXTURE_ANCHORS: Record<string, [number, number]> = {
-  treePine: [0.5, 150 / 190],
-  treeOak: [0.5, 150 / 190],
-  treeDead: [0.5, 140 / 170],
+  treePine: [120 / 256, 118 / 256],
+  treeOak: [120 / 256, 118 / 256],
+  treeDead: [120 / 256, 118 / 256],
+  boulder: [52 / 112, 52 / 112],
   machete: [0.06, 0.5],
   survivorLegs: [0.12, 0.5],
   door: [0.05, 0.5],

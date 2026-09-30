@@ -37,6 +37,7 @@ const world = (): WorldState => ({
   stakes: [0, 3],
   hidingOccupied: [false, true],
   doors: [true, false, false, true],
+  doorsBroken: [false, true, false, false],
   radar: [{ x: 1200, y: 3400 }],
 });
 

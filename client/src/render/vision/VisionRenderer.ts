@@ -18,7 +18,7 @@ export interface MaskSources {
   los: number[] | null;
   /** Light sources (R channel). */
   lights: MaskPolygon[];
-  /** See-through light (goggles / Hemp Battery): R at 70% and G, fading in. */
+  /** See-through light (goggles / Hemp Battery): B at 70%, ignoring walls, fading in. */
   xray: { poly: number[]; fade: number } | null;
 }
 
@@ -29,17 +29,23 @@ export interface VisionEffects {
 }
 
 const MASK_SCALE = 0.5;
-/** Own vision: bright near you, a little dimmer toward the end of the beam. */
+/**
+ * Own light, by absolute distance (world units): the beam never ends before it hits
+ * something, but it is brightest close up. [max distance, added intensity].
+ */
 const OWN_LAYERS: readonly [number, number][] = [
-  [1.0, 0.8],
-  [0.8, 0.1],
-  [0.55, 0.1],
+  [Infinity, 0.5],
+  [900, 0.22],
+  [420, 0.28],
 ];
+/** Light sources, by fraction of their radius. */
 const LIGHT_LAYERS: readonly [number, number][] = [
-  [1.0, 0.62],
+  [1.0, 0.55],
   [0.7, 0.2],
   [0.4, 0.18],
 ];
+/** Warm, flat Darkwood grade for everything in light. */
+const GRADE = { saturation: 0.72, tint: [1.1, 1.0, 0.8] as const };
 
 /**
  * Owns the half-resolution visibility mask, the vision post-process filter (applied to the
@@ -81,8 +87,9 @@ export class VisionRenderer {
       uGrain: { value: 0.025, type: 'f32' },
       uFlicker: { value: 1, type: 'f32' },
       uDamage: { value: 0, type: 'f32' },
-      uSaturation: { value: 1.18, type: 'f32' },
-      uTint: { value: new Float32Array([1.04, 1.0, 0.96]), type: 'vec3<f32>' },
+      uSaturation: { value: GRADE.saturation, type: 'f32' },
+      uFog: { value: 0.4, type: 'f32' },
+      uTint: { value: new Float32Array(GRADE.tint), type: 'vec3<f32>' },
     });
     this.visionFilter = new Filter({
       glProgram: GlProgram.from({ vertex: screenVertex, fragment: visionFragment, name: 'mh-vision' }),
@@ -93,6 +100,8 @@ export class VisionRenderer {
       uMaskScale: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
       uScreenSize: { value: new Float32Array([width, height]), type: 'vec2<f32>' },
       uThreshold: { value: 0.12, type: 'f32' },
+      uSaturation: { value: GRADE.saturation, type: 'f32' },
+      uTint: { value: new Float32Array(GRADE.tint), type: 'vec3<f32>' },
     });
     this.entityFilter = new Filter({
       glProgram: GlProgram.from({ vertex: screenVertex, fragment: entityMaskFragment, name: 'mh-entity-mask' }),
@@ -149,27 +158,27 @@ export class VisionRenderer {
       gl.rect(camX, camY, this.screenW / zoom, this.screenH / zoom).fill({ color: 0x00ff00, alpha: 1 });
     }
 
-    this.drawLayered(this.gOwn, sources.own, 0x0000ff, OWN_LAYERS);
-    this.drawLayered(this.gLight, sources.lights, 0xff0000, LIGHT_LAYERS);
+    this.drawLayered(this.gOwn, sources.own, 0x0000ff, OWN_LAYERS, true);
+    this.drawLayered(this.gLight, sources.lights, 0xff0000, LIGHT_LAYERS, false);
 
     const gx = this.gXray;
     gx.clear();
     if (sources.xray && sources.xray.poly.length >= 6 && sources.xray.fade > 0.001) {
-      // R carries the brightness (70%), G opens line of sight through walls.
-      const r = Math.round(BALANCE.xray.brightness * 255);
-      gx.poly(sources.xray.poly).fill({ color: (r << 16) | 0x00ff00, alpha: sources.xray.fade });
+      // Your own light at 70%, straight through walls.
+      gx.poly(sources.xray.poly).fill({ color: Math.round(BALANCE.xray.brightness * 255), alpha: sources.xray.fade });
     }
 
     renderer.render({ container: this.maskRoot, target: this.maskTexture, clear: true, clearColor: [0, 0, 0, 0] });
   }
 
-  private drawLayered(g: Graphics, polys: MaskPolygon[], color: number, layers: readonly [number, number][]): void {
+  private drawLayered(g: Graphics, polys: MaskPolygon[], color: number, layers: readonly [number, number][], absolute: boolean): void {
     g.clear();
     for (const p of polys) {
       if (p.poly.length < 6) continue;
       const intensity = p.intensity ?? 1;
-      for (const [frac, alpha] of layers) {
-        const pts = frac >= 1 ? p.poly : clampPolygon(p.poly, p.ox, p.oy, p.range * frac, this.tmp);
+      for (const [k, alpha] of layers) {
+        const dist = absolute ? k : p.range * k;
+        const pts = dist >= p.range ? p.poly : clampPolygon(p.poly, p.ox, p.oy, dist, this.tmp);
         g.poly(pts.slice()).fill({ color, alpha: alpha * intensity });
       }
     }

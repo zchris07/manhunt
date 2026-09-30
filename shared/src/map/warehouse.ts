@@ -246,12 +246,27 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
     walls.push({ ax, ay, bx, by, kind: 'warehouse', vision: true, move: true });
   };
   const stub = (C - DOOR_W) / 2;
+  // Exterior walls get a window every third cell: glass blocks movement, not sight.
+  const WIN_W = 64;
+  const pane = (ax: number, ay: number, bx: number, by: number): void => {
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const ux = (bx - ax) / C;
+    const uy = (by - ay) / C;
+    pushWall(ax, ay, mx - (ux * WIN_W) / 2, my - (uy * WIN_W) / 2);
+    walls.push({ ax: mx - (ux * WIN_W) / 2, ay: my - (uy * WIN_W) / 2, bx: mx + (ux * WIN_W) / 2, by: my + (uy * WIN_W) / 2, kind: 'window', vision: false, move: true });
+    pushWall(mx + (ux * WIN_W) / 2, my + (uy * WIN_W) / 2, bx, by);
+  };
   const exterior = (r: number, c: number, horizontal: boolean): boolean => (horizontal ? r === 0 || r === N : c === 0 || c === N);
   for (let r = 0; r <= N; r++) {
     let runStart = -1;
     for (let c = 0; c <= N; c++) {
       const e = c < N ? h[r][c] : 'open';
-      if (e === 'wall') {
+      if (e === 'wall' && (r === 0 || r === N) && c % 3 === 1 && c !== gateCol) {
+        if (runStart >= 0) pushWall(x0 + runStart * C, y0 + r * C, x0 + c * C, y0 + r * C);
+        runStart = -1;
+        pane(x0 + c * C, y0 + r * C, x0 + (c + 1) * C, y0 + r * C);
+      } else if (e === 'wall') {
         if (runStart < 0) runStart = c;
       } else {
         if (runStart >= 0) pushWall(x0 + runStart * C, y0 + r * C, x0 + c * C, y0 + r * C);
@@ -270,7 +285,11 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
     let runStart = -1;
     for (let r = 0; r <= N; r++) {
       const e = r < N ? v[r][c] : 'open';
-      if (e === 'wall') {
+      if (e === 'wall' && (c === 0 || c === N) && r % 3 === 1) {
+        if (runStart >= 0) pushWall(x0 + c * C, y0 + runStart * C, x0 + c * C, y0 + r * C);
+        runStart = -1;
+        pane(x0 + c * C, y0 + r * C, x0 + c * C, y0 + (r + 1) * C);
+      } else if (e === 'wall') {
         if (runStart < 0) runStart = r;
       } else {
         if (runStart >= 0) pushWall(x0 + c * C, y0 + runStart * C, x0 + c * C, y0 + r * C);

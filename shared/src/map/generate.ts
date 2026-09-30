@@ -103,6 +103,26 @@ interface Kit {
   radius: number;
 }
 
+/** Hiding spots and stakes keep at least this far from a doorway's centre. */
+const ENTRANCE_CLEAR = 90;
+/** Generators (bigger) keep this far. */
+const GEN_ENTRANCE_CLEAR = 135;
+
+/** Slides a generator straight away from any doorway it would block. */
+function clearOfEntrances<T extends { x: number; y: number }>(g: T, entrances: { x: number; y: number }[]): T {
+  const out = { ...g };
+  for (const e of entrances) {
+    const dx = out.x - e.x;
+    const dy = out.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= GEN_ENTRANCE_CLEAR) continue;
+    const k = d > 1e-3 ? GEN_ENTRANCE_CLEAR / d : 0;
+    out.x = e.x + (d > 1e-3 ? dx * k : GEN_ENTRANCE_CLEAR);
+    out.y = e.y + (d > 1e-3 ? dy * k : 0);
+  }
+  return out;
+}
+
 function rot(x: number, y: number, k: number): [number, number] {
   switch (k & 3) {
     case 0:
@@ -139,7 +159,9 @@ function buildKit(type: number, cx: number, cy: number, k: number, rng: Rng): Ki
     // Shack: a door on one side, an open gap opposite (run in, run through).
     seg(-95, -65, -35, -65, 'shack');
     seg(35, -65, 95, -65, 'shack');
-    seg(95, -65, 95, 65, 'shack');
+    seg(95, -65, 95, -30, 'shack');
+    seg(95, -30, 95, 30, 'window', false);
+    seg(95, 30, 95, 65, 'shack');
     seg(95, 65, 40, 65, 'shack');
     seg(-40, 65, -95, 65, 'shack');
     seg(-95, 65, -95, -65, 'shack');
@@ -339,6 +361,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   const doorSpots: DoorSpot[] = [...wh.doors];
   const barricadeSpots: OpeningSpot[] = [...wh.barricadeSpots];
   const cabinClearings = new Set<Circle>();
+  const cabinDoorSide = new Map<Rect, number>();
   for (const c of rng.shuffle(clearings.slice(1))) {
     if (cabins.length >= 3) break;
     if (c === hunterClearing) continue;
@@ -350,6 +373,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     cabins.push(rect);
     cabinClearings.add(c);
     const doorSide = rng.int(0, 3);
+    cabinDoorSide.set(rect, doorSide);
     const sides: [number, number, number, number][] = [
       [rect.x, rect.y, rect.x + cw, rect.y],
       [rect.x + cw, rect.y, rect.x + cw, rect.y + ch],
@@ -367,7 +391,10 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
         // Doors swing outward (to the right of a clockwise side is outside).
         doorSpots.push({ hx: mx - ux * 38, hy: my - uy * 38, angle: Math.atan2(uy, ux), length: 76, swing: -1, open: false });
       } else {
-        walls.push({ ax, ay, bx, by, kind: 'cabin', vision: true, move: true });
+        // A window in the middle of every other side: look in, light spills out.
+        walls.push({ ax, ay, bx: mx - ux * 34, by: my - uy * 34, kind: 'cabin', vision: true, move: true });
+        walls.push({ ax: mx - ux * 34, ay: my - uy * 34, bx: mx + ux * 34, by: my + uy * 34, kind: 'window', vision: false, move: true });
+        walls.push({ ax: mx + ux * 34, ay: my + uy * 34, bx, by, kind: 'cabin', vision: true, move: true });
       }
     });
     // Interior: wardrobe against the side facing the door, bed in a corner, a lamp.
@@ -427,8 +454,9 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     let gy = c.y + Math.sin(a) * c.r * 0.3;
     const cabin = cabins.find((r) => inRect(r, c.x, c.y, 60));
     if (cabin) {
+      // Behind the cabin, never in front of its door.
       gx = c.x;
-      gy = cabin.y + cabin.h + 110;
+      gy = cabinDoorSide.get(cabin) === 2 ? cabin.y - 110 : cabin.y + cabin.h + 110;
     }
     generators.push({ x: gx, y: gy, angle: rng.int(0, 3) * (Math.PI / 2), area: 'woods' });
     keep.circle(gx, gy, 120);
@@ -602,7 +630,14 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       stakeCandidates.push({ x: c.x + Math.cos(a) * c.r * 0.55, y: c.y + Math.sin(a) * c.r * 0.55 });
     }
   }
+  // Nothing may stand in a doorway or a barricade gap.
+  const entrancePts = (): { x: number; y: number }[] => [
+    ...doorSpots.map((d) => ({ x: d.hx + (Math.cos(d.angle) * d.length) / 2, y: d.hy + (Math.sin(d.angle) * d.length) / 2 })),
+    ...barricadeSpots.map((b) => ({ x: b.x, y: b.y })),
+  ];
+  const nearEntrance = (x: number, y: number, r: number): boolean => entrancePts().some((e) => Math.hypot(e.x - x, e.y - y) < r);
   const okStake = (p: { x: number; y: number }): boolean =>
+    !nearEntrance(p.x, p.y, ENTRANCE_CLEAR) &&
     !generators.some((g) => Math.hypot(g.x - p.x, g.y - p.y) < 130) &&
     !cabins.some((r) => inRect(r, p.x, p.y, 40)) &&
     !lights.some((l) => l.kind === 'campfire' && Math.hypot(l.x - p.x, l.y - p.y) < 90) &&
@@ -692,8 +727,8 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     racks: wh.racks,
     wrecks: wreckRects,
     exitZone,
-    generators: generators.map((g, id) => ({ id, ...g })),
-    hidingSpots: hidingSpots.map((h, id) => ({ id, ...h })),
+    generators: generators.map((g, id) => ({ id, ...clearOfEntrances(g, entrancePts()) })),
+    hidingSpots: hidingSpots.filter((h) => h.kind === 'grass' || !nearEntrance(h.x, h.y, ENTRANCE_CLEAR)).map((h, id) => ({ id, ...h })),
     loot: [],
     stakes: stakes.map((s, id) => ({ id, ...s })),
     barricades,

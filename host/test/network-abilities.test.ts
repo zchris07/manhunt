@@ -93,14 +93,14 @@ describe('mechanics over the network', () => {
     expect(hunter.latest!.worldState.barricades[0]).toBe(BarricadeState.Down);
   });
 
-  it('Soundcloud Burst: right click scares a survivor across the map', async () => {
+  it('Soundcloud Burst: F fires a wave that scares a survivor across the map', async () => {
     const { h, hunter, surv } = await duel();
     const w = h.host.world!;
     place(h, hunter, 600, 600);
     place(h, surv, w.map.width - 600, w.map.height - 600);
     h.run(100, () => hunter.pushInput(idle()));
     events(surv);
-    tap(h, hunter, Btn.Secondary);
+    tap(h, hunter, Btn.Secondary, { aim: Math.PI / 4 });
     expect(hunter.self!.burstCd).toBeGreaterThan(10);
     h.run(3500, () => hunter.pushInput(idle()));
     const evs = events(surv);

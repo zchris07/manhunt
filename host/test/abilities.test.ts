@@ -48,28 +48,10 @@ describe('hiding (Outlast / DBD)', () => {
     d.run(secs(0.8));
     place(h, spot.exitX, spot.exitY);
     d.run(2);
+    // Searching takes no time.
     d.tap(h.id, Btn.Interact);
-    d.run(secs(BALANCE.hunter.searchTime) + 2);
     expect(s.hideState).toBe(0);
     expect(s.health).toBe(Health.Wounded);
-  });
-
-  it('locker slam: bursting out during a search stuns Zach', () => {
-    const { w, d, spot } = lockerWorld();
-    const s = w.players.get(2)!;
-    const h = w.players.get(1)!;
-    d.run(2);
-    d.tap(s.id, Btn.Interact);
-    d.run(secs(0.8));
-    place(h, spot.exitX, spot.exitY);
-    d.run(2);
-    d.tap(h.id, Btn.Interact);
-    d.run(5);
-    d.tap(s.id, Btn.Interact);
-    expect(h.stunT).toBeGreaterThan(0);
-    expect(s.hideState).toBe(0);
-    expect(s.health).toBe(Health.Healthy);
-    expect(s.stats.stuns).toBe(1);
   });
 
   it('leaving is interruptible and holding breath (Space) runs the breath down', () => {
@@ -164,26 +146,25 @@ describe('survivor items (stun, never kill)', () => {
     expect(s.shells.length).toBe(0);
   });
 
-  it('night vision: toggles with a 0.5 s delay, sees through walls, and is used up for good', () => {
+  it('night vision: on only while held, sees through walls, and is used up for good', () => {
     const { w, d, s } = duel(2000);
     give(s, ItemKind.Goggles);
-    use(d, s, ItemKind.Goggles);
+    const held = { buttons: Btn.Primary, item: ItemKind.Goggles };
+    d.run(1, (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(true);
     const v = visionFor(w, s);
     expect(v.xray).toBe(true);
     expect(v.cone.halfAngle).toBeCloseTo(BALANCE.survivor.vision.coneHalfAngleDeg * (Math.PI / 180) * I.goggles.coneMul, 3);
-    use(d, s, ItemKind.Goggles);
+    d.run(secs(1), (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(true);
-    d.run(secs(I.goggles.toggleDelay));
-    use(d, s, ItemKind.Goggles);
+    d.run(1, (p) => (p.id === s.id ? { item: ItemKind.Goggles } : undefined));
     expect(s.gogglesOn).toBe(false);
     const left = s.goggles[0];
     expect(left).toBeLessThan(I.goggles.meter);
     d.run(secs(3));
     expect(s.goggles[0]).toBe(left);
     s.goggles[0] = 0.5;
-    use(d, s, ItemKind.Goggles);
-    d.run(secs(1));
+    d.run(secs(1), (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(false);
     expect(s.inv[ItemKind.Goggles]).toBe(0);
   });
@@ -268,20 +249,22 @@ describe("Zach's kit", () => {
     expect(h.move.lungeT).toBe(0);
   });
 
-  it('Soundcloud Burst travels through everything and jump-scares every survivor it passes', () => {
+  it('Soundcloud Burst is an aimed wave: it flies through everything and scares only who it passes', () => {
     const { w, d, h, s } = duel(3000);
     const mate = w.players.get(3)!;
-    d.tap(h.id, Btn.Secondary);
+    // Aim at s (3000 u to the west); the teammate stands off to the side of the wave.
+    place(mate, h.move.x - 1500, h.move.y + H.burst.width);
+    d.tap(h.id, Btn.Secondary, { aim: Math.PI });
     expect(h.burstCd).toBeGreaterThan(H.burst.cooldown - 0.2);
     expect(w.events.some((e) => e.e.k === 'burst')).toBe(true);
-    d.run(secs(0.5));
+    d.run(secs(2800 / H.burst.speed - 0.1));
     expect(s.scareT).toBe(0);
-    d.run(secs(1.2));
+    d.run(secs(0.3));
     expect(s.scareT).toBeGreaterThan(0);
     d.run(secs(2.5));
-    expect(mate.scareT).toBeGreaterThan(0);
-    expect(w.events.filter((e) => e.e.k === 'scare').map((e) => e.to[0]).sort()).toEqual([s.id, mate.id].sort());
-    // On cooldown: a second click does nothing.
+    expect(mate.scareT).toBe(0);
+    expect(w.events.filter((e) => e.e.k === 'scare').map((e) => e.to[0])).toEqual([s.id]);
+    // On cooldown: a second press does nothing.
     const n = w.bursts.length;
     d.tap(h.id, Btn.Secondary);
     expect(w.bursts.length).toBe(n);
@@ -417,6 +400,21 @@ describe('testing mode', () => {
     expect(w.switchRole(s.id)).toBe(true);
     expect(s.role).toBe('survivor');
     expect(s.inv[ItemKind.Trap]).toBe(I.maxStack);
+  });
+
+  it('teleports to a clicked map point, and survivors see their own scent trail', () => {
+    const { w, d, s } = duel(200, { testMode: true });
+    w.teleport(s.id, 1234, 2345);
+    expect(Math.hypot(s.move.x - 1234, s.move.y - 2345)).toBeLessThan(60);
+    const c = clearLane(w, 450);
+    place(s, c.x - 300, c.y);
+    d.run(secs(3), (p) => (p.id === s.id ? { moveX: 1, buttons: Btn.Run } : undefined));
+    expect(w.events.some((e) => e.e.k === 'trail' && e.to.includes(s.id))).toBe(true);
+    // Outside testing mode there is no teleporting.
+    const n = duel(200);
+    const x0 = n.s.move.x;
+    n.w.teleport(n.s.id, 1234, 2345);
+    expect(n.s.move.x).toBe(x0);
   });
 
   it('switching sides is refused outside testing mode', () => {

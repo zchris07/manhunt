@@ -58,7 +58,8 @@ export interface SelfState {
   /** Seconds left on the goggles currently in use. */
   goggleMeter: number;
   gogglesOn: number;
-  gogglesCd: number;
+  /** Zach: seconds the swing has been charged (-1 = not charging). */
+  chargeT: number;
   /** Shells left in the current shotgun. */
   shells: number;
   reloadT: number;
@@ -121,7 +122,7 @@ export function emptySelf(id = 0): SelfState {
     inv: [0, 0, 0, 0, 0, 0],
     goggleMeter: 0,
     gogglesOn: 0,
-    gogglesCd: 0,
+    chargeT: -1,
     shells: 0,
     reloadT: 0,
     confit: 0,
@@ -167,7 +168,8 @@ export const SextonFlag = {
 
 /**
  * A quantised entity as sent on the wire. x/y are in 1/8 units, facing in 1/256 turns.
- * `aux` holds the held item (players: low 3 bits) and `stamina` the sprint meter (0-255).
+ * `aux` holds a survivor's held item (low 3 bits) or Zach's swing charge (0-255), and
+ * `stamina` the sprint meter (0-255).
  */
 export interface EntityRecord {
   id: number;
@@ -229,6 +231,8 @@ export interface WorldState {
   stakes: number[];
   hidingOccupied: boolean[];
   doors: boolean[];
+  /** Doors Zach smashed. */
+  doorsBroken: boolean[];
   /** JARVIS radar: hunter positions (only while this player's radar is running). */
   radar: { x: number; y: number }[];
 }
@@ -273,6 +277,7 @@ export function encodeWorld(ws: WorldState): Uint8Array {
   for (const s of ws.stakes) w.u8(s);
   packBits(w, ws.hidingOccupied);
   packBits(w, ws.doors);
+  packBits(w, ws.doorsBroken);
   w.u8(ws.radar.length);
   for (const p of ws.radar) w.u16(Math.max(0, Math.round(p.x))).u16(Math.max(0, Math.round(p.y)));
   return w.finish();
@@ -301,6 +306,7 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
   for (let i = 0; i < ns; i++) stakes.push(r.u8());
   const hidingOccupied = unpackBits(r);
   const doors = unpackBits(r);
+  const doorsBroken = unpackBits(r);
   const radar: WorldState['radar'] = [];
   const nr = r.u8();
   for (let i = 0; i < nr; i++) radar.push({ x: r.u16(), y: r.u16() });
@@ -320,6 +326,7 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
     stakes,
     hidingOccupied,
     doors,
+    doorsBroken,
     radar,
   };
 }
@@ -343,7 +350,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(s.stakeStage).u16(tenths(s.stakeT)).u8(unit(s.wiggle));
   w.u8(unit(s.breath)).u16(ms(s.attackCd)).u16(tenths(s.burstCd)).u8(s.hemp);
   for (let i = 1; i < 6; i++) w.u8(s.inv[i] ?? 0);
-  w.u16(tenths(s.goggleMeter)).u8(s.gogglesOn).u16(ms(s.gogglesCd)).u8(s.shells).u16(ms(s.reloadT));
+  w.u16(tenths(s.goggleMeter)).u8(s.gogglesOn).u16(ms(s.chargeT + 1)).u8(s.shells).u16(ms(s.reloadT));
   w.u8(s.confit).u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
 }
@@ -397,7 +404,7 @@ function readSelf(r: ByteReader): SelfState {
   for (let i = 1; i < 6; i++) s.inv.push(r.u8());
   s.goggleMeter = r.u16() / 10;
   s.gogglesOn = r.u8();
-  s.gogglesCd = r.u16() / 1000;
+  s.chargeT = r.u16() / 1000 - 1;
   s.shells = r.u8();
   s.reloadT = r.u16() / 1000;
   s.confit = r.u8();

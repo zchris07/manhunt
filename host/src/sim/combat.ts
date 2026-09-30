@@ -1,12 +1,22 @@
-import { Action, BALANCE, BarricadeState, DEG, Health, angleDiff, closestOnSeg, pointSegDist2, resolveOverlaps } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, DEG, Health, angleDiff, closestOnSeg, pointSegDist2, resolveOverlaps } from '@manhunt/shared';
 import { HISTORY_TICKS, type SimPlayer } from './player';
 import { eliminate, type World } from './World';
 
 const H = BALANCE.hunter;
 
-/** Starts a swing (resolved after the wind-up). */
-export function attemptAttack(w: World, h: SimPlayer): void {
-  if (h.carrying || h.attackCd > 0 || h.attackWindup > 0 || h.action !== Action.None || h.stunT > 0 || h.move.lungeT > 0) return;
+function canSwing(h: SimPlayer): boolean {
+  return !h.carrying && h.attackCd <= 0 && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0 && h.move.lungeT <= 0;
+}
+
+/** Left click pressed: start charging a swing (released in updateCombat). */
+export function startCharge(h: SimPlayer): void {
+  if (h.chargeT < 0 && canSwing(h)) h.chargeT = 0;
+}
+
+/** Starts a swing (resolved after the wind-up). A heavy swing is a fully charged one. */
+export function attemptAttack(w: World, h: SimPlayer, heavy = false): void {
+  if (!canSwing(h)) return;
+  h.heavy = heavy;
   h.attackWindup = H.attack.windup;
   h.swingT = H.attack.swingTime;
   h.move.slowT = Math.max(h.move.slowT, H.attack.windup);
@@ -29,12 +39,13 @@ function hittable(q: SimPlayer): boolean {
 
 /** True if (x,y) with radius r is inside the swipe in front of the hunter. */
 function inSwipe(h: SimPlayer, x: number, y: number, r: number): boolean {
-  const reach = H.attack.range + BALANCE.net.hunterHitTolerance;
+  const C = H.attack.charge;
+  const reach = H.attack.range * (h.heavy ? C.rangeMul : 1) + BALANCE.net.hunterHitTolerance;
   const d = Math.hypot(x - h.move.x, y - h.move.y) - r;
   if (d > reach) return false;
   if (d <= h.radius) return true;
   const a = Math.atan2(y - h.move.y, x - h.move.x);
-  return Math.abs(angleDiff(a, h.facing)) <= (H.attack.arcDeg / 2) * DEG + Math.atan2(r, Math.max(1, d));
+  return Math.abs(angleDiff(a, h.facing)) <= (H.attack.arcDeg / 2) * DEG * (h.heavy ? C.arcMul : 1) + Math.atan2(r, Math.max(1, d));
 }
 
 function resolveAttack(w: World, h: SimPlayer): void {
@@ -52,8 +63,10 @@ function resolveAttack(w: World, h: SimPlayer): void {
     }
   }
   let hit = false;
+  const power = h.heavy ? 2 : 1;
   if (best) {
     damageSurvivor(w, best, h);
+    if (h.heavy) damageSurvivor(w, best, h);
     hit = true;
   } else if (w.sexton.alive && inSwipe(h, w.sexton.x, w.sexton.y, BALANCE.sexton.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.sexton.x, w.sexton.y)) {
     w.sexton.hit(h);
@@ -67,12 +80,29 @@ function resolveAttack(w: World, h: SimPlayer): void {
       const { x: cx, y: cy } = closestOnSeg(h.move.x, h.move.y, b.x - ux, b.y - uy, b.x + ux, b.y + uy, { x: 0, y: 0 });
       if (!inSwipe(h, cx, cy, 6)) return;
       hit = true;
-      w.barricadeHits[i]++;
+      w.barricadeHits[i] += power;
       w.noise(cx, cy, 700, 'smash');
       w.emit(w.near(b.x, b.y, BALANCE.net.maxSensingRadius), { k: 'barricadeHit', id: i, hits: w.barricadeHits[i] });
       if (w.barricadeHits[i] >= H.attack.barricadeHits) w.setBarricade(i, BarricadeState.Broken);
     });
+    // Two swings smash a closed door (it stays open for good).
+    w.map.doors.forEach((d, i) => {
+      if (hit || w.doors[i] || w.doorBroken[i]) return;
+      const ex = d.hx + Math.cos(d.angle) * d.length;
+      const ey = d.hy + Math.sin(d.angle) * d.length;
+      const { x: cx, y: cy } = closestOnSeg(h.move.x, h.move.y, d.hx, d.hy, ex, ey, { x: 0, y: 0 });
+      if (!inSwipe(h, cx, cy, 6)) return;
+      hit = true;
+      w.doorHits[i] += power;
+      w.noise(cx, cy, 700, 'smash');
+      if (w.doorHits[i] >= H.attack.doorHits) {
+        w.setDoor(i, true);
+        w.doorBroken[i] = true;
+        w.noise(cx, cy, 900, 'door_smash');
+      }
+    });
   }
+  h.heavy = false;
   w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'swing', id: h.id, hit });
   if (hit) {
     h.attackCd = H.attack.hitCooldown;
@@ -194,6 +224,20 @@ export function updateCombat(w: World, dt: number): void {
     if (p.swingT > 0) p.swingT = Math.max(0, p.swingT - dt);
 
     if (p.role === 'hunter') {
+      if (p.chargeT >= 0) {
+        const C = H.attack.charge;
+        if (!canSwing(p)) p.chargeT = -1;
+        else if (p.lastCmd.buttons & Btn.Primary) {
+          p.chargeT = Math.min(C.max, p.chargeT + dt);
+          p.move.slowT = Math.max(p.move.slowT, 0.1);
+          p.move.slowMul = Math.min(p.move.slowMul, 1 - (1 - C.slowMul) * (p.chargeT / C.max));
+        } else {
+          // Released: strike.
+          const heavy = p.chargeT >= C.heavyAt;
+          p.chargeT = -1;
+          attemptAttack(w, p, heavy);
+        }
+      }
       if (p.attackWindup > 0) {
         p.attackWindup -= dt;
         if (p.attackWindup <= 0) {

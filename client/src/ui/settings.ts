@@ -41,8 +41,8 @@ export function openSettings(parent: HTMLElement, h: SettingsHandlers): HTMLElem
     `<div class="panel" style="width:min(640px,100%)">
       <h2 style="margin-top:0">Settings <span class="note">(the game keeps running)</span></h2>
       ${slider('master', 'Master volume')}
-      ${slider('sfx', 'Effects')}
-      ${slider('ambience', 'Ambience')}
+      ${slider('sfx', 'Soundcloud Burst')}
+      ${slider('ambience', "Sexton's reel")}
       ${controlsHtml(h.role)}
       <div class="row" style="margin-top:16px;justify-content:space-between">
         <button id="leave">Leave match</button>

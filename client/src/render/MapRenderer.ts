@@ -3,10 +3,23 @@ import type { MapData, WallSeg } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import { ChunkedLayer } from './ChunkedLayer';
 import { lightFlicker } from './flicker';
+import { CANOPY_PX } from '../assets/procedural/textures';
 
 export type BarricadeVisual = 'up' | 'down' | 'broken';
 
-const INK = 0x181024;
+/** Every cast shadow falls down and to the right, as if lit from the upper left. */
+const SHADOW = { x: 7, y: 11 };
+
+/** Wall looks: [thickness, side face, top face, top highlight, height offset]. */
+type WallLook = [number, number, number, number, number];
+const WALLS: Partial<Record<WallSeg['kind'], WallLook>> = {
+  warehouse: [18, 0x1f201f, 0x4c4c48, 0x6a6a64, 7],
+  cabin: [14, 0x1e1812, 0x4a3a2a, 0x66523c, 6],
+  shack: [12, 0x1a1c1d, 0x42474a, 0x5c6266, 5],
+  wreck: [0, 0, 0, 0, 0],
+  fence: [6, 0x1c1610, 0x3e3226, 0x564634, 3],
+  yard: [3, 0x202224, 0x55595c, 0x74787a, 1],
+};
 
 function repeatTex(tex: Texture): Texture {
   tex.source.addressMode = 'repeat';
@@ -20,21 +33,23 @@ interface DoorSprite {
   /** Current openness 0..1 (animated toward the target). */
   k: number;
   target: number;
+  broken: boolean;
 }
 
 /**
- * Draws the static map: ground, paths, lake, buildings, walls, trees, props, lights. Dynamic
- * props (generator lights, barricades, doors, gate) are kept here too with setters for their
- * state; doors swing open and shut smoothly.
+ * Draws the static map in a Darkwood-like style: murky ground, walls with a top face and a
+ * soft cast shadow (so the flat map reads as a 3D scene seen from above), glass windows,
+ * tree canopies from straight above, props and lights. Doors, barricades and the gate are
+ * kept here too with setters for their state. Generators and the gate lever are objectives
+ * and live on the entity layer, so they are hidden in the fog of war.
  */
 export class MapRenderer {
   readonly root = new Container();
   private readonly low: ChunkedLayer;
   private readonly high: ChunkedLayer;
-  private readonly generatorSprites: Sprite[] = [];
-  private readonly generatorGlows: Sprite[] = [];
   private readonly barricadeSprites: Sprite[] = [];
   private readonly doors: DoorSprite[] = [];
+  private readonly debris = new Graphics();
   private readonly gateSprite: Sprite;
   private readonly glows: { sprite: Sprite; index: number; kind: string; base: number }[] = [];
 
@@ -50,7 +65,7 @@ export class MapRenderer {
     const props = new Container();
     this.gateSprite = this.buildDynamicProps(props);
     this.buildHighProps();
-    this.root.addChild(ground, this.low.root, props, walls, this.high.root);
+    this.root.addChild(ground, this.low.root, props, this.debris, walls, this.high.root);
   }
 
   private tex(id: string, variant = 0): Texture {
@@ -73,57 +88,74 @@ export class MapRenderer {
     c.addChild(new TilingSprite({ texture: this.tex('ground.forest'), width: m.width, height: m.height }));
     const g = new Graphics();
     const dirt = repeatTex(this.tex('ground.path'));
+    // Clearings and paths fade softly into the forest floor.
     for (const cl of m.clearings) {
-      g.circle(cl.x, cl.y, cl.r * 0.95).fill({ texture: dirt, alpha: 0.35 });
-      g.circle(cl.x, cl.y, cl.r * 0.75).fill({ texture: dirt, alpha: 0.7 });
+      g.circle(cl.x, cl.y, cl.r * 1.0).fill({ texture: dirt, alpha: 0.18 });
+      g.circle(cl.x, cl.y, cl.r * 0.85).fill({ texture: dirt, alpha: 0.3 });
+      g.circle(cl.x, cl.y, cl.r * 0.68).fill({ texture: dirt, alpha: 0.5 });
     }
     for (const p of m.paths) {
-      g.poly(p.points, false).stroke({ width: p.width + 16, texture: dirt, alpha: 0.35, cap: 'round', join: 'round' });
-      g.poly(p.points, false).stroke({ width: p.width - 10, texture: dirt, alpha: 0.95, cap: 'round', join: 'round' });
+      g.poly(p.points, false).stroke({ width: p.width + 30, texture: dirt, alpha: 0.2, cap: 'round', join: 'round' });
+      g.poly(p.points, false).stroke({ width: p.width + 6, texture: dirt, alpha: 0.45, cap: 'round', join: 'round' });
+      g.poly(p.points, false).stroke({ width: p.width - 18, texture: dirt, alpha: 0.7, cap: 'round', join: 'round' });
     }
-    for (const gp of m.grassPatches) g.circle(gp.x, gp.y, gp.r).fill({ color: 0x2f7a2c, alpha: 0.6 });
+    for (const gp of m.grassPatches) g.circle(gp.x, gp.y, gp.r * 1.1).fill({ color: 0x1c2214, alpha: 0.45 });
+    // Lake: muddy bank, dark still water.
+    g.poly(m.lake).stroke({ width: 40, color: 0x2a261e, alpha: 0.7 });
     g.poly(m.lake).fill({ texture: repeatTex(this.tex('ground.water')) });
-    g.poly(m.lake).stroke({ width: 14, color: 0xd8c08a, alpha: 0.9 });
-    g.poly(m.lake).stroke({ width: 3, color: INK, alpha: 0.9 });
+    g.poly(m.lake).stroke({ width: 8, color: 0x16140f, alpha: 0.8 });
     const concrete = repeatTex(this.tex('ground.concrete'));
     const wood = repeatTex(this.tex('ground.wood'));
+    // Dock: shadow on the water, then planks.
+    g.poly(m.dock.map((v, i) => v + (i % 2 === 0 ? SHADOW.x : SHADOW.y))).fill({ color: 0x000000, alpha: 0.45 });
     g.poly(m.dock).fill({ texture: wood });
-    g.poly(m.dock).stroke({ width: 2.5, color: INK });
     const wh = m.warehouse;
-    g.rect(wh.x - 8, wh.y - 8, wh.w + 16, wh.h + 16).fill({ color: 0x3a3a48 });
+    g.rect(wh.x - 14, wh.y - 14, wh.w + 28, wh.h + 28).fill({ color: 0x24241f, alpha: 0.8 });
     g.rect(wh.x, wh.y, wh.w, wh.h).fill({ texture: concrete });
     const ez = m.exitZone;
-    g.rect(ez.x - 10, ez.y - 10, ez.w + 20, ez.h + 80).fill({ texture: concrete, alpha: 0.95 });
-    // Painted exit markings.
-    for (let i = 0; i < 6; i++) g.rect(ez.x + 8 + i * ((ez.w - 16) / 6), ez.y + ez.h - 14, (ez.w - 16) / 12, 10).fill({ color: 0xf2b632 });
-    g.roundRect(ez.x + ez.w / 2 - 55, ez.y + 8, 110, 44, 6).fill({ color: 0x2fc05a }).stroke({ width: 2, color: INK });
+    g.rect(ez.x - 10, ez.y - 10, ez.w + 20, ez.h + 80).fill({ texture: concrete, alpha: 0.9 });
+    // Worn hazard striping by the exit.
+    for (let i = 0; i < 6; i++) g.rect(ez.x + 8 + i * ((ez.w - 16) / 6), ez.y + ez.h - 14, (ez.w - 16) / 12, 10).fill({ color: 0x8a7a3a, alpha: 0.55 });
     for (const cab of m.cabins) {
       g.rect(cab.x, cab.y, cab.w, cab.h).fill({ texture: wood });
-      g.rect(cab.x + 40, cab.y + 50, cab.w - 80, cab.h - 100).fill({ color: 0xc0392b, alpha: 0.55 });
+      g.rect(cab.x + 40, cab.y + 50, cab.w - 80, cab.h - 100).fill({ color: 0x3a1c18, alpha: 0.55 });
     }
     c.addChild(g);
     return c;
+  }
+
+  /** A soft cast shadow for a rectangle-ish prop (three widening, fading layers). */
+  private shadowRect(g: Graphics, x: number, y: number, w: number, h: number, r = 4): void {
+    for (const [grow, a] of [
+      [8, 0.12],
+      [4, 0.18],
+      [0, 0.28],
+    ] as const) {
+      g.roundRect(x + SHADOW.x - grow / 2, y + SHADOW.y - grow / 2, w + grow, h + grow, r + grow / 2).fill({ color: 0x000000, alpha: a });
+    }
   }
 
   private buildLowProps(): void {
     const m = this.map;
     for (const b of m.bushes) this.low.add(this.sprite('prop.bush', b.variant, b.x, b.y, b.r / 40, b.x % 6.28), b.x, b.y);
     for (const gp of m.grassPatches) {
-      const n = Math.max(3, Math.round((gp.r * gp.r) / 2400));
+      const n = Math.max(4, Math.round((gp.r * gp.r) / 1800));
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + gp.x;
-        const r = i === 0 ? 0 : gp.r * 0.55 * ((i % 3) / 3 + 0.4);
+        const r = i === 0 ? 0 : gp.r * 0.6 * ((i % 3) / 3 + 0.4);
         const x = gp.x + Math.cos(a) * r;
         const y = gp.y + Math.sin(a) * r;
-        this.low.add(this.sprite('grass.tall', i, x, y, 0.9 + (i % 3) * 0.15, a), x, y);
+        this.low.add(this.sprite('grass.tall', i, x, y, 1 + (i % 3) * 0.15, a), x, y);
       }
     }
     for (const l of m.logs) this.low.add(this.sprite('prop.log', 0, l.x, l.y, l.length / 144, l.angle), l.x, l.y);
-    const boxes = [0xe8453c, 0xf2b632, 0x2fc0a8, 0x2d6fe8, 0x8e4ae8];
+    // Warehouse racks: metal shelving with dusty boxes.
+    const boxes = [0x5a4a36, 0x4a3e30, 0x635240, 0x3e3a34];
     for (const r of m.racks) {
       const g = new Graphics();
-      g.rect(r.x + 5, r.y + 6, r.w, r.h).fill({ color: 0x000000, alpha: 0.3 });
-      g.rect(r.x, r.y, r.w, r.h).fill({ color: 0x3f5f8f }).stroke({ width: 2, color: INK });
+      this.shadowRect(g, r.x, r.y, r.w, r.h, 2);
+      g.rect(r.x, r.y, r.w, r.h).fill({ color: 0x2c2e30 });
+      g.rect(r.x, r.y, r.w, r.h).stroke({ width: 2, color: 0x4a4e52 });
       const horizontal = r.w > r.h;
       const len = horizontal ? r.w : r.h;
       let k = 6;
@@ -131,26 +163,30 @@ export class MapRenderer {
       while (k < len - 18) {
         const bx = horizontal ? r.x + k : r.x + 5;
         const by = horizontal ? r.y + 5 : r.y + k;
-        g.rect(bx, by, horizontal ? 20 : r.w - 10, horizontal ? r.h - 10 : 20)
-          .fill({ color: boxes[(i + Math.round(r.x)) % boxes.length] })
-          .stroke({ width: 1.2, color: INK });
+        const bw = horizontal ? 20 : r.w - 10;
+        const bh = horizontal ? r.h - 10 : 20;
+        g.rect(bx, by, bw, bh).fill({ color: boxes[(i + Math.round(r.x)) % boxes.length] });
+        g.rect(bx, by, bw, 2).fill({ color: 0x7a6a54, alpha: 0.5 });
+        g.moveTo(bx + bw / 2, by).lineTo(bx + bw / 2, by + bh).stroke({ width: 1.5, color: 0x2a2218, alpha: 0.6 });
         k += 26;
         i++;
       }
       this.low.add(g, r.x + r.w / 2, r.y + r.h / 2);
     }
+    // Wrecked cars: rusted shells seen from above.
     for (const w of m.wrecks) {
       const g = new Graphics();
-      g.roundRect(w.x + 5, w.y + 6, w.w, w.h, 14).fill({ color: 0x000000, alpha: 0.3 });
-      g.roundRect(w.x, w.y, w.w, w.h, 14).fill({ color: 0xc0452e }).stroke({ width: 2, color: INK });
+      this.shadowRect(g, w.x, w.y, w.w, w.h, 14);
+      g.roundRect(w.x, w.y, w.w, w.h, 14).fill({ color: 0x3e2c22 });
+      g.roundRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6, 12).stroke({ width: 2, color: 0x5a4030, alpha: 0.8 });
       const horizontal = w.w > w.h;
       if (horizontal) {
-        g.roundRect(w.x + w.w * 0.3, w.y + 8, w.w * 0.4, w.h - 16, 6).fill({ color: 0x5ad0e0 }).stroke({ width: 1.5, color: INK });
-        g.rect(w.x + 10, w.y + 6, 18, w.h - 12).fill({ color: 0xe06a4a });
+        g.roundRect(w.x + w.w * 0.3, w.y + 8, w.w * 0.4, w.h - 16, 6).fill({ color: 0x1a2224 });
+        g.roundRect(w.x + w.w * 0.32, w.y + 10, w.w * 0.12, w.h - 20, 4).fill({ color: 0x3a4a4c, alpha: 0.5 });
       } else {
-        g.roundRect(w.x + 8, w.y + w.h * 0.3, w.w - 16, w.h * 0.4, 6).fill({ color: 0x5ad0e0 }).stroke({ width: 1.5, color: INK });
+        g.roundRect(w.x + 8, w.y + w.h * 0.3, w.w - 16, w.h * 0.4, 6).fill({ color: 0x1a2224 });
       }
-      g.circle(w.x + w.w * 0.72, w.y + w.h * 0.5, 9).fill({ color: 0x7a2a18, alpha: 0.7 });
+      g.circle(w.x + w.w * 0.72, w.y + w.h * 0.5, 9).fill({ color: 0x5a3a24, alpha: 0.6 });
       this.low.add(g, w.x + w.w / 2, w.y + w.h / 2);
     }
     for (const h of m.hidingSpots) {
@@ -162,53 +198,72 @@ export class MapRenderer {
     for (const st of m.stakes) this.low.add(this.sprite('obj.stake', 0, st.x, st.y, 1, (st.x + st.y) % 6.28), st.x, st.y);
   }
 
-  private buildWalls(): Graphics {
-    const g = new Graphics();
-    // [width, fill, highlight]
-    const style: Partial<Record<WallSeg['kind'], [number, number, number]>> = {
-      warehouse: [16, 0x7c8298, 0xaab0c6],
-      cabin: [13, 0x8a5530, 0xc07a42],
-      shack: [11, 0x4f7ca8, 0x86b2dc],
-      fence: [5, 0xa0703c, 0xd09a5c],
-      yard: [3, 0xa8b0bc, 0xd8dee8],
-      rack: [0, 0, 0],
-    };
-    const kinds = this.map.walls.filter((w) => style[w.kind] && style[w.kind]![0] > 0);
-    // Ink outline, then the wall body, then a lit top edge.
-    for (const pass of [0, 1, 2] as const) {
-      for (const w of kinds) {
-        const [width, fill, hi] = style[w.kind]!;
-        const cap = w.kind === 'fence' || w.kind === 'yard' ? 'butt' : 'square';
-        if (pass === 0) g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: width + 3, color: INK, cap });
-        else if (pass === 1) g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width, color: fill, cap });
-        else if (width > 6) g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: width * 0.3, color: hi, cap, alpha: 0.9 });
+  /**
+   * Walls in three passes so they read as solid blocks seen from above: a soft cast shadow,
+   * the dark side face, then the lit top face raised a few units up-left. Windows are panes
+   * of dirty glass in a frame: you can see (and shine a light) through them.
+   */
+  private buildWalls(): Container {
+    const c = new Container();
+    const shadow = new Graphics();
+    const body = new Graphics();
+    const walls = this.map.walls.filter((w) => (WALLS[w.kind]?.[0] ?? 0) > 0);
+    for (const w of walls) {
+      const [width, , , , h] = WALLS[w.kind]!;
+      const k = h / 7;
+      for (const [grow, a] of [
+        [16, 0.1],
+        [8, 0.16],
+        [2, 0.26],
+      ] as const) {
+        shadow.moveTo(w.ax + SHADOW.x * k, w.ay + SHADOW.y * k).lineTo(w.bx + SHADOW.x * k, w.by + SHADOW.y * k).stroke({ width: width + grow, color: 0x000000, alpha: a, cap: 'round' });
       }
     }
+    for (const pass of [0, 1, 2] as const) {
+      for (const w of walls) {
+        const [width, side, top, hi, h] = WALLS[w.kind]!;
+        const cap = w.kind === 'fence' || w.kind === 'yard' ? 'butt' : 'square';
+        const ox = -h * 0.35;
+        const oy = -h * 0.6;
+        if (pass === 0) body.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width, color: side, cap });
+        else if (pass === 1) body.moveTo(w.ax + ox, w.ay + oy).lineTo(w.bx + ox, w.by + oy).stroke({ width: width * 0.9, color: top, cap });
+        else if (width > 6) body.moveTo(w.ax + ox - 1, w.ay + oy - 1).lineTo(w.bx + ox - 1, w.by + oy - 1).stroke({ width: width * 0.22, color: hi, cap, alpha: 0.7 });
+      }
+    }
+    // Fence posts.
     for (const w of this.map.walls) {
       if (w.kind !== 'fence' && w.kind !== 'yard') continue;
       const len = Math.hypot(w.bx - w.ax, w.by - w.ay);
       for (let t = 0; t <= len; t += 40) {
         const x = w.ax + ((w.bx - w.ax) * t) / len;
         const y = w.ay + ((w.by - w.ay) * t) / len;
-        g.rect(x - 3.5, y - 3.5, 7, 7).fill({ color: w.kind === 'yard' ? 0xc9d2dc : 0x8a5530 }).stroke({ width: 1.2, color: INK });
+        shadow.rect(x - 3 + SHADOW.x * 0.5, y - 3 + SHADOW.y * 0.5, 6, 6).fill({ color: 0x000000, alpha: 0.3 });
+        body.rect(x - 3.5, y - 5, 7, 7).fill({ color: w.kind === 'yard' ? 0x5a5e60 : 0x3a2e22 });
       }
     }
-    return g;
+    // Windows: a frame on each end and a pane of grimy glass.
+    for (const w of this.map.walls) {
+      if (w.kind !== 'window') continue;
+      const len = Math.hypot(w.bx - w.ax, w.by - w.ay) || 1;
+      const ux = (w.bx - w.ax) / len;
+      const uy = (w.by - w.ay) / len;
+      body.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 7, color: 0x1a1c1c, alpha: 0.9 });
+      body.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 4, color: 0x7a9094, alpha: 0.35 });
+      body.moveTo(w.ax + ux * len * 0.15 - uy * 1, w.ay + uy * len * 0.15 + ux * 1).lineTo(w.ax + ux * len * 0.45, w.ay + uy * len * 0.45).stroke({ width: 1.2, color: 0xc8d8da, alpha: 0.35 });
+      body.rect(w.ax + ux * len * 0.5 - 2.5, w.ay + uy * len * 0.5 - 2.5, 5, 5).fill({ color: 0x2a2620 });
+      for (const [x, y] of [
+        [w.ax, w.ay],
+        [w.bx, w.by],
+      ]) {
+        body.rect(x - 5, y - 5, 10, 10).fill({ color: 0x2a2620 });
+      }
+    }
+    c.addChild(shadow, body);
+    return c;
   }
 
   private buildDynamicProps(props: Container): Sprite {
     const m = this.map;
-    for (const gen of m.generators) {
-      const glow = this.sprite('fx.glow', 0, gen.x, gen.y, 2.6);
-      glow.tint = 0xffe07a;
-      glow.blendMode = 'add';
-      glow.visible = false;
-      props.addChild(glow);
-      this.generatorGlows.push(glow);
-      const s = this.sprite('obj.generator', 0, gen.x, gen.y, 1, gen.angle);
-      props.addChild(s);
-      this.generatorSprites.push(s);
-    }
     for (const b of m.barricades) {
       const s = this.sprite('obj.barricade', 0, 0, 0, b.length / 96, b.angle);
       props.addChild(s);
@@ -223,45 +278,35 @@ export class MapRenderer {
       const k = m.dynamicSegments[d.dyn].active ? 0 : 1;
       s.rotation = d.angle + (open - d.angle) * k;
       props.addChild(s);
-      this.doors.push({ sprite: s, closed: d.angle, open, k, target: k });
+      this.doors.push({ sprite: s, closed: d.angle, open, k, target: k, broken: false });
     }
     const gate = this.sprite('obj.gate', 0, m.gate.x, m.gate.y, m.gate.length / 150, m.gate.angle);
     props.addChild(gate);
-    const lever = new Graphics();
-    lever.roundRect(m.gate.leverX - 9, m.gate.leverY - 13, 18, 26, 3).fill({ color: 0xf2b632 }).stroke({ width: 1.6, color: INK });
-    lever.roundRect(m.gate.leverX - 3, m.gate.leverY - 18, 6, 12, 2).fill({ color: 0xe8453c }).stroke({ width: 1.4, color: INK });
-    props.addChild(lever);
     return gate;
   }
 
   private buildHighProps(): void {
     const m = this.map;
+    // Canopies seen from straight above: no trunks, just the crown and its shadow.
     for (const t of m.trees) {
       const id = t.kind === 'pine' ? 'tree.pine' : t.kind === 'oak' ? 'tree.oak' : 'tree.dead';
-      const base = t.kind === 'pine' ? 0.6 : t.kind === 'oak' ? 0.62 : 0.7;
-      const s = this.sprite(id, t.variant, t.x, t.y, base + t.r / 45);
-      // Mirror some trees for variety; they stay upright on their trunks.
-      if ((Math.floor(t.x * 7 + t.y * 3) & 1) === 1) s.scale.x *= -1;
+      const crown = t.kind === 'pine' ? 3.4 : t.kind === 'oak' ? 3.8 : 3.2;
+      // Not rotated, so the baked shadow always falls down and to the right.
+      const s = this.sprite(id, t.variant, t.x, t.y, (t.r * crown) / CANOPY_PX);
+      if ((Math.floor(t.x * 7 + t.y * 3) & 1) === 1) s.scale.y *= -1;
       this.high.add(s, t.x, t.y);
     }
-    for (const r of m.rocks) this.high.add(this.sprite('prop.boulder', r.variant, r.x, r.y, r.r / 40, (r.x + r.y) % 6.28), r.x, r.y);
+    for (const r of m.rocks) this.high.add(this.sprite('prop.boulder', r.variant, r.x, r.y, r.r / 38), r.x, r.y);
     m.lights.forEach((l, i) => {
       const id = l.kind === 'campfire' ? 'obj.campfire' : 'obj.lamp';
       this.high.add(this.sprite(id, 0, l.x, l.y), l.x, l.y);
-      const glow = this.sprite('fx.glow', 0, l.x, l.y, (l.radius * 1.3) / 128);
-      glow.tint = l.kind === 'campfire' ? 0xff9a3a : 0xffe7a8;
+      const glow = this.sprite('fx.glow', 0, l.x, l.y, (l.radius * 1.1) / 128);
+      glow.tint = l.kind === 'campfire' ? 0xd07030 : 0xd8b070;
       glow.blendMode = 'add';
-      glow.alpha = 0.3;
+      glow.alpha = 0.18;
       this.high.add(glow, l.x, l.y);
-      this.glows.push({ sprite: glow, index: i, kind: l.kind, base: 0.3 });
+      this.glows.push({ sprite: glow, index: i, kind: l.kind, base: 0.18 });
     });
-  }
-
-  setGenerator(id: number, repaired: boolean): void {
-    const s = this.generatorSprites[id];
-    if (!s) return;
-    s.texture = this.tex('obj.generator', repaired ? 1 : 0);
-    this.generatorGlows[id].visible = repaired;
   }
 
   setBarricade(id: number, state: BarricadeVisual): void {
@@ -293,9 +338,26 @@ export class MapRenderer {
     s.rotation = b.angle + (hits > 0 ? 0.06 : 0);
   }
 
-  setDoor(id: number, open: boolean): void {
+  /** Opens or closes a door; a smashed door is left as a splintered stub with debris. */
+  setDoor(id: number, open: boolean, broken = false): void {
     const d = this.doors[id];
-    if (d) d.target = open ? 1 : 0;
+    if (!d) return;
+    d.target = open ? 1 : 0;
+    if (broken && !d.broken) {
+      d.broken = true;
+      d.sprite.scale.x *= 0.35;
+      d.sprite.tint = 0x8a7a6a;
+      const def = this.map.doors[id];
+      const cx = def.hx + Math.cos(def.angle) * def.length * 0.5;
+      const cy = def.hy + Math.sin(def.angle) * def.length * 0.5;
+      for (let i = 0; i < 9; i++) {
+        const a = def.angle + i * 1.9;
+        const r = 8 + ((i * 13) % 24);
+        this.debris
+          .rect(cx + Math.cos(a) * r - 7, cy + Math.sin(a) * r - 2, 10 + (i % 3) * 4, 3)
+          .fill({ color: i % 2 ? 0x4a3a2a : 0x2e241a });
+      }
+    }
   }
 
   setGateOpen(open: boolean): void {

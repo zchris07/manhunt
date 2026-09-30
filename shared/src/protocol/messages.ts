@@ -92,9 +92,9 @@ export type GameEvent =
   | { k: 'swing'; id: number; hit: boolean }
   /** A shotgun blast: origin, angle, length of the tracer, whether it hit Zach. */
   | { k: 'shot'; x: number; y: number; a: number; len: number; hit: boolean }
-  /** Soundcloud Burst ring starting at (x,y). */
-  | { k: 'burst'; x: number; y: number }
-  /** The ring reached you: jump scare. */
+  /** Soundcloud Burst wave launched from (x,y) at angle a. */
+  | { k: 'burst'; x: number; y: number; a: number }
+  /** The wave reached you: jump scare. */
   | { k: 'scare' }
   | { k: 'jarvis'; by: number }
   | { k: 'hemp'; by: number }
@@ -122,6 +122,8 @@ export type ClientMessage =
   | { t: 'mapReq' }
   /** Testing mode only: switch between Zach and survivor mid-match. */
   | { t: 'switchRole' }
+  /** Testing mode: teleport to a world point (clicked on the full map). */
+  | { t: 'teleport'; x: number; y: number }
   /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
   | { t: 'dev'; cmd: string; args: number[] };
 
@@ -223,6 +225,8 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isStr(v.text, 280) ? { t: 'chat', text: v.text } : null;
     case 'skill':
       return isInt(v.id, 0, 1e9) && (v.result === 'miss' || v.result === 'good' || v.result === 'great') ? { t: 'skill', id: v.id, result: v.result } : null;
+    case 'teleport':
+      return isNum(v.x, 0, 1e5) && isNum(v.y, 0, 1e5) ? { t: 'teleport', x: v.x, y: v.y } : null;
     case 'spectate':
       return v.dir === 1 || v.dir === -1 ? { t: 'spectate', dir: v.dir } : null;
     case 'dev':

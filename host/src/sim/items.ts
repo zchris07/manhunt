@@ -1,14 +1,14 @@
-import { Action, BALANCE, BarricadeState, DEG, Health, ItemKind, angleDiff, pointSegDist2, type InputCmd } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, DEG, Health, ItemKind, angleDiff, pointSegDist2, type InputCmd } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { dropCarried } from './combat';
-import { exitHiding } from './interact';
 
 const I = BALANCE.items;
 
 function interruptHunter(w: World, h: SimPlayer): void {
   if (h.action !== Action.None) w.cancelAction(h);
   h.attackWindup = 0;
+  h.chargeT = -1;
   h.move.lungeT = 0;
   if (h.carrying) dropCarried(w, h);
 }
@@ -49,17 +49,6 @@ export function dropBarricade(w: World, p: SimPlayer, bi: number): void {
   }
 }
 
-/** Bursting out of a hiding spot while Zach is searching it. */
-export function lockerSlam(w: World, p: SimPlayer): boolean {
-  const h = w.order.find((q) => q.role === 'hunter' && q.action === Action.Search && q.actionTarget === p.hideSpot);
-  if (!h) return false;
-  if (!stunHunter(w, h, BALANCE.hiding.slamStun, 'slam', p)) return false;
-  exitHiding(w, p, true);
-  p.move.hasteT = BALANCE.survivor.hitHasteTime;
-  w.feed(`${p.name} burst out on ${h.name}`);
-  return true;
-}
-
 /** Uses up one of an item (testing mode never runs out). */
 function consume(w: World, p: SimPlayer, kind: ItemKind): void {
   if (w.testMode) return;
@@ -79,13 +68,9 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       consume(w, p, kind);
       break;
     }
-    case ItemKind.Goggles: {
-      if (p.gogglesCd > 0) return;
-      if (!p.gogglesOn && !w.testMode && (p.goggles[0] ?? 0) <= 0) return;
-      p.gogglesOn = !p.gogglesOn;
-      p.gogglesCd = I.goggles.toggleDelay;
+    case ItemKind.Goggles:
+      // Held, not toggled: see updateItems.
       break;
-    }
     case ItemKind.Shotgun: {
       if (p.reloadT > 0) return;
       fireShotgun(w, p, cmd.aim);
@@ -202,11 +187,12 @@ export function updateItems(w: World, dt: number): void {
 
   for (const p of w.order) {
     if (p.role !== 'survivor') continue;
-    p.gogglesCd = Math.max(0, p.gogglesCd - dt);
     p.reloadT = Math.max(0, p.reloadT - dt);
     p.scareT = Math.max(0, p.scareT - dt);
     p.jarvisT = Math.max(0, p.jarvisT - dt);
-    if (p.gogglesOn && (!canAct(p) && p.health !== Health.Downed)) p.gogglesOn = false;
+    // Night vision is on only while left click is held with the goggles selected.
+    const holding = (p.lastCmd.buttons & Btn.Primary) !== 0 && p.selItem === ItemKind.Goggles && p.inv[ItemKind.Goggles] > 0;
+    p.gogglesOn = holding && (canAct(p) || p.health === Health.Downed) && p.hideState === 0 && (w.testMode || (p.goggles[0] ?? 0) > 0);
     if (p.gogglesOn && !w.testMode) {
       p.goggles[0] = (p.goggles[0] ?? 0) - dt;
       if (p.goggles[0] <= 0) {
