@@ -1,0 +1,10 @@
+export { GameHost, type GameHostOptions } from './GameHost';
+export { Lobby, DEFAULT_SETTINGS } from './lobby';
+export { World } from './sim/World';
+export { buildView, canSee, visionFor } from './sim/view';
+export { matchLogEntry, summarize, type MatchLogEntry, type TelemetrySummary } from './telemetry';
+export type { HostTransport, GuestTransport } from './transport/types';
+export { LOCAL_PEER } from './transport/types';
+export { MemoryHub, type LinkConditions } from './transport/memory';
+export { withLatency } from './transport/latency';
+export { HostBridge, WorkerHostTransport, type BridgeFromWorker, type BridgeToWorker } from './transport/workerBridge';

@@ -1,0 +1,14 @@
+# Netlify: connect the repository and this config does the rest.
+# Cloudflare Pages: build command `npm run build`, output directory `client/dist`, NODE_VERSION=22.
+[build]
+  command = "npm run build"
+  publish = "client/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The game is one static page; /sandbox/ has its own index.html.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"

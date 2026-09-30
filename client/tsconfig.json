@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
+    "types": ["vite/client"]
+  },
+  "include": ["src", "sandbox", "vite.config.ts"]
+}

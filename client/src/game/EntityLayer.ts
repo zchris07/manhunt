@@ -1,0 +1,652 @@
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { BALANCE, DEG, EF, EntityKind, GenFlag, Health, ItemKind, SextonFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import type { AssetManager } from '../assets/AssetManager';
+import type { InterpEntity } from '../net/GameClient';
+
+export interface RenderPlayer {
+  id: number;
+  x: number;
+  y: number;
+  facing: number;
+  state: number;
+  action: number;
+  extra: number;
+  aux: number;
+  /** Sprint meter 0-255. */
+  stamina: number;
+}
+
+const INK = 0x181024;
+const ITEM_TEX: Record<number, string> = {
+  [ItemKind.Bottle]: 'item.bottle',
+  [ItemKind.Goggles]: 'item.goggles',
+  [ItemKind.Shotgun]: 'item.shotgun',
+  [ItemKind.Energy]: 'item.energy',
+  [ItemKind.Trap]: 'item.trap',
+};
+export const LOOT_TEX: Record<string, string> = {
+  bottle: 'item.bottle',
+  goggles: 'item.goggles',
+  confit: 'item.confit',
+  shotgun: 'item.shotgun',
+  energy: 'item.energy',
+  trap: 'item.trap',
+};
+
+/** Walk cycle: legs swing under the body in the direction of travel. */
+class Walker {
+  phase = 0;
+  moveDir = 0;
+  speed = 0;
+  private lx = NaN;
+  private ly = NaN;
+
+  update(x: number, y: number, dt: number, stride: number): void {
+    if (Number.isNaN(this.lx)) {
+      this.lx = x;
+      this.ly = y;
+    }
+    const dx = x - this.lx;
+    const dy = y - this.ly;
+    const d = Math.hypot(dx, dy);
+    this.lx = x;
+    this.ly = y;
+    const v = dt > 0 ? d / dt : 0;
+    this.speed += (Math.min(v, 900) - this.speed) * Math.min(1, dt * 12);
+    if (d > 0.3 && d < 120) {
+      let da = Math.atan2(dy, dx) - this.moveDir;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      this.moveDir += da * Math.min(1, dt * 14);
+      this.phase += (d / stride) * Math.PI * 2;
+    } else if (this.speed < 8) {
+      // Ease the feet back together when standing still.
+      const k = Math.sin(this.phase);
+      if (Math.abs(k) > 0.05) this.phase += (k > 0 ? -1 : 1) * dt * 6 * Math.sign(Math.cos(this.phase) || 1);
+    }
+  }
+}
+
+class StaminaBar {
+  readonly g = new Graphics();
+  draw(frac: number, locked: boolean, time: number, w = 38): void {
+    const g = this.g;
+    g.clear();
+    const h = 6;
+    g.roundRect(-w / 2 - 1.5, -h / 2 - 1.5, w + 3, h + 3, 3).fill({ color: INK, alpha: 0.9 });
+    g.roundRect(-w / 2, -h / 2, w, h, 2).fill({ color: 0x3a3450 });
+    const f = Math.max(0, Math.min(1, frac));
+    const color = locked ? (Math.sin(time * 18) > 0 ? 0xff3a3a : 0x8a1a1a) : f > 0.5 ? 0x4cff6a : f > 0.25 ? 0xffd23a : 0xff5a3a;
+    if (f > 0.01) {
+      g.roundRect(-w / 2, -h / 2, w * f, h, 2).fill({ color });
+      g.rect(-w / 2 + 1, -h / 2 + 1, Math.max(0, w * f - 2), 1.5).fill({ color: 0xffffff, alpha: 0.45 });
+    }
+  }
+}
+
+class PlayerSprite {
+  readonly root = new Container();
+  readonly shadow = new Graphics();
+  readonly legs = new Container();
+  readonly legA: Sprite;
+  readonly legB: Sprite;
+  readonly body = new Container();
+  readonly torso: Sprite;
+  readonly held: Sprite;
+  readonly weapon: Sprite | null;
+  readonly swipe = new Graphics();
+  readonly downed: Sprite;
+  readonly carried: Sprite;
+  readonly fx = new Graphics();
+  readonly aura = new Graphics();
+  readonly bar = new StaminaBar();
+  readonly label: Text;
+  readonly walker = new Walker();
+  private shake = 0;
+  private swingT = 0;
+  private wasAttacking = false;
+  private readonly hunter: boolean;
+  private readonly look: number;
+
+  constructor(
+    private readonly assets: AssetManager,
+    readonly info: MatchPlayerInfo,
+    showLabel: boolean,
+  ) {
+    this.hunter = info.role === 'hunter';
+    this.look = info.tint % 10;
+    const tex = (id: string, v = 0): Sprite => {
+      const s = new Sprite(assets.getTexture(id, v));
+      const [ax, ay] = assets.anchorOf(id);
+      s.anchor.set(ax, ay);
+      return s;
+    };
+    const legVariant = this.hunter ? 10 : this.look;
+    this.legA = tex('char.legs', legVariant);
+    this.legB = tex('char.legs', legVariant);
+    this.legs.addChild(this.legA, this.legB);
+    this.torso = tex(this.hunter ? 'char.hunter' : 'char.survivor', this.look);
+    if (this.hunter) this.torso.anchor.set(38 / 84, 0.5);
+    else this.torso.anchor.set(30 / 64, 0.5);
+    this.held = new Sprite();
+    this.held.anchor.set(0.5);
+    this.held.visible = false;
+    this.weapon = this.hunter ? tex('char.machete') : null;
+    this.body.addChild(this.swipe, this.torso, this.held);
+    if (this.weapon) {
+      this.weapon.position.set(20, 11);
+      this.body.addChild(this.weapon);
+    }
+    this.downed = tex('char.survivorDowned', this.look);
+    this.downed.visible = false;
+    this.carried = tex('char.survivorDowned', 0);
+    this.carried.scale.set(0.7);
+    this.carried.visible = false;
+    this.label = new Text({ text: info.name, style: { fontFamily: 'Rubik, Inter, system-ui, sans-serif', fontSize: 12, fontWeight: '700', fill: 0xffffff, stroke: { color: INK, width: 3 } } });
+    this.label.anchor.set(0.5, 1);
+    this.label.visible = showLabel;
+    this.aura.blendMode = 'add';
+    this.root.addChild(this.shadow, this.aura, this.legs, this.downed, this.body, this.carried, this.fx, this.bar.g, this.label);
+  }
+
+  set(p: RenderPlayer, time: number, dt: number, stakePos: { x: number; y: number } | null): void {
+    const health = p.state & EF.HealthMask;
+    const hunter = (p.state & EF.Hunter) !== 0;
+    const r = hunter ? BALANCE.hunter.radius : BALANCE.survivor.radius;
+    this.root.position.set(p.x, p.y);
+    this.walker.update(p.x, p.y, dt, hunter ? 46 : 38);
+    const staked = !hunter && health === Health.Staked && stakePos;
+    const down = !hunter && health === Health.Downed;
+    if (staked) {
+      this.shake += dt * 30;
+      this.root.position.set(stakePos.x + Math.sin(this.shake) * 1.5, stakePos.y);
+    }
+
+    this.shadow.clear();
+    if (!down) this.shadow.ellipse(3, 4, r + 3, r + 1).fill({ color: 0x0a0618, alpha: 0.3 });
+
+    // Legs: two feet swinging along the direction of travel.
+    const moving = this.walker.speed > 12 && !staked;
+    this.legs.visible = !down && !staked;
+    if (this.legs.visible) {
+      this.legs.rotation = moving ? this.walker.moveDir : p.facing;
+      const stride = moving ? Math.min(1, this.walker.speed / (hunter ? 220 : 170)) * (hunter ? 10 : 8) : 0;
+      const s = Math.sin(this.walker.phase);
+      const sideOff = hunter ? 7 : 5.5;
+      this.legA.position.set(-4 + s * stride, -sideOff);
+      this.legB.position.set(-4 - s * stride, sideOff);
+    }
+
+    this.downed.visible = down;
+    this.body.visible = !down;
+    if (down) {
+      this.downed.rotation = p.facing;
+    } else {
+      this.body.rotation = staked ? -Math.PI / 2 : p.facing;
+      const bob = moving ? Math.abs(Math.sin(this.walker.phase)) * 0.04 : 0;
+      this.body.scale.set(1 + bob, 1 - bob * 0.5);
+      this.torso.tint = staked ? 0xd09090 : 0xffffff;
+    }
+
+    // Held item (survivors).
+    const item = hunter ? 0 : p.aux & 7;
+    this.held.visible = !down && !staked && item > 0 && item !== ItemKind.Goggles;
+    if (this.held.visible) {
+      this.held.texture = this.assets.getTexture(ITEM_TEX[item]);
+      const big = item === ItemKind.Shotgun;
+      this.held.position.set(big ? 24 : 21, big ? 3 : 7);
+      this.held.scale.set(big ? 0.62 : 0.48);
+      this.held.rotation = big ? 0.35 : 0.2;
+    }
+
+    if (hunter) {
+      this.carried.visible = (p.state & EF.Carrying) !== 0;
+      if (this.carried.visible) {
+        this.carried.position.set(Math.cos(p.facing + Math.PI * 0.6) * 12, Math.sin(p.facing + Math.PI * 0.6) * 12);
+        this.carried.rotation = p.facing + Math.PI / 2;
+      }
+      // Machete swing: the blade sweeps across and the swiped area flashes.
+      const attacking = (p.state & EF.Attacking) !== 0;
+      if (attacking && !this.wasAttacking) this.swingT = BALANCE.hunter.attack.swingTime;
+      this.wasAttacking = attacking;
+      this.drawSwing(dt);
+      this.body.scale.x *= (p.state & EF.Lunging) !== 0 ? 1.12 : 1;
+    }
+
+    this.fx.clear();
+    if (p.state & EF.Stunned) {
+      for (let i = 0; i < 4; i++) {
+        const a = time * 5 + (i * Math.PI * 2) / 4;
+        this.star(Math.cos(a) * 16, -r - 8 + Math.sin(a) * 5, 4);
+      }
+    }
+    if (p.state & EF.Gassed) {
+      for (let i = 0; i < 5; i++) {
+        const a = time * 2 + i * 1.3;
+        this.fx.circle(Math.cos(a) * (r + 6), Math.sin(a * 1.3) * (r + 4) - 4, 3 + (i % 2)).fill({ color: i % 2 ? 0xd06aff : 0x6a8aff, alpha: 0.8 });
+      }
+    }
+    if (p.state & EF.Lunging) {
+      for (let i = 1; i <= 3; i++) {
+        const back = p.facing + Math.PI;
+        this.fx
+          .moveTo(Math.cos(back) * (r + i * 7) + Math.cos(p.facing + Math.PI / 2) * 8, Math.sin(back) * (r + i * 7) + Math.sin(p.facing + Math.PI / 2) * 8)
+          .lineTo(Math.cos(back) * (r + i * 7 + 14) + Math.cos(p.facing + Math.PI / 2) * 8, Math.sin(back) * (r + i * 7 + 14) + Math.sin(p.facing + Math.PI / 2) * 8)
+          .stroke({ width: 3, color: 0xffffff, alpha: 0.6 / i });
+        this.fx
+          .moveTo(Math.cos(back) * (r + i * 7) - Math.cos(p.facing + Math.PI / 2) * 8, Math.sin(back) * (r + i * 7) - Math.sin(p.facing + Math.PI / 2) * 8)
+          .lineTo(Math.cos(back) * (r + i * 7 + 14) - Math.cos(p.facing + Math.PI / 2) * 8, Math.sin(back) * (r + i * 7 + 14) - Math.sin(p.facing + Math.PI / 2) * 8)
+          .stroke({ width: 3, color: 0xffffff, alpha: 0.6 / i });
+      }
+    }
+    this.aura.clear();
+    if (p.state & EF.Hemp) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 6);
+      this.aura.circle(0, 0, r + 14 + pulse * 4).fill({ color: 0x6dff6a, alpha: 0.18 + pulse * 0.1 });
+    }
+    if (p.state & EF.Goggles) {
+      const ex = Math.cos(p.facing) * 8;
+      const ey = Math.sin(p.facing) * 8;
+      this.aura.circle(ex, ey, 10).fill({ color: 0x5cff6a, alpha: 0.35 });
+      this.fx.circle(ex - Math.sin(p.facing) * 3, ey + Math.cos(p.facing) * 3, 2).fill({ color: 0x9dff9a });
+      this.fx.circle(ex + Math.sin(p.facing) * 3, ey - Math.cos(p.facing) * 3, 2).fill({ color: 0x9dff9a });
+    }
+
+    // Everyone has a clearly visible sprint meter over their head.
+    const showBar = !staked && health !== Health.Carried;
+    this.bar.g.visible = showBar;
+    if (showBar) {
+      this.bar.g.position.set(0, -r - 16);
+      this.bar.draw(p.stamina / 255, (p.state & EF.StaminaLock) !== 0, time, hunter ? 44 : 38);
+    }
+    this.label.position.set(0, -r - 22);
+  }
+
+  private star(x: number, y: number, s: number): void {
+    const pts: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      const rr = i % 2 === 0 ? s : s * 0.45;
+      pts.push(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    this.fx.poly(pts).fill({ color: 0xffe14a }).stroke({ width: 1, color: INK });
+  }
+
+  private drawSwing(dt: number): void {
+    const g = this.swipe;
+    g.clear();
+    const T = BALANCE.hunter.attack.swingTime;
+    if (this.swingT <= 0) {
+      if (this.weapon) this.weapon.rotation = 0.35;
+      return;
+    }
+    this.swingT = Math.max(0, this.swingT - dt);
+    const k = 1 - this.swingT / T; // 0 -> 1 through the swing
+    const half = (BALANCE.hunter.attack.arcDeg / 2) * DEG;
+    const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const a = -half - 0.2 + (half * 2 + 0.4) * ease;
+    if (this.weapon) this.weapon.rotation = a;
+    // The swiped area: a fading crescent over the part of the arc already covered.
+    const R = BALANCE.hunter.attack.range;
+    const alpha = Math.sin(Math.PI * k) * 0.55;
+    g.moveTo(Math.cos(-half) * 26, Math.sin(-half) * 26);
+    g.arc(0, 0, R, -half, a);
+    g.arc(0, 0, 26, a, -half, true);
+    g.closePath();
+    g.fill({ color: 0xffffff, alpha: alpha * 0.55 });
+    g.arc(0, 0, R, -half, a).stroke({ width: 4, color: 0xff3a5a, alpha });
+  }
+}
+
+interface Bubble {
+  root: Container;
+  until: number;
+}
+
+interface TabletFlight {
+  sprite: Sprite;
+  fx: number;
+  fy: number;
+  to: number;
+  t: number;
+}
+
+/**
+ * Dynamic things drawn on the entity layer, which the entity-occlusion filter hides outside
+ * the vision mask: players, Sexton, thrown bottles, traps, gas, loot, generator progress,
+ * hiding markers, dialogue bubbles and the tablet handoff.
+ */
+export class EntityLayer {
+  readonly root = new Container();
+  /** Drawn above the vision mask (Sexton's dialogue box, readable next to him). */
+  readonly overlay = new Container();
+  /** Whether a speech bubble at (x,y) should be readable from the viewer's position. */
+  bubbleCheck: (x: number, y: number) => boolean = () => true;
+  private readonly ground = new Container();
+  private readonly players = new Map<number, PlayerSprite>();
+  private readonly things = new Map<number, Container>();
+  private readonly loot: Container[] = [];
+  private readonly markers = new Graphics();
+  private readonly gens = new Graphics();
+  private readonly effects = new Graphics();
+  private sexton: { root: Container; body: Sprite; dead: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite } | null = null;
+  private bubble: Bubble | null = null;
+  private tablets: TabletFlight[] = [];
+  private shots: { x: number; y: number; a: number; len: number; t: number }[] = [];
+  private lastTime = 0;
+  private readonly positions = new Map<number, { x: number; y: number }>();
+
+  constructor(
+    private readonly assets: AssetManager,
+    private readonly map: MapData,
+    private roster: Map<number, MatchPlayerInfo>,
+    private viewerIsHunter: boolean,
+  ) {
+    for (const l of map.loot) {
+      const c = new Container();
+      const glow = new Sprite(assets.getTexture('fx.glow'));
+      glow.anchor.set(0.5);
+      glow.scale.set(0.55);
+      glow.tint = 0xffe14a;
+      glow.blendMode = 'add';
+      const s = new Sprite(assets.getTexture(LOOT_TEX[l.item]));
+      s.anchor.set(0.5);
+      s.scale.set(0.8);
+      c.addChild(glow, s);
+      c.position.set(l.x, l.y);
+      this.loot.push(c);
+      this.ground.addChild(c);
+    }
+    this.root.addChild(this.ground, this.gens, this.markers, this.effects);
+  }
+
+  /** Testing mode: roles changed, rebuild the player sprites. */
+  setRoster(roster: Map<number, MatchPlayerInfo>, viewerIsHunter: boolean): void {
+    this.roster = roster;
+    this.viewerIsHunter = viewerIsHunter;
+    for (const s of this.players.values()) s.root.destroy({ children: true });
+    this.players.clear();
+  }
+
+  /** Sexton's dialogue box. */
+  say(text: string, time: number): void {
+    this.bubble?.root.destroy({ children: true });
+    const root = new Container();
+    const t = new Text({ text, style: { fontFamily: 'Rubik, Inter, system-ui, sans-serif', fontSize: 14, fontWeight: '700', fill: 0x181024, wordWrap: true, wordWrapWidth: 200, align: 'center' } });
+    t.anchor.set(0.5, 1);
+    const w = t.width + 20;
+    const h = t.height + 12;
+    const box = new Graphics();
+    box.roundRect(-w / 2, -h - 10, w, h, 8).fill({ color: 0xffffff }).stroke({ width: 2, color: INK });
+    box.poly([-7, -11, 7, -11, 0, -1]).fill({ color: 0xffffff }).stroke({ width: 2, color: INK });
+    box.rect(-6, -12, 12, 3).fill({ color: 0xffffff });
+    t.position.set(0, -16);
+    root.addChild(box, t);
+    root.scale.set(0.2);
+    this.overlay.addChild(root);
+    this.bubble = { root, until: time + 2.6 };
+  }
+
+  /** Sexton hands a glowing tablet to a survivor. */
+  handTablet(x: number, y: number, to: number): void {
+    const s = new Sprite(this.assets.getTexture('item.tablet'));
+    s.anchor.set(0.5);
+    s.scale.set(0.3);
+    const glow = new Sprite(this.assets.getTexture('fx.glow'));
+    glow.anchor.set(0.5);
+    glow.tint = 0x7af8ff;
+    glow.blendMode = 'add';
+    glow.scale.set(1.4);
+    s.addChild(glow);
+    this.root.addChild(s);
+    this.tablets.push({ sprite: s, fx: x, fy: y, to, t: 0 });
+  }
+
+  shot(x: number, y: number, a: number, len: number): void {
+    this.shots.push({ x, y, a, len, t: 0 });
+  }
+
+  update(ents: InterpEntity[], self: RenderPlayer | null, world: WorldState | null, time: number): void {
+    const dt = this.lastTime ? Math.min(0.1, time - this.lastTime) : 1 / 60;
+    this.lastTime = time;
+    const seen = new Set<number>();
+    const stakeOf = new Map<number, { x: number; y: number }>();
+    if (world) world.stakes.forEach((occ, i) => occ && stakeOf.set(occ, this.map.stakes[i]));
+
+    const draw = (p: RenderPlayer): void => {
+      const info = this.roster.get(p.id);
+      if (!info) return;
+      let s = this.players.get(p.id);
+      if (!s) {
+        const label = info.role === 'survivor' && !this.viewerIsHunter;
+        s = new PlayerSprite(this.assets, info, label && p.id !== self?.id);
+        this.players.set(p.id, s);
+        this.root.addChild(s.root);
+      }
+      s.root.visible = true;
+      s.set(p, time, dt, stakeOf.get(p.id) ?? null);
+      this.positions.set(p.id, { x: p.x, y: p.y });
+      seen.add(p.id);
+    };
+
+    let sextonSeen = false;
+    for (const e of ents) {
+      if (e.kind === EntityKind.Player) {
+        if (self && e.id === self.id) continue;
+        draw({ ...e });
+      } else if (e.kind === EntityKind.Sexton) {
+        sextonSeen = true;
+        this.drawSexton(e, dt, time);
+      } else {
+        this.drawThing(e, time);
+        seen.add(e.id);
+      }
+    }
+    if (self) draw(self);
+    if (this.sexton) this.sexton.root.visible = sextonSeen;
+
+    for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
+    for (const [id, c] of this.things) {
+      if (!seen.has(id)) {
+        c.destroy({ children: true });
+        this.things.delete(id);
+      }
+    }
+
+    // Dialogue bubble pops in above Sexton.
+    if (this.bubble) {
+      const b = this.bubble;
+      if (time > b.until || !this.sexton) {
+        b.root.destroy({ children: true });
+        this.bubble = null;
+      } else {
+        const s = this.sexton.root;
+        b.root.position.set(s.x, s.y - 30);
+        b.root.visible = s.visible && this.bubbleCheck(s.x, s.y);
+        const age = 2.6 - (b.until - time);
+        const pop = Math.min(1, age / 0.18);
+        b.root.scale.set(0.2 + 0.8 * (1 - Math.pow(1 - pop, 3)) + Math.sin(Math.min(1, age / 0.4) * Math.PI) * 0.06);
+        b.root.alpha = Math.min(1, (b.until - time) / 0.3);
+      }
+    }
+    // Tablet flies to its new owner with a quick ease and a spin.
+    this.tablets = this.tablets.filter((f) => {
+      f.t += dt / BALANCE.sexton.handTime;
+      const to = this.positions.get(f.to) ?? { x: f.fx, y: f.fy };
+      const k = Math.min(1, f.t);
+      const e = 1 - Math.pow(1 - k, 3);
+      f.sprite.position.set(f.fx + (to.x - f.fx) * e, f.fy + (to.y - f.fy) * e - Math.sin(k * Math.PI) * 26);
+      f.sprite.rotation = k * Math.PI * 2;
+      f.sprite.scale.set(0.3 + 0.35 * Math.sin(k * Math.PI));
+      if (k >= 1) {
+        f.sprite.destroy({ children: true });
+        return false;
+      }
+      return true;
+    });
+    // Shotgun tracers.
+    this.effects.clear();
+    this.shots = this.shots.filter((s) => {
+      s.t += dt;
+      const a = 1 - s.t / 0.25;
+      if (a <= 0) return false;
+      for (const off of [-0.06, 0, 0.06]) {
+        this.effects
+          .moveTo(s.x + Math.cos(s.a) * 20, s.y + Math.sin(s.a) * 20)
+          .lineTo(s.x + Math.cos(s.a + off) * s.len, s.y + Math.sin(s.a + off) * s.len)
+          .stroke({ width: 2.5, color: 0xfff2a0, alpha: a });
+      }
+      this.effects.circle(s.x + Math.cos(s.a) * 26, s.y + Math.sin(s.a) * 26, 10 * a + 4).fill({ color: 0xffd23a, alpha: a });
+      return true;
+    });
+
+    if (!world) return;
+    this.loot.forEach((c, i) => {
+      c.visible = !world.lootTaken[i];
+      if (!c.visible) return;
+      c.children[1].rotation = Math.sin(time * 1.5 + i) * 0.15;
+      c.children[0].alpha = 0.35 + 0.25 * Math.sin(time * 3 + i);
+    });
+    this.gens.clear();
+    world.gens.forEach((g, i) => {
+      if (g.flags & GenFlag.Repaired || !(g.flags & GenFlag.Known) || g.progress <= 0.001) return;
+      const d = this.map.generators[i];
+      this.gens.circle(d.x, d.y - 46, 12).fill({ color: INK, alpha: 0.7 });
+      this.gens.arc(d.x, d.y - 46, 10, -Math.PI / 2, -Math.PI / 2 + g.progress * Math.PI * 2).stroke({ width: 4, color: g.flags & GenFlag.Regressing ? 0xff3a3a : 0x4cff6a });
+    });
+    this.markers.clear();
+    if (!this.viewerIsHunter) {
+      world.hidingOccupied.forEach((occ, i) => {
+        if (!occ) return;
+        const h = this.map.hidingSpots[i];
+        this.markers.circle(h.x, h.y - 26, 5).fill({ color: 0x4cff6a }).stroke({ width: 1.5, color: INK });
+      });
+    }
+  }
+
+  private drawSexton(e: InterpEntity, dt: number, time: number): void {
+    if (!this.sexton) {
+      const root = new Container();
+      const legs = new Container();
+      const legA = new Sprite(this.assets.getTexture('char.legs', 20));
+      const legB = new Sprite(this.assets.getTexture('char.legs', 20));
+      for (const l of [legA, legB]) {
+        const [ax, ay] = this.assets.anchorOf('char.legs');
+        l.anchor.set(ax, ay);
+      }
+      legs.addChild(legA, legB);
+      const body = new Sprite(this.assets.getTexture('char.sexton'));
+      body.anchor.set(30 / 64, 0.5);
+      const dead = new Sprite(this.assets.getTexture('char.sextonDead'));
+      dead.anchor.set(0.5);
+      root.addChild(legs, body, dead);
+      this.root.addChild(root);
+      this.sexton = { root, body, dead, walker: new Walker(), legs, legA, legB };
+    }
+    const s = this.sexton;
+    s.root.position.set(e.x, e.y);
+    const dead = (e.state & SextonFlag.Dead) !== 0;
+    s.dead.visible = dead;
+    s.body.visible = !dead;
+    s.legs.visible = !dead;
+    if (dead) {
+      s.dead.rotation = e.facing;
+      return;
+    }
+    s.walker.update(e.x, e.y, dt, 34);
+    const moving = s.walker.speed > 10;
+    s.legs.rotation = moving ? s.walker.moveDir : e.facing;
+    const st = moving ? Math.min(1, s.walker.speed / 150) * 8 : 0;
+    const k = Math.sin(s.walker.phase);
+    s.legA.position.set(-4 + k * st, -5.5);
+    s.legB.position.set(-4 - k * st, 5.5);
+    s.body.rotation = e.facing;
+    const hurt = (e.state & SextonFlag.Hurt) !== 0;
+    s.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff6a6a : 0xffffff;
+  }
+
+  private drawThing(e: InterpEntity, time: number): void {
+    let c = this.things.get(e.id);
+    if (!c) {
+      c = new Container();
+      if (e.kind === EntityKind.Bottle) {
+        const s = new Sprite(this.assets.getTexture('item.bottle'));
+        s.anchor.set(0.5);
+        s.scale.set(0.6);
+        c.addChild(s);
+      } else if (e.kind === EntityKind.Trap) {
+        const ring = new Graphics();
+        const s = new Sprite(this.assets.getTexture('item.trap'));
+        s.anchor.set(0.5);
+        s.scale.set(0.7);
+        c.addChild(ring, s);
+      } else if (e.kind === EntityKind.Gas) {
+        const colors = [0x9a4aff, 0xff5ad8, 0x4a8aff, 0xc86aff, 0x6a5aff];
+        for (let i = 0; i < 16; i++) {
+          const p = new Sprite(this.assets.getTexture('fx.puff', i % 3));
+          p.anchor.set(0.5);
+          p.tint = colors[i % colors.length];
+          p.blendMode = 'add';
+          c.addChild(p);
+        }
+        const stars = new Graphics();
+        c.addChild(stars);
+      } else if (e.kind === EntityKind.Hemp) {
+        const glow = new Sprite(this.assets.getTexture('fx.glow'));
+        glow.anchor.set(0.5);
+        glow.tint = 0x6dff6a;
+        glow.blendMode = 'add';
+        glow.scale.set(0.9);
+        const s = new Sprite(this.assets.getTexture('item.hemp'));
+        s.anchor.set(0.5);
+        c.addChild(glow, s);
+      }
+      this.things.set(e.id, c);
+      this.root.addChildAt(c, 1);
+    }
+    c.position.set(e.x, e.y);
+    if (e.kind === EntityKind.Bottle) {
+      const k = e.extra / 255;
+      const lift = Math.sin(k * Math.PI) * 26;
+      c.children[0].position.set(0, -lift);
+      c.children[0].rotation = time * 14;
+      c.children[0].scale.set(0.6 + lift / 90);
+    } else if (e.kind === EntityKind.Trap) {
+      const armed = (e.state & 1) === 1;
+      // Semi-hidden: faint to Zach.
+      c.alpha = this.viewerIsHunter ? 0.35 : 1;
+      const ring = c.children[0] as Graphics;
+      ring.clear();
+      if (!this.viewerIsHunter) {
+        ring.circle(0, 0, 16).stroke({ width: 2, color: armed ? 0xc86aff : 0x8a8a9a, alpha: 0.6 + 0.3 * Math.sin(time * 5) });
+      }
+    } else if (e.kind === EntityKind.Gas) {
+      // Disperses over half a second, swirls, then thins out.
+      const T = BALANCE.items.trap;
+      const age = (e.extra / 255) * T.gasTime;
+      const spread = Math.min(1, age / T.spreadTime);
+      const ease = 1 - Math.pow(1 - spread, 3);
+      const fade = Math.min(1, (T.gasTime - age) / 1.2);
+      const R = T.gasRadius * ease;
+      const kids = c.children;
+      for (let i = 0; i < 16; i++) {
+        const p = kids[i] as Sprite;
+        const a = (i / 16) * Math.PI * 2 + time * 0.35 * (i % 2 ? 1 : -1);
+        const d = R * (i < 5 ? 0.25 : i < 10 ? 0.55 : 0.82);
+        p.position.set(Math.cos(a) * d, Math.sin(a) * d);
+        p.scale.set((R / 96) * 1.1 + 0.3);
+        p.alpha = 0.5 * fade;
+      }
+      const stars = kids[16] as Graphics;
+      stars.clear();
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.39996 + time * 0.3;
+        const d = R * ((i * 0.37) % 1);
+        stars.circle(Math.cos(a) * d, Math.sin(a) * d, 1.5 + (i % 3) * 0.5).fill({ color: 0xffffff, alpha: fade * (0.5 + 0.5 * Math.sin(time * 6 + i)) });
+      }
+    } else if (e.kind === EntityKind.Hemp) {
+      c.children[0].alpha = 0.5 + 0.3 * Math.sin(time * 4);
+      c.children[1].rotation = Math.sin(time * 2) * 0.2;
+    }
+  }
+}
