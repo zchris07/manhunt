@@ -1,4 +1,4 @@
-import { Container, type Application } from 'pixi.js';
+import { Container, Graphics, type Application } from 'pixi.js';
 import {
   Action,
   BALANCE,
@@ -69,6 +69,7 @@ export class GameView {
   private damage = 0;
   private barricadeState: number[] = [];
   private doorState: boolean[] = [];
+  private windowState: boolean[] = [];
   private gateOpen = false;
   private repaired: boolean[] = [];
   private lastAim = -Math.PI / 2;
@@ -84,6 +85,9 @@ export class GameView {
   /** Zach: when the current swing charge started (0 = not charging), and its strength 0..1. */
   private chargeStart = 0;
   private charge = 0;
+  private chargeLock = false;
+  /** Zach: an arrow toward Shane Jeans while he's chasing someone. */
+  private readonly shaneArrow = new Graphics();
   private readonly resize = (w: number, h: number): void => this.vision.resize(w, h);
   private readonly teleport = (x: number, y: number): void => this.o.client.send({ t: 'teleport', x: Math.round(x), y: Math.round(y) });
   readonly roleIsHunter: boolean;
@@ -100,7 +104,7 @@ export class GameView {
     this.entityWorld.addChild(this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
-    this.senses.addChild(this.overlays.senses, this.entities.overlay);
+    this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow);
     this.entities.bubbleCheck = (x, y) => Math.hypot(x - this.renderPos.x, y - this.renderPos.y) < 360 && m.mw.geo.hasLineOfSight(this.renderPos.x, this.renderPos.y, x, y);
     o.app.stage.addChild(this.viewport, this.senses);
 
@@ -191,8 +195,15 @@ export class GameView {
       const now = performance.now();
       const C = BALANCE.hunter.attack.charge;
       const ready = !!s && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
-      if (b & Btn.Primary && inp.buttons[0]) {
-        if (!this.chargeStart && ready) this.chargeStart = now;
+      if (!inp.buttons[0]) this.chargeLock = false;
+      if (this.chargeStart && now - this.chargeStart >= C.autoRelease * 1000) {
+        // Held too long: the swing goes off by itself; let go to charge again.
+        this.charge = 1;
+        this.chargeStart = 0;
+        this.chargeLock = true;
+        this.swingUntil = now + (BALANCE.hunter.attack.swingTime + BALANCE.hunter.attack.windup) * 1000;
+      } else if (b & Btn.Primary && inp.buttons[0]) {
+        if (!this.chargeStart && ready && !this.chargeLock) this.chargeStart = now;
       } else if (this.chargeStart) {
         this.charge = Math.min(1, (now - this.chargeStart) / 1000 / C.max);
         this.chargeStart = 0;
@@ -295,7 +306,7 @@ export class GameView {
         break;
       case 'noise':
         if (e.s === 'gen_explode' || e.s === 'gen_kick') this.particles.burst(e.x, e.y - 10, 40, { speed: 260, life: 0.7 });
-        else if (e.s === 'glass') this.particles.burst(e.x, e.y, 22, { speed: 170, life: 0.45, tint: 0x9dffb0, size: 0.8 });
+        else if (e.s === 'glass') this.particles.burst(e.x, e.y, 22, { speed: 170, life: 0.45, tint: 0xb8c8c8, size: 0.8 });
         else if (e.s === 'smash' || e.s === 'barricade' || e.s === 'door_smash') this.particles.burst(e.x, e.y, e.s === 'door_smash' ? 30 : 16, { speed: 150, life: 0.55, tint: 0x6e5840, size: 1.3 });
         if (e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash' || e.s === 'door_smash') this.shake = Math.max(this.shake, 7 * near(e.x, e.y, 450));
         break;
@@ -306,9 +317,9 @@ export class GameView {
         break;
       }
       case 'burst':
-        // Everyone hears the wave go out.
+        // Everyone sees the wave; only Zach hears it go out (half volume, a random snippet).
         this.overlays.addBurst(e.x, e.y, e.a, now);
-        a.playClip('burst');
+        if (this.roleIsHunter) a.playClip('burst', { volume: 0.5 });
         break;
       case 'scare':
         this.hud.jumpScare(BALANCE.hunter.burst.scareTime * 1000);
@@ -317,11 +328,17 @@ export class GameView {
         if (e.by === me) {
           this.hud.big('JARVIS ONLINE', 'jarvis');
           this.minimap.revealAll();
-        } else this.hud.feed(`${name(e.by)} brought JARVIS online`);
+        } else this.hud.big('JARVIS ONLINE', 'jarvis');
+        this.hud.feed(`${name(e.by)} brought JARVIS online. Everything is visible for 10 s.`);
+        a.announce('Jarvis online');
+        break;
+      case 'shane':
+        if (e.alerted) this.hud.center('SHANE JEANS HAS BEEN ALERTED', 3000);
         break;
       case 'hemp':
         if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
         else this.hud.feed('Zach used a Hemp Battery');
+        a.announce('Hemp battery activated');
         break;
       case 'sexton':
         this.entities.say(e.say, this.time);
@@ -354,6 +371,11 @@ export class GameView {
       if (this.doorState[i] === open) return;
       this.doorState[i] = open;
       mr.setDoor(i, open, ws.doorsBroken[i] === true);
+    });
+    ws.windowsBroken.forEach((b, i) => {
+      if (this.windowState[i] === b) return;
+      this.windowState[i] = b;
+      mr.setWindowBroken(i, b);
     });
     if (ws.gateOpen !== this.gateOpen) {
       this.gateOpen = ws.gateOpen;
@@ -529,7 +551,11 @@ export class GameView {
     ws.gens.forEach((g, i) => {
       if (g.flags & 1) lights.push({ key: `g${i}`, x: map.generators[i].x, y: map.generators[i].y, radius: BALANCE.lights.generatorRadius, intensity: 0.95, static: true });
     });
+    // Shane Jeans carries a faint light wherever he goes.
+    const jeans = ents.find((e) => e.kind === EntityKind.Shane);
+    if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
     const sources = this.sources.build(viewer, lights, Math.hypot(vw, vh) / 2);
+    sources.reveal = ws.reveal;
     this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources, z);
 
     // Your map fills in with what you actually see.
@@ -550,6 +576,17 @@ export class GameView {
     if (!this.roleIsHunter) ws.stakes.forEach((occ, i) => occ && occ !== c.you && auras.push(map.stakes[i]));
     this.overlays.update(now, auras, { x: cam.x, y: cam.y, w: vw, h: vh });
 
+    // Zach sees which way Shane Jeans is (never where exactly) while he's chasing someone.
+    const arrow = this.shaneArrow;
+    arrow.clear();
+    if (ws.shaneDir !== null) {
+      const a = ws.shaneDir;
+      const r = 70 + Math.sin(this.time * 6) * 4;
+      const cx = this.renderPos.x + Math.cos(a) * r;
+      const cy = this.renderPos.y + Math.sin(a) * r;
+      const pt = (f: number, s: number): [number, number] => [cx + Math.cos(a) * f - Math.sin(a) * s, cy + Math.sin(a) * f + Math.cos(a) * s];
+      arrow.poly([...pt(16, 0), ...pt(-8, 11), ...pt(-3, 0), ...pt(-8, -11)]).fill({ color: 0x4a6a9a, alpha: 0.9 }).stroke({ width: 2, color: 0xd9d3c1, alpha: 0.9 });
+    }
     this.skill.draw(now);
     if (this.skill.isActive && s.action !== Action.Repair) this.skill.cancel();
     this.hud.update(s, ws);

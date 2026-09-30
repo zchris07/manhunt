@@ -14,6 +14,8 @@ export interface AssetEntry {
   offset?: number;
   /** Sounds: play only this many seconds. */
   duration?: number;
+  /** Sounds: start each play from a random point in the file. */
+  random?: boolean;
 }
 
 export interface AssetManifest {

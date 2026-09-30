@@ -132,7 +132,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     const elapsed = s.kbDur - s.kbT;
     const step = Math.min(dt, s.kbT);
     const v = dashSpeed(s.kbPeak, elapsed + step / 2, s.kbDur);
-    moveCircle(geo, s, radius, Math.cos(s.kbAng) * v * step, Math.sin(s.kbAng) * v * step);
+    moveCircle(geo, s, radius, Math.cos(s.kbAng) * v * step, Math.sin(s.kbAng) * v * step, ctx.role === 'hunter');
     s.kbT = Math.max(0, s.kbT - dt);
   }
 
@@ -188,7 +188,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
       const elapsed = L.duration - s.lungeT;
       const step = Math.min(dt, s.lungeT);
       const v = dashSpeed(L.peak, elapsed + step / 2, L.duration);
-      moveCircle(geo, s, radius, Math.cos(s.lungeAng) * v * step, Math.sin(s.lungeAng) * v * step);
+      moveCircle(geo, s, radius, Math.cos(s.lungeAng) * v * step, Math.sin(s.lungeAng) * v * step, true);
       s.lungeT = Math.max(0, s.lungeT - dt);
       return Gait.Run;
     }
@@ -196,6 +196,8 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     if (ctx.carrying) speed *= H.carrySpeedMul;
     if (s.hempT > 0) speed *= H.hemp.speedMul;
     if (s.slowT > 0) speed *= s.slowMul;
+    // Climbing through a smashed window is slow.
+    if (geo.inBrokenWindow(s.x, s.y, radius + 4)) speed *= H.windowClimbMul;
     gait = moving ? (sprint ? Gait.Run : Gait.Walk) : Gait.Idle;
   } else {
     const sv = BALANCE.survivor;
@@ -219,7 +221,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   if (moving) {
     dx *= speed * dt;
     dy *= speed * dt;
-    moveCircle(geo, s, radius, dx, dy);
+    moveCircle(geo, s, radius, dx, dy, role === 'hunter');
   }
   return gait;
 }

@@ -28,6 +28,7 @@ import { updateAbilities } from './abilities';
 import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
+import { Shane } from './shane';
 
 export interface GenState {
   progress: number;
@@ -119,6 +120,8 @@ export class World {
   /** Swipes each closed door has taken, and doors Zach smashed (open for good). */
   readonly doorHits: number[];
   readonly doorBroken: boolean[];
+  /** Windows Zach smashed (he can climb through them). */
+  readonly windowsBroken: boolean[];
   readonly doorCd: number[];
   readonly lootTaken: boolean[];
   readonly stakes: number[];
@@ -133,6 +136,9 @@ export class World {
   readonly trailSent = new Map<number, Set<number>>();
   hempDrop: { id: number; x: number; y: number } | null = null;
   readonly sexton: Sexton;
+  readonly shane: Shane;
+  /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
+  revealT = 0;
   events: OutEvent[] = [];
   result: MatchResult | null = null;
   nextEntityId = 32;
@@ -155,6 +161,7 @@ export class World {
     this.doorCd = opts.map.doors.map(() => 0);
     this.doorHits = opts.map.doors.map(() => 0);
     this.doorBroken = opts.map.doors.map(() => false);
+    this.windowsBroken = this.geo.windowSegs.map(() => false);
     this.lootTaken = opts.map.loot.map(() => false);
     this.stakes = opts.map.stakes.map(() => 0);
     this.hiding = opts.map.hidingSpots.map(() => 0);
@@ -171,6 +178,7 @@ export class World {
     }
     this.survivorsTotal = this.order.filter((p) => p.role === 'survivor').length;
     this.sexton = new Sexton(this);
+    this.shane = new Shane(this);
   }
 
   get geo() {
@@ -336,6 +344,7 @@ export class World {
     updateItems(this, dt);
     updateAbilities(this, dt);
     updateSexton(this, dt);
+    this.shane.update(dt);
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -424,12 +433,19 @@ export class World {
     if (!open) this.pushOutOfColliders();
   }
 
+  /** Smashes a window: Zach can climb through it from now on. */
+  breakWindow(i: number): void {
+    this.windowsBroken[i] = true;
+    this.geo.setWindowBroken(i, true);
+  }
+
   private pushOutOfColliders(): void {
     for (const p of this.order) {
       if (p.role === 'spectator' || p.health === Health.Carried || p.hideState === 2) continue;
-      resolveOverlaps(this.geo, p.move, p.radius);
+      resolveOverlaps(this.geo, p.move, p.radius, p.role === 'hunter');
     }
     this.sexton.unstick();
+    this.shane.unstick();
   }
 
   allocEntityId(): number {

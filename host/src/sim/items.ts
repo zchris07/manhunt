@@ -113,6 +113,16 @@ function fireShotgun(w: World, p: SimPlayer, aim: number): void {
     hitH = h;
     hitD = d;
   }
+  // Shane Jeans in the blast (and nearer than Zach) is shaken off.
+  const sh = w.shane;
+  const sd = Math.hypot(sh.x - p.move.x, sh.y - p.move.y);
+  const shaneHit =
+    sh.chasing && sd < Math.min(hitD, S.range + BALANCE.shane.radius) && Math.abs(angleDiff(Math.atan2(sh.y - p.move.y, sh.x - p.move.x), aim)) <= S.spreadDeg * DEG + Math.atan2(BALANCE.shane.radius, Math.max(1, sd)) && w.geo.hasLineOfSight(p.move.x, p.move.y, sh.x, sh.y);
+  if (shaneHit) {
+    w.emit(w.near(p.move.x, p.move.y, BALANCE.net.maxSensingRadius), { k: 'shot', x: Math.round(p.move.x), y: Math.round(p.move.y), a: Math.round(aim * 1000) / 1000, len: Math.round(sd), hit: true });
+    sh.shotHit();
+    return;
+  }
   const len = hitH ? hitD : range;
   w.emit(w.near(p.move.x, p.move.y, BALANCE.net.maxSensingRadius), { k: 'shot', x: Math.round(p.move.x), y: Math.round(p.move.y), a: Math.round(aim * 1000) / 1000, len: Math.round(len), hit: !!hitH });
   if (!hitH) return;
@@ -143,9 +153,16 @@ export function updateItems(w: World, dt: number): void {
         break;
       }
     }
+    const sh = w.shane;
+    const hitShane = !hit && sh.chasing && pointSegDist2(sh.x, sh.y, b.x, b.y, nx, ny) <= (BALANCE.shane.radius + B.hitRadius) ** 2;
     b.x = nx;
     b.y = ny;
     b.travelled += step;
+    if (hitShane) {
+      w.noise(nx, ny, 900, 'glass');
+      sh.bottleHit();
+      continue;
+    }
     if (hit) {
       const owner = w.players.get(b.owner);
       w.noise(nx, ny, 900, 'glass');

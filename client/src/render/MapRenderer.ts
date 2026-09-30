@@ -50,6 +50,7 @@ export class MapRenderer {
   private readonly barricadeSprites: Sprite[] = [];
   private readonly doors: DoorSprite[] = [];
   private readonly debris = new Graphics();
+  private readonly windows: { g: Graphics; w: WallSeg }[] = [];
   private readonly gateSprite: Sprite;
   private readonly glows: { sprite: Sprite; index: number; kind: string; base: number }[] = [];
 
@@ -241,25 +242,55 @@ export class MapRenderer {
         body.rect(x - 3.5, y - 5, 7, 7).fill({ color: w.kind === 'yard' ? 0x5a5e60 : 0x3a2e22 });
       }
     }
-    // Windows: a frame on each end and a pane of grimy glass.
+    // Windows: a frame on each end and a pane of grimy glass (redrawn when smashed).
     for (const w of this.map.walls) {
       if (w.kind !== 'window') continue;
-      const len = Math.hypot(w.bx - w.ax, w.by - w.ay) || 1;
-      const ux = (w.bx - w.ax) / len;
-      const uy = (w.by - w.ay) / len;
-      body.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 7, color: 0x1a1c1c, alpha: 0.9 });
-      body.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 4, color: 0x7a9094, alpha: 0.35 });
-      body.moveTo(w.ax + ux * len * 0.15 - uy * 1, w.ay + uy * len * 0.15 + ux * 1).lineTo(w.ax + ux * len * 0.45, w.ay + uy * len * 0.45).stroke({ width: 1.2, color: 0xc8d8da, alpha: 0.35 });
-      body.rect(w.ax + ux * len * 0.5 - 2.5, w.ay + uy * len * 0.5 - 2.5, 5, 5).fill({ color: 0x2a2620 });
-      for (const [x, y] of [
-        [w.ax, w.ay],
-        [w.bx, w.by],
-      ]) {
-        body.rect(x - 5, y - 5, 10, 10).fill({ color: 0x2a2620 });
+      const g = new Graphics();
+      this.windows.push({ g, w });
+      this.drawWindow(g, w, false);
+      c.addChild(g);
+    }
+    c.addChildAt(shadow, 0);
+    c.addChildAt(body, 1);
+    return c;
+  }
+
+  private drawWindow(g: Graphics, w: WallSeg, broken: boolean): void {
+    g.clear();
+    const len = Math.hypot(w.bx - w.ax, w.by - w.ay) || 1;
+    const ux = (w.bx - w.ax) / len;
+    const uy = (w.by - w.ay) / len;
+    const at = (t: number, n = 0): [number, number] => [w.ax + ux * len * t - uy * n, w.ay + uy * len * t + ux * n];
+    if (!broken) {
+      g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 7, color: 0x1a1c1c, alpha: 0.9 });
+      g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 4, color: 0x7a9094, alpha: 0.35 });
+      const [x0, y0] = at(0.15, -1);
+      const [x1, y1] = at(0.45);
+      g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 1.2, color: 0xc8d8da, alpha: 0.35 });
+      const [mx, my] = at(0.5);
+      g.rect(mx - 2.5, my - 2.5, 5, 5).fill({ color: 0x2a2620 });
+    } else {
+      // Smashed: an empty frame, jagged teeth of glass and shards on the ground.
+      g.moveTo(w.ax, w.ay).lineTo(w.bx, w.by).stroke({ width: 2, color: 0x1a1c1c, alpha: 0.7 });
+      for (let k = 0; k < 7; k++) {
+        const t = 0.06 + k * 0.14;
+        const side = k % 2 ? 1 : -1;
+        const [sx, sy] = at(t, side * (6 + ((k * 7) % 11)));
+        g.rect(sx - 2, sy - 1, 4 + (k % 3) * 2, 2).fill({ color: 0x9aaeb0, alpha: 0.45 });
       }
     }
-    c.addChild(shadow, body);
-    return c;
+    for (const [x, y] of [
+      [w.ax, w.ay],
+      [w.bx, w.by],
+    ]) {
+      g.rect(x - 5, y - 5, 10, 10).fill({ color: 0x2a2620 });
+    }
+  }
+
+  /** Zach smashed window `i` (in map order). */
+  setWindowBroken(i: number, broken: boolean): void {
+    const win = this.windows[i];
+    if (win) this.drawWindow(win.g, win.w, broken);
   }
 
   private buildDynamicProps(props: Container): Sprite {

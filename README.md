@@ -103,7 +103,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Left mouse | Use the selected item (hold it for night vision goggles) |
 | Mouse wheel / 1–5 / click a slot | Select an inventory slot |
 | Tab | Rearrange your inventory slots (drag and drop) |
-| Q | JARVIS, once you have Sexton's tablet: reveals the whole map for you and shows Zach for 10 s |
+| Q | JARVIS, once you have Sexton's tablet: for 10 s every player's whole screen is visible; your own map is fully revealed and shows Zach |
 | Space | Slam a barricade down · skill checks · hold breath while hidden |
 | M | Full map (only the parts you've explored) |
 
@@ -112,7 +112,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Item | |
 |---|---|
 | Bottle (20 on the map) | Throw it at the cursor. A hit stuns Zach. |
-| Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; within 650 u your light passes through walls and the cone is 20% wider. |
+| Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; your whole beam passes through walls and the cone is 20% wider. |
 | Shotgun (2) | 3 shells, 2 s reload. Stuns Zach for 0.8 s and blasts him back. |
 | Energy drink (8) | For 20 s your sprint refills 1.5× faster and the meter holds 2 s more. |
 | Galaxy gas trap (8) | Plant it. It's hard for Zach to spot. When he comes near it bursts into gas that slows him a lot. |
@@ -122,14 +122,28 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 |---|---|
 | WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
 | Shift | Sprint (6 s meter, refills in 6 s) |
-| Left mouse | Machete swipe. Hold to charge, release to strike: a full charge is a heavy swipe that reaches 30% farther, sweeps wider and counts as two hits. Two swipes smash a closed door (it stays open) or a dropped barricade. |
+| Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself): a full charge is a heavy swipe that reaches 30% farther, sweeps wider and counts as two hits. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which you can then climb through (slowly). Survivors can't use smashed windows. |
 | Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. |
-| F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall. Every survivor it passes is jump-scared. Everyone hears a snippet of GMajor when it goes out. |
+| F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared. Only you hear it go out: a quiet snippet of GMajor from a random point in the song. |
 | Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
 | E | Pick up, stake, search a hiding spot (instant), damage a generator, open and close doors |
 | M | Full map. Zach knows the whole map and every stake. |
 
 Zach always sees a red scent trail left by anyone sprinting or bleeding.
+
+**NPCs.** There is exactly one **Sexton Science**; once Zach slays him he never comes back.
+**Shane Jeans** (one, unkillable) wanders from a random spot with a faint light. A survivor
+who comes within 80 u of him, or keeps a flashlight on him for 2 s in total (the meter drains
+slowly while he's out of the beam), alerts him: everyone is told, and he tails that survivor
+as closely as he can at 200 u/s (Sexton's panic speed) while Zach gets an arrow pointing
+toward him. Zach never alerts him. He gives up after 20 s, when Zach comes within 260 u of
+him, or when the survivor gets 1100 u away; 2 bottles or 1 shotgun blast shake him off (he
+runs away for 4 s). He can't open doors or break barricades, and after a chase he can't be
+alerted again for 10 s.
+
+**Distances** are in world units (u); at normal zoom 1 u is one screen pixel. A survivor is
+30 u across and Zach 38 u. A warehouse door is 72 u long and a cabin door 76 u. The map is
+6000 × 6000 u, and the swipe reaches 124 u.
 
 Press **Esc** for settings (volume, controls, leave). The game keeps running while it's open.
 
@@ -183,8 +197,9 @@ game has no synthesized audio at all. To use a real file, replace the slot:
   when they're generated; a file is used as it is.
 - Textures may set `"anchor": [x, y]` (the pivot as fractions of the image). Trees and rocks are
   anchored at the centre of the crown.
-- **Sounds:** the game plays only the two supplied files: a fading 2.6 s snippet of GMajor
-  (`burst`, from 17 s in) that everyone hears when Zach fires a Soundcloud Burst, and Sexton's
+- **Sounds:** the game plays only the two supplied files, plus spoken "Jarvis online" and
+  "Hemp battery activated" announcements: a fading 2.6 s snippet of GMajor (`burst`, from a
+  random point, half volume) that only Zach hears when he fires a Soundcloud Burst, and Sexton's
   reel (`sexton.reel`, a positional loop that gets louder the closer you are). Sounds may set
   `offset` and `duration` in seconds. Loops should loop seamlessly.
 - The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`).
@@ -252,12 +267,12 @@ colour and renders everything else as a colourless fog at low brightness, so the
 readable. Lamps and campfires light the scene, but only your own light (cone, proximity circle,
 x-ray) reveals characters, items and objectives: a second filter hides them everywhere else
 with a hard threshold, and the host never sends what you can't see. Night vision and the Hemp
-Battery add an x-ray cone (650 u) that passes through walls; it fades in over 0.75 s and out
-in 1/6 s.
+Battery turn the whole beam into x-ray light that passes through walls; it fades in over 0.75 s
+and out in 1/6 s. While JARVIS runs, every player's whole screen counts as lit.
 
 **Testing mode.** Press **Testing mode** on the landing page to play alone. You get every item
 and ability with infinite uses (Zach's Hemp Battery toggles on and off), there's no win
-condition, Sexton comes back 10 s after he's slain, and **T** switches you between Zach and a
+condition, and **T** switches you between Zach and a
 survivor. Open the full map (**M**) and click anywhere to teleport there. Survivors see their
 own scent trail. A lobby owner can also tick **Testing mode** in the lobby settings to test with
 friends.

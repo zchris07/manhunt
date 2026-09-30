@@ -82,6 +82,8 @@ export interface SimPlayer {
   swingT: number;
   /** Seconds the swing has been charged (left click held); -1 when not charging. */
   chargeT: number;
+  /** Seconds left click has been held this charge (it strikes by itself at autoRelease). */
+  chargeHeld: number;
   /** The swing being wound up is a fully charged heavy swipe. */
   heavy: boolean;
   lungeHit: boolean;
@@ -163,6 +165,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     attackWindup: 0,
     swingT: 0,
     chargeT: -1,
+    chargeHeld: 0,
     heavy: false,
     lungeHit: false,
     wasLunging: false,

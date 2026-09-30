@@ -145,6 +145,7 @@ export const EntityKind = {
   Gas: 3,
   Sexton: 4,
   Hemp: 5,
+  Shane: 6,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

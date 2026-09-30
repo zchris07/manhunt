@@ -1,5 +1,5 @@
 import { GridIndex } from './spatialHash';
-import { rayCircle, raySegment, segmentCircle, segmentsIntersect } from './math';
+import { pointSegDist2, rayCircle, raySegment, segmentCircle, segmentsIntersect } from './math';
 
 export interface SegmentDef {
   ax: number;
@@ -10,6 +10,8 @@ export interface SegmentDef {
   vision: boolean;
   /** Blocks movement (walls, fences, windows, shoreline). */
   move: boolean;
+  /** A window: Zach can smash it and then climb through (survivors still can't). */
+  window?: boolean;
 }
 
 export interface CircleDef {
@@ -56,6 +58,10 @@ export class Geometry {
   readonly moveCircleGrid: GridIndex;
   /** Index of the first dynamic segment in moveSeg. */
   readonly dynamicBase: number;
+  /** Move segment index of each window, in map order. */
+  readonly windowSegs: number[];
+  /** Per move segment: 1 where Zach may pass (a smashed window). */
+  readonly hunterPass: Uint8Array;
   private readonly tmpA: number[] = [];
   private readonly tmpB: number[] = [];
 
@@ -95,7 +101,10 @@ export class Geometry {
     });
 
     this.dynamicBase = ms.length;
+    this.windowSegs = [];
+    ms.forEach((s, i) => s.window && this.windowSegs.push(i));
     const allMove = [...ms, ...dynamic];
+    this.hunterPass = new Uint8Array(allMove.length);
     this.moveSeg = new Float64Array(allMove.length * 4);
     this.moveSegActive = new Uint8Array(allMove.length);
     this.moveSegGrid = new GridIndex(width, height, CELL);
@@ -118,6 +127,28 @@ export class Geometry {
     this.moveSegActive[this.dynamicBase + index] = active ? 1 : 0;
     const v = this.dynVis[index];
     if (v !== undefined && v >= 0) this.visSegActive[v] = active ? 1 : 0;
+  }
+
+  /** Smashes (or restores) window `index`: Zach can climb through a smashed one. */
+  setWindowBroken(index: number, broken: boolean): void {
+    const m = this.windowSegs[index];
+    if (m !== undefined) this.hunterPass[m] = broken ? 1 : 0;
+  }
+
+  isWindowBroken(index: number): boolean {
+    const m = this.windowSegs[index];
+    return m !== undefined && this.hunterPass[m] === 1;
+  }
+
+  /** True if a circle at (x,y) overlaps a smashed window (Zach is climbing through). */
+  inBrokenWindow(x: number, y: number, r: number): boolean {
+    const ms = this.moveSeg;
+    for (const m of this.windowSegs) {
+      if (!this.hunterPass[m]) continue;
+      const o = m * 4;
+      if (pointSegDist2(x, y, ms[o], ms[o + 1], ms[o + 2], ms[o + 3]) < r * r) return true;
+    }
+    return false;
   }
 
   isDynamicActive(index: number): boolean {

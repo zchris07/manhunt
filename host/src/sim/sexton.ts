@@ -29,7 +29,6 @@ export class Sexton {
   private talkTo = 0;
   private talkT = 0;
   private handT = 0;
-  private deadT = 0;
   private stuckT = 0;
   readonly given = new Set<number>();
 
@@ -100,7 +99,6 @@ export class Sexton {
       this.alive = false;
       this.mode = 'idle';
       this.moving = false;
-      this.deadT = 0;
       w.hempDrop = { id: w.allocEntityId(), x: this.x + Math.cos(this.facing) * 22, y: this.y + Math.sin(this.facing) * 22 };
       w.feed(`${h.name} slayed Sexton Science. Something is glowing where he fell.`);
       return;
@@ -123,15 +121,8 @@ export class Sexton {
   update(dt: number): void {
     const w = this.w;
     this.hurtT = Math.max(0, this.hurtT - dt);
-    if (!this.alive) {
-      // Testing mode brings him back so the tablet and battery can be tried again.
-      this.deadT += dt;
-      if (w.testMode && this.deadT > 10) {
-        this.given.clear();
-        this.spawn();
-      }
-      return;
-    }
+    // There is only ever one Sexton Science, and once slain he stays dead.
+    if (!this.alive) return;
     if (this.mode === 'talk') {
       this.updateTalk(dt);
       return;

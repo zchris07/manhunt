@@ -631,6 +631,8 @@ export const SURVIVOR_LOOKS: readonly Look[] = [
 ];
 
 const HUNTER_LOOK: Look = { skin: '#d9c9a8', hair: '#2a2420', style: 'short', shirt: '#3b3f2a', pants: '#23262e', shoes: '#1a1614', jacket: '#4a5236' };
+/** Shane Jeans: double denim. */
+const SHANE_LOOK: Look = { skin: '#e0b890', hair: '#3a2a1c', style: 'long', shirt: '#d8d0c0', pants: '#3a5a8a', shoes: '#2a2622', jacket: '#4a6a9a' };
 const SEXTON_LOOK: Look = { skin: '#f4cfae', hair: '#f5d86a', style: 'short', shirt: '#2f86f0', pants: '#cdb57c', shoes: '#5a3a22' };
 
 /** A leg + shoe, pointing +x from the hip (used in pairs for the walk cycle). */
@@ -810,7 +812,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 30 ? SHANE_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -938,6 +940,12 @@ export const machete: CanvasGen = () => {
 export const sexton: CanvasGen = () => {
   const [c, ctx] = canvas(64);
   person(ctx, SEXTON_LOOK, 30, 32, 1, { glasses: true });
+  return c;
+};
+
+export const shane: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, SHANE_LOOK, 30, 32, 1);
   return c;
 };
 
@@ -1502,6 +1510,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   machete,
   sexton,
   sextonDead,
+  shane,
   generator,
   locker,
   wardrobe,

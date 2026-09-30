@@ -97,6 +97,8 @@ export type GameEvent =
   /** The wave reached you: jump scare. */
   | { k: 'scare' }
   | { k: 'jarvis'; by: number }
+  /** Shane Jeans was alerted (true) or gave up the chase (false). */
+  | { k: 'shane'; alerted: boolean }
   | { k: 'hemp'; by: number }
   | { k: 'sexton'; say: string }
   /** Sexton hands a glowing tablet to a survivor. */

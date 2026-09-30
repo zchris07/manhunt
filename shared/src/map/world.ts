@@ -6,7 +6,7 @@ export const BARREL_RADIUS = 18;
 export const CAMPFIRE_RADIUS = 18;
 
 export function buildGeometry(data: MapData): Geometry {
-  const segments: SegmentDef[] = data.walls.map((w) => ({ ax: w.ax, ay: w.ay, bx: w.bx, by: w.by, vision: w.vision, move: w.move }));
+  const segments: SegmentDef[] = data.walls.map((w) => ({ ax: w.ax, ay: w.ay, bx: w.bx, by: w.by, vision: w.vision, move: w.move, window: w.kind === 'window' }));
   const circles: CircleDef[] = [];
   for (const t of data.trees) circles.push({ x: t.x, y: t.y, r: t.r, vision: true, move: true });
   for (const r of data.rocks) circles.push({ x: r.x, y: r.y, r: r.r, vision: true, move: true });

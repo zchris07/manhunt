@@ -336,6 +336,9 @@ export class GameClient {
         doorsChanged = true;
       }
     });
+    ws.windowsBroken.forEach((b, i) => {
+      if (b !== geo.isWindowBroken(i)) geo.setWindowBroken(i, b);
+    });
     if (doorsChanged) this.doorVersion++;
 
     this.reconcile(snap);

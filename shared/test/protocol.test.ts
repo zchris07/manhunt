@@ -38,6 +38,9 @@ const world = (): WorldState => ({
   hidingOccupied: [false, true],
   doors: [true, false, false, true],
   doorsBroken: [false, true, false, false],
+  windowsBroken: [true, false],
+  reveal: true,
+  shaneDir: 1.25,
   radar: [{ x: 1200, y: 3400 }],
 });
 

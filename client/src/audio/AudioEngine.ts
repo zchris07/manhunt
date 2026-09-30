@@ -18,9 +18,10 @@ interface Loop {
 }
 
 /**
- * The game's only sounds are the two custom audio files in assets/manifest.json: a fading
- * GMajor snippet when Zach fires a Soundcloud Burst (everyone hears it) and Sexton Science's
- * positional reel. There is no procedural or synthesized audio of any kind.
+ * The game's sounds are the two custom audio files in assets/manifest.json (a short fading
+ * GMajor snippet that only Zach hears when he fires a Soundcloud Burst, and Sexton Science's
+ * positional reel) plus two spoken announcements (JARVIS and the Hemp Battery). There is no
+ * other procedural or synthesized audio.
  */
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -104,25 +105,30 @@ export class AudioEngine {
   }
 
   /**
-   * Plays a section of a file: from the manifest's `offset` for its `duration`, fading out
-   * over its last `fadeOut` seconds. Restarts if already playing.
+   * Plays a section of a file for the manifest's `duration`, fading out over its last
+   * `fadeOut` seconds: from its `offset`, or from a random point when the entry sets
+   * `"random": true`. Restarts if already playing.
    */
-  playClip(id: string, fadeOut = 1.4): boolean {
+  playClip(id: string, o: { fadeOut?: number; volume?: number } = {}): boolean {
+    const fadeOut = o.fadeOut ?? 1.4;
+    const vol = o.volume ?? 1;
     const ctx = this.ctx;
     if (!ctx) return false;
     const b = this.getSound(id);
     if (!b) return false;
     this.clip?.src.stop();
     const entry = this.assets.soundEntry(id);
-    const offset = Math.min(Math.max(0, entry?.offset ?? 0), Math.max(0, b.duration - 0.1));
-    const dur = Math.min(entry?.duration ?? b.duration, b.duration - offset);
+    const want = Math.min(entry?.duration ?? b.duration, b.duration);
+    const from = entry?.random ? Math.random() * Math.max(0, b.duration - want) : (entry?.offset ?? 0);
+    const offset = Math.min(Math.max(0, from), Math.max(0, b.duration - 0.1));
+    const dur = Math.min(want, b.duration - offset);
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
     src.buffer = b;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(1, t + 0.04);
-    gain.gain.setValueAtTime(1, t + Math.max(0.05, dur - fadeOut));
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.04);
+    gain.gain.setValueAtTime(vol, t + Math.max(0.05, dur - fadeOut));
     gain.gain.linearRampToValueAtTime(0.0001, t + dur);
     src.connect(gain).connect(this.clipBus);
     src.start(t, offset, dur + 0.05);
@@ -180,8 +186,30 @@ export class AudioEngine {
     this.loops.set(key, { id, src, gain, panner: p });
   }
 
+  /** A robot voice announcement (speech synthesis, pitched down). */
+  announce(text: string): void {
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+    this.lastAnnouncement = text;
+    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.pitch = 0.1;
+      u.rate = 0.85;
+      u.volume = Math.min(1, this.volumes.master * 1.1);
+      const voices = synth.getVoices();
+      const pick = voices.find((v) => /en/i.test(v.lang) && /male|david|daniel|fred|google uk/i.test(v.name)) ?? voices.find((v) => /^en/i.test(v.lang));
+      if (pick) u.voice = pick;
+      synth.cancel();
+      synth.speak(u);
+    } catch {
+      // Speech isn't available (some headless browsers): the on-screen text still shows.
+    }
+  }
+
+  lastAnnouncement = '';
+
   /** Diagnostics for tests and the debug overlay. */
-  stats(): { state: string; buffers: number; loops: string[]; clip: boolean; clips: number; loaded: string[] } {
+  stats(): { state: string; buffers: number; loops: string[]; clip: boolean; clips: number; loaded: string[]; announced: string } {
     return {
       state: this.ctx?.state ?? 'none',
       buffers: this.buffers.size,
@@ -189,6 +217,7 @@ export class AudioEngine {
       clip: this.clip !== null,
       clips: this.clips,
       loaded: [...this.buffers.keys()],
+      announced: this.lastAnnouncement,
     };
   }
 
