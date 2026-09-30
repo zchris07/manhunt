@@ -10,7 +10,7 @@ async function audio(page: Page): Promise<{ state: string; buffers: number; loop
   return page.evaluate(() => (window.__manhunt as unknown as { audioStats: { state: string; buffers: number; loops: string[]; clips: number; loaded: string[] } | null }).audioStats);
 }
 
-test('audio is only the two custom files: the burst snippet (everyone) and Sexton\'s reel', async ({ browser }) => {
+test('audio: the burst snippet only Zach hears, and Sexton\'s reel', async ({ browser }) => {
   const errors: string[] = [];
   const surv = await newPlayer(browser, '/?dev=1');
   surv.on('pageerror', (e) => errors.push(e.message));
@@ -33,10 +33,11 @@ test('audio is only the two custom files: the burst snippet (everyone) and Sexto
   await expect.poll(async () => ((await audio(zach))?.loaded ?? []).length, { timeout: 10000 }).toBe(2);
   expect((await audio(surv))!.loops).toEqual([]);
 
-  // Zach fires a Soundcloud Burst (F): both players hear the GMajor snippet.
+  // Zach fires a Soundcloud Burst (F): he hears a GMajor snippet; survivors hear nothing.
   await zach.keyboard.press('KeyF');
   await expect.poll(async () => (await audio(zach))?.clips ?? 0, { timeout: 10000 }).toBe(1);
-  await expect.poll(async () => (await audio(surv))?.clips ?? 0, { timeout: 10000 }).toBe(1);
+  await surv.waitForTimeout(1500);
+  expect((await audio(surv))!.clips).toBe(0);
 
   // Sexton Science's reel plays around him (louder the closer you are).
   await dev(surv, 'sexton', [60, 0]);

@@ -102,9 +102,9 @@ export const BALANCE = {
       /**
        * Hold left click to charge the swing, release to strike. A full charge (`max` s) is a
        * heavy swipe: longer reach, wider arc, and it counts as two hits (downs a healthy
-       * survivor, breaks a door or barricade outright).
+       * survivor, breaks a door or barricade outright). Holding past `autoRelease` s strikes.
        */
-      charge: { max: 0.9, heavyAt: 0.85, rangeMul: 1.3, arcMul: 1.25, slowMul: 0.65 },
+      charge: { max: 0.9, heavyAt: 0.85, rangeMul: 1.3, arcMul: 1.25, slowMul: 0.65, autoRelease: 3 },
     },
     /**
      * Lunge (right click): a League-of-Legends-style dash. Speed starts at `peak` and eases out to zero
@@ -116,11 +116,13 @@ export const BALANCE = {
      * Soundcloud Burst (F): an aimed wave of sound, a slightly concave purple lens of fixed
      * `width` that flies across the whole map through everything. `thickness` is its depth.
      */
-    burst: { cooldown: 12, speed: 3400, width: HUNTER_WIDTH * 6, thickness: 36, scareTime: 4 },
+    burst: { cooldown: 12, speed: 1700, width: HUNTER_WIDTH * 6, thickness: 36, scareTime: 4 },
     /** Scent trail (always on): survivors running or bleeding leave red scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /** Hemp Battery (Q, dropped by Sexton Science). */
     hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
+    /** Speed multiplier while climbing through a smashed window (one swipe smashes it). */
+    windowClimbMul: 0.35,
     breakBarricadeTime: 2.2,
     damageGenTime: 2.0,
     pickupTime: 1.0,
@@ -167,10 +169,9 @@ export const BALANCE = {
   },
 
   /**
-   * Penetrating light (goggles, Hemp Battery): within `range` of the cone it sees through
-   * everything, at `brightness`. It grows in over `fadeIn` s and fades out over `fadeOut` s.
+   * Penetrating light (goggles, Hemp Battery): the whole cone sees through everything, at `brightness`. It grows in over `fadeIn` s and fades out over `fadeOut` s.
    */
-  xray: { range: 650, brightness: 0.7, fadeIn: 0.75, fadeOut: 1 / 6 },
+  xray: { range: BEAM_RANGE, brightness: 0.7, fadeIn: 0.75, fadeOut: 1 / 6 },
 
   sexton: {
     radius: 15,
@@ -184,6 +185,32 @@ export const BALANCE = {
     /** Reel audio: full volume within `near`, silent past `far`. */
     audio: { near: 60, far: 950 },
     jarvisRadarSec: 10,
+  },
+
+  /**
+   * Shane Jeans: an unkillable wanderer. A survivor who comes within `alertRadius`, or keeps
+   * a flashlight on him for `flashAlertSec` in total (the meter drains at `alertDecay` per
+   * second when he's out of the beam), alerts him. He then chases that survivor at Sexton's
+   * flee speed (Zach sees an arrow toward him) until `chaseTime` passes, Zach comes within
+   * `hunterBreakRadius` of him, the survivor gets farther than `loseRadius`, or he is hit by
+   * `bottlesToShake` bottles or one shotgun blast (then he runs off for `fleeTime`). After a
+   * chase he can't be alerted for `cooldown` seconds. He can't open doors.
+   */
+  shane: {
+    radius: 15,
+    walk: 65,
+    chase: 200,
+    alertRadius: 80,
+    flashAlertSec: 2,
+    alertDecay: 0.3,
+    chaseTime: 20,
+    hunterBreakRadius: 260,
+    loseRadius: 1100,
+    bottlesToShake: 2,
+    fleeTime: 4,
+    cooldown: 10,
+    /** His faint light (client only). */
+    light: { radius: 150, intensity: 0.4 },
   },
 
   objectives: {

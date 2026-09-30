@@ -56,6 +56,8 @@ export function visionFor(w: World, v: SimPlayer): Vision {
  * anywhere in the near part of a see-through (x-ray) cone.
  */
 export function canSee(w: World, v: SimPlayer, x: number, y: number): boolean {
+  // JARVIS: for a few seconds everyone sees everything on their screen.
+  if (w.revealT > 0) return true;
   const { cone, prox, xray } = visionFor(w, v);
   if (xray && inCone({ ...cone, range: Math.min(cone.range, BALANCE.xray.range) }, x, y)) return true;
   const d = Math.hypot(x - v.move.x, y - v.move.y);
@@ -207,6 +209,10 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
       if (sx.hurtT > 0) st |= SextonFlag.Hurt;
       entities.push(quantizeEntity(sx.id, EntityKind.Sexton, sx.x, sx.y, sx.facing, st, 0, sx.hp, sx.moving ? 1 : 0, 0));
     }
+    // Shane Jeans is sent to everyone nearby (his faint light shows even in the dark; he is
+    // still only drawn inside your own light).
+    const sh = w.shane;
+    if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= R) entities.push(sh.record());
     const hd = w.hempDrop;
     if (hd && Math.hypot(hd.x - v.move.x, hd.y - v.move.y) <= R) entities.push(quantizeEntity(hd.id, EntityKind.Hemp, hd.x, hd.y, 0, 0, 0, 0));
   }
@@ -250,7 +256,11 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     hidingOccupied,
     doors: w.doors.slice(),
     doorsBroken: w.doorBroken.slice(),
+    windowsBroken: w.windowsBroken.slice(),
     radar,
+    reveal: w.revealT > 0,
+    // Zach gets only the direction to a chasing Shane, never his position.
+    shaneDir: v && v.role === 'hunter' && w.shane.chasing ? Math.atan2(w.shane.y - v.move.y, w.shane.x - v.move.x) : null,
   };
   return { self: selfState(w, peerPlayer, v), entities, world };
 }

@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, DEG, EF, EntityKind, GenFlag, Health, ItemKind, SextonFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, DEG, EF, EntityKind, GenFlag, Health, ItemKind, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -406,6 +406,7 @@ export class EntityLayer {
   private readonly genSprites: Sprite[] = [];
   private readonly genGlows: Sprite[] = [];
   private sexton: { root: Container; body: Sprite; dead: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite } | null = null;
+  private shane: { root: Container; body: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite; mark: Text } | null = null;
   private bubble: Bubble | null = null;
   private tablets: TabletFlight[] = [];
   private shots: { x: number; y: number; a: number; len: number; t: number }[] = [];
@@ -538,10 +539,14 @@ export class EntityLayer {
     };
 
     let sextonSeen = false;
+    let shaneSeen = false;
     for (const e of ents) {
       if (e.kind === EntityKind.Player) {
         if (self && e.id === self.id) continue;
         draw({ ...e });
+      } else if (e.kind === EntityKind.Shane) {
+        shaneSeen = true;
+        this.drawShane(e, dt, time);
       } else if (e.kind === EntityKind.Sexton) {
         sextonSeen = true;
         this.drawSexton(e, dt, time);
@@ -552,6 +557,7 @@ export class EntityLayer {
     }
     if (self) draw(self);
     if (this.sexton) this.sexton.root.visible = sextonSeen;
+    if (this.shane) this.shane.root.visible = shaneSeen;
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
     for (const [id, c] of this.things) {
@@ -671,6 +677,41 @@ export class EntityLayer {
     s.body.rotation = e.facing;
     const hurt = (e.state & SextonFlag.Hurt) !== 0;
     s.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff6a6a : 0xffffff;
+  }
+
+  /** Shane Jeans: double denim; a "!" over his head while he's chasing someone. */
+  private drawShane(e: InterpEntity, dt: number, time: number): void {
+    if (!this.shane) {
+      const root = new Container();
+      const legs = new Container();
+      const legA = new Sprite(this.assets.getTexture('char.legs', 30));
+      const legB = new Sprite(this.assets.getTexture('char.legs', 30));
+      const [ax, ay] = this.assets.anchorOf('char.legs');
+      for (const l of [legA, legB]) l.anchor.set(ax, ay);
+      legs.addChild(legA, legB);
+      const body = new Sprite(this.assets.getTexture('char.shane'));
+      body.anchor.set(30 / 64, 0.5);
+      const mark = new Text({ text: '!', style: { fontFamily: 'Oswald, Impact, sans-serif', fontSize: 22, fontWeight: '700', fill: 0xb3121b, stroke: { color: 0x000000, width: 3 } } });
+      mark.anchor.set(0.5, 1);
+      mark.position.set(0, -24);
+      const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
+      root.addChild(shadow, legs, body, mark);
+      this.root.addChild(root);
+      this.shane = { root, body, walker: new Walker(), legs, legA, legB, mark };
+    }
+    const s = this.shane;
+    s.root.position.set(e.x, e.y);
+    s.walker.update(e.x, e.y, dt, 34);
+    const moving = s.walker.speed > 10;
+    s.legs.rotation = moving ? s.walker.moveDir : e.facing;
+    const st = moving ? Math.min(1, s.walker.speed / 150) * 8 : 0;
+    const k = Math.sin(s.walker.phase);
+    s.legA.position.set(-4 + k * st, -5.5);
+    s.legB.position.set(-4 - k * st, 5.5);
+    s.body.rotation = e.facing;
+    const chasing = (e.state & ShaneFlag.Chasing) !== 0;
+    s.mark.visible = chasing;
+    if (chasing) s.mark.scale.set(1 + 0.15 * Math.sin(time * 10));
   }
 
   private drawThing(e: InterpEntity, time: number): void {

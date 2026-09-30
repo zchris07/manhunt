@@ -81,3 +81,9 @@ export function clearLane(w: World, half = 450): { x: number; y: number } {
   }
   throw new Error('no clear lane on this map');
 }
+
+/** Keeps Shane Jeans out of the way (far corner) so he doesn't tail anyone in a test. */
+export function parkShane(w: World): void {
+  w.shane.x = w.map.width - 60;
+  w.shane.y = 60;
+}

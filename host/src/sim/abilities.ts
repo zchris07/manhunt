@@ -35,12 +35,16 @@ export function tryHemp(w: World, h: SimPlayer): void {
   w.emit('all', { k: 'hemp', by: h.id });
 }
 
-/** JARVIS (Q, survivors with Sexton's tablet): reveals the map and shows Zach for 10 s. */
+/**
+ * JARVIS (Q, survivors with Sexton's tablet): for 10 s everyone's whole screen is visible;
+ * its user also gets the whole map revealed and sees Zach on it.
+ */
 export function tryJarvis(w: World, p: SimPlayer): void {
   if (p.jarvis !== 1 && p.jarvis !== 3) return;
   if (p.health === Health.Eliminated || p.health === Health.Escaped) return;
   if (p.jarvis === 1) p.jarvis = 2;
   p.jarvisT = BALANCE.sexton.jarvisRadarSec;
+  w.revealT = BALANCE.sexton.jarvisRadarSec;
   w.emit('all', { k: 'jarvis', by: p.id });
 }
 
@@ -64,6 +68,7 @@ function sendScent(w: World, h: SimPlayer): void {
 }
 
 export function updateAbilities(w: World, dt: number): void {
+  w.revealT = Math.max(0, w.revealT - dt);
   const sendNow = Math.floor(w.time / H.scent.sendEvery) !== Math.floor((w.time - dt) / H.scent.sendEvery);
   for (const h of w.order) {
     // Testing mode: survivors see their own scent trail.

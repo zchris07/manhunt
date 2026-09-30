@@ -10,7 +10,10 @@ function canSwing(h: SimPlayer): boolean {
 
 /** Left click pressed: start charging a swing (released in updateCombat). */
 export function startCharge(h: SimPlayer): void {
-  if (h.chargeT < 0 && canSwing(h)) h.chargeT = 0;
+  if (h.chargeT < 0 && canSwing(h)) {
+    h.chargeT = 0;
+    h.chargeHeld = 0;
+  }
 }
 
 /** Starts a swing (resolved after the wind-up). A heavy swing is a fully charged one. */
@@ -100,6 +103,19 @@ function resolveAttack(w: World, h: SimPlayer): void {
         w.doorBroken[i] = true;
         w.noise(cx, cy, 900, 'door_smash');
       }
+    });
+  }
+  // One swipe smashes a window; Zach can climb through the frame afterwards.
+  if (!hit) {
+    w.geo.windowSegs.forEach((m, i) => {
+      if (hit || w.windowsBroken[i]) return;
+      const ms = w.geo.moveSeg;
+      const o = m * 4;
+      const { x: cx, y: cy } = closestOnSeg(h.move.x, h.move.y, ms[o], ms[o + 1], ms[o + 2], ms[o + 3], { x: 0, y: 0 });
+      if (!inSwipe(h, cx, cy, 6)) return;
+      hit = true;
+      w.breakWindow(i);
+      w.noise(cx, cy, 800, 'glass');
     });
   }
   h.heavy = false;
@@ -227,12 +243,13 @@ export function updateCombat(w: World, dt: number): void {
       if (p.chargeT >= 0) {
         const C = H.attack.charge;
         if (!canSwing(p)) p.chargeT = -1;
-        else if (p.lastCmd.buttons & Btn.Primary) {
+        else if (p.lastCmd.buttons & Btn.Primary && p.chargeHeld + dt < C.autoRelease) {
+          p.chargeHeld += dt;
           p.chargeT = Math.min(C.max, p.chargeT + dt);
           p.move.slowT = Math.max(p.move.slowT, 0.1);
           p.move.slowMul = Math.min(p.move.slowMul, 1 - (1 - C.slowMul) * (p.chargeT / C.max));
         } else {
-          // Released: strike.
+          // Released (or held too long): strike.
           const heavy = p.chargeT >= C.heavyAt;
           p.chargeT = -1;
           attemptAttack(w, p, heavy);

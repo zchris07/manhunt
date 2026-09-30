@@ -158,6 +158,12 @@ export const EF = {
   Gassed: 1 << 15,
 } as const;
 
+/** Shane Jeans's state bits (EntityRecord.state for EntityKind.Shane). */
+export const ShaneFlag = {
+  Chasing: 1,
+  Fleeing: 2,
+} as const;
+
 /** Sexton Science's state bits (EntityRecord.state for EntityKind.Sexton). */
 export const SextonFlag = {
   Dead: 1,
@@ -233,8 +239,14 @@ export interface WorldState {
   doors: boolean[];
   /** Doors Zach smashed. */
   doorsBroken: boolean[];
+  /** Windows Zach smashed. */
+  windowsBroken: boolean[];
   /** JARVIS radar: hunter positions (only while this player's radar is running). */
   radar: { x: number; y: number }[];
+  /** JARVIS is running: everyone's whole screen is visible. */
+  reveal: boolean;
+  /** Zach only: direction (radians) to Shane Jeans while he's chasing someone, else null. */
+  shaneDir: number | null;
 }
 
 export const GenFlag = {
@@ -278,8 +290,11 @@ export function encodeWorld(ws: WorldState): Uint8Array {
   packBits(w, ws.hidingOccupied);
   packBits(w, ws.doors);
   packBits(w, ws.doorsBroken);
+  packBits(w, ws.windowsBroken);
   w.u8(ws.radar.length);
   for (const p of ws.radar) w.u16(Math.max(0, Math.round(p.x))).u16(Math.max(0, Math.round(p.y)));
+  w.u8(ws.reveal ? 1 : 0);
+  w.u16(ws.shaneDir === null ? 0xffff : Math.round(((((ws.shaneDir % TAU) + TAU) % TAU) / TAU) * 0xfffe));
   return w.finish();
 }
 
@@ -307,9 +322,13 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
   const hidingOccupied = unpackBits(r);
   const doors = unpackBits(r);
   const doorsBroken = unpackBits(r);
+  const windowsBroken = unpackBits(r);
   const radar: WorldState['radar'] = [];
   const nr = r.u8();
   for (let i = 0; i < nr; i++) radar.push({ x: r.u16(), y: r.u16() });
+  const reveal = r.u8() === 1;
+  const sd = r.u16();
+  const shaneDir = sd === 0xffff ? null : (sd / 0xfffe) * TAU;
   return {
     timeLeft,
     required,
@@ -327,7 +346,10 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
     hidingOccupied,
     doors,
     doorsBroken,
+    windowsBroken,
     radar,
+    reveal,
+    shaneDir,
   };
 }
 

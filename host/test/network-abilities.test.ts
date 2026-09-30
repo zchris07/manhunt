@@ -102,7 +102,7 @@ describe('mechanics over the network', () => {
     events(surv);
     tap(h, hunter, Btn.Secondary, { aim: Math.PI / 4 });
     expect(hunter.self!.burstCd).toBeGreaterThan(10);
-    h.run(3500, () => hunter.pushInput(idle()));
+    h.run(5000, () => hunter.pushInput(idle()));
     const evs = events(surv);
     expect(evs.some((e) => e.k === 'burst')).toBe(true);
     expect(evs.some((e) => e.k === 'scare')).toBe(true);

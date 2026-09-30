@@ -20,6 +20,8 @@ export interface MaskSources {
   lights: MaskPolygon[];
   /** See-through light (goggles / Hemp Battery): B at 70%, ignoring walls, fading in. */
   xray: { poly: number[]; fade: number } | null;
+  /** JARVIS: the whole screen counts as your own light. */
+  reveal?: boolean;
 }
 
 export interface VisionEffects {
@@ -159,6 +161,7 @@ export class VisionRenderer {
     }
 
     this.drawLayered(this.gOwn, sources.own, 0x0000ff, OWN_LAYERS, true);
+    if (sources.reveal) this.gOwn.rect(camX, camY, this.screenW / zoom, this.screenH / zoom).fill({ color: 0x0000ff, alpha: 0.85 });
     this.drawLayered(this.gLight, sources.lights, 0xff0000, LIGHT_LAYERS, false);
 
     const gx = this.gXray;
