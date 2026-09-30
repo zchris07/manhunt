@@ -47,7 +47,7 @@ describe('telemetry', () => {
   });
 
   it('summarises win rates per lobby shape', () => {
-    const base = { v: 1, at: '', seed: 1, mapHash: 1, difficulty: 1, escapeFraction: 0.5, requiredGenerators: 5, totalGenerators: 7, repairTime: 70, hunterSpeed: 205, stunMul: 1, lootMul: 1, reason: '', durationSec: 600, realDurationSec: 600, generatorsRepaired: 3, escaped: 0, eliminated: 4 } as const;
+    const base = { v: 2, at: '', seed: 1, mapHash: 1, difficulty: 1, escapeFraction: 0.5, requiredGenerators: 5, totalGenerators: 7, repairTime: 70, hunterSpeed: 205, stunMul: 1, reason: '', durationSec: 600, realDurationSec: 600, generatorsRepaired: 3, escaped: 0, eliminated: 4 } as const;
     const entries: MatchLogEntry[] = [
       { ...base, players: [], hunters: 1, survivors: 4, winner: 'hunters' },
       { ...base, players: [], hunters: 1, survivors: 4, winner: 'hunters' },

@@ -24,7 +24,7 @@ test('two browsers join a room by code and move in a shared match', async ({ bro
   // Both players can move; the host simulates both.
   expect(await walk(host, 'KeyS', 1500)).toBeGreaterThan(40);
   expect(await walk(guest, 'KeyS', 1500)).toBeGreaterThan(40);
-  await expect(host.locator('.hud .objective')).toContainText('Generators');
+  await expect(host.locator('.hud .objective')).toContainText('Exit gate');
 });
 
 test('a guest with 100 ms simulated latency plays smoothly', async ({ browser }) => {

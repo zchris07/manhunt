@@ -4,10 +4,13 @@ import {
   BALANCE,
   Btn,
   EF,
+  EntityKind,
   Gait,
   Health,
+  SextonFlag,
   TICK_DT,
   VisibilityComputer,
+  maxStamina,
   type GameEvent,
   type InputCmd,
   type SelfState,
@@ -15,19 +18,21 @@ import {
 } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { AudioEngine } from '../audio/AudioEngine';
-import type { GameClient } from '../net/GameClient';
+import type { GameClient, InterpEntity } from '../net/GameClient';
 import type { Input } from '../input/Input';
 import { MapRenderer, type BarricadeVisual } from '../render/MapRenderer';
 import { VisionRenderer } from '../render/vision/VisionRenderer';
-import { Hud, SkillCheck } from '../ui/hud';
+import { Hud, Inventory, SkillCheck } from '../ui/hud';
 import { EntityLayer, type RenderPlayer } from './EntityLayer';
 import { Overlays } from './Overlays';
 import { VisionSources, type LightInfo, type ViewerInfo } from './visionSources';
 import { FogLayer } from './FogLayer';
 import { Particles } from './Particles';
+import { MiniMap } from './MiniMap';
 import { lightFlicker } from '../render/flicker';
 
 const STEP_MS = TICK_DT * 1000;
+const HEMP_ZOOM = 1 / BALANCE.hunter.hemp.zoomOut;
 
 export interface GameViewOptions {
   app: Application;
@@ -36,6 +41,8 @@ export interface GameViewOptions {
   client: GameClient;
   uiRoot: HTMLElement;
   input: Input;
+  /** The shared inventory layout (kept across role switches). */
+  inventory: Inventory;
 }
 
 /** Renders and drives one match: input sampling, prediction, vision, entities, HUD. */
@@ -53,28 +60,29 @@ export class GameView {
   private readonly sources: VisionSources;
   private readonly vis: VisibilityComputer;
   readonly hud: Hud;
+  readonly minimap: MiniMap;
   private readonly skill: SkillCheck;
   private latch = new Set<string>();
   private stepTimer = 0;
   private lastStepAt = 0;
   private time = 0;
   private damage = 0;
-  private blindFx = 0;
-  private bloodhoundUntil = 0;
   private barricadeState: number[] = [];
+  private doorState: boolean[] = [];
   private gateOpen = false;
   private repaired: boolean[] = [];
   private lastAim = -Math.PI / 2;
   private lastAimDist = 0;
   private renderPos = { x: 0, y: 0 };
   private readonly particles: Particles;
-  private readonly footTimers = new Map<number, number>();
-  private selfStepT = 0;
-  private readonly lastSelfPos = { x: 0, y: 0 };
   private shake = 0;
-  private chaseOn = false;
+  private zoomK = 0;
+  private xrayK = 0;
+  private lastReveal = 0;
+  private doorVersion = -1;
+  private swingUntil = 0;
   private readonly resize = (w: number, h: number): void => this.vision.resize(w, h);
-  private readonly roleIsHunter: boolean;
+  readonly roleIsHunter: boolean;
 
   constructor(private readonly o: GameViewOptions) {
     const m = o.client.match!;
@@ -88,7 +96,8 @@ export class GameView {
     this.entityWorld.addChild(this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
-    this.senses.addChild(this.overlays.senses);
+    this.senses.addChild(this.overlays.senses, this.entities.overlay);
+    this.entities.bubbleCheck = (x, y) => Math.hypot(x - this.renderPos.x, y - this.renderPos.y) < 360 && m.mw.geo.hasLineOfSight(this.renderPos.x, this.renderPos.y, x, y);
     o.app.stage.addChild(this.viewport, this.senses);
 
     this.vision = new VisionRenderer(o.app.screen.width, o.app.screen.height);
@@ -97,15 +106,15 @@ export class GameView {
     this.vis = new VisibilityComputer(m.mw.geo);
     this.sources = new VisionSources(this.vis, m.map);
 
-    this.hud = new Hud(o.uiRoot, o.client);
-    this.skill = new SkillCheck(this.hud.root, (id, result) => {
-      o.client.send({ t: 'skill', id, result });
-      o.audio.play(result === 'miss' ? 'skill.fail' : 'skill.good');
-    });
+    this.hud = new Hud(o.uiRoot, o.client, o.assets, o.inventory);
+    this.minimap = new MiniMap(this.hud.root, m.map, this.roleIsHunter);
+    this.hud.topRight.insertBefore(this.minimap.root, this.hud.topRight.firstChild);
+    this.skill = new SkillCheck(this.hud.root, (id, result) => o.client.send({ t: 'skill', id, result }));
     this.barricadeState = m.map.barricades.map(() => 0);
+    this.doorState = m.map.doors.map((d) => !m.map.dynamicSegments[d.dyn].active);
     this.repaired = m.map.generators.map(() => false);
     o.audio.stopAllLoops();
-    this.hud.center(this.roleIsHunter ? 'You are Zach Branch. Hunt them.' : m.role === 'spectator' ? 'Spectating' : 'Find fuel and wire. Stay quiet.', 4500);
+    this.hud.center(this.roleIsHunter ? 'You are Zach Branch. Hunt them.' : m.role === 'spectator' ? 'Spectating' : 'Start every generator. Stay out of sight.', 4500);
 
     // Fixed 30 Hz input steps on their own timer, independent of the render frame rate.
     let next = performance.now();
@@ -126,7 +135,7 @@ export class GameView {
     const c = this.o.client;
     this.latch = this.o.input.takeLatched();
     if (this.skill.isActive) this.latch.delete('Space');
-    c.pushInput(this.spectating() ? { buttons: 0, moveX: 0, moveY: 0, aim: this.lastAim, aimDist: 0 } : this.buildCmd());
+    c.pushInput(this.spectating() ? { buttons: 0, moveX: 0, moveY: 0, aim: this.lastAim, aimDist: 0, item: 0 } : this.buildCmd());
     this.lastStepAt = at;
   }
 
@@ -134,6 +143,7 @@ export class GameView {
     clearInterval(this.stepTimer);
     this.o.app.renderer.off('resize', this.resize);
     this.hud.destroy();
+    this.minimap.destroy();
     this.skill.destroy();
     this.viewport.filters = null;
     this.entityViewport.filters = null;
@@ -141,7 +151,6 @@ export class GameView {
     this.senses.destroy({ children: true });
     this.vision.destroy();
     this.o.audio.stopAllLoops();
-    this.o.audio.setHeartbeat(0);
   }
 
   private get self(): SelfState | null {
@@ -153,60 +162,65 @@ export class GameView {
     return !!s && (s.spectating > 0 || s.role === 2);
   }
 
+  private get zoom(): number {
+    const e = this.zoomK * this.zoomK * (3 - 2 * this.zoomK);
+    return 1 + (HEMP_ZOOM - 1) * e;
+  }
+
   private buildCmd(): Omit<InputCmd, 'seq'> {
     const inp = this.o.input;
     const ax = inp.axis();
     const L = (code: string): boolean => this.latch.has(code);
+    const menus = this.hud.editorOpen || this.minimap.isOpen;
     let b = 0;
+    if (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) b |= Btn.Run;
+    if (inp.isDown('KeyE') || L('KeyE')) b |= Btn.Interact;
+    if (inp.isDown('KeyQ') || L('KeyQ')) b |= Btn.Ability;
+    if (!menus && (inp.buttons[0] || L('Mouse0'))) b |= Btn.Primary;
     if (this.roleIsHunter) {
-      if (inp.buttons[0] || L('Mouse0')) b |= Btn.Attack;
-      if (inp.buttons[2] || L('Mouse2') || inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) b |= Btn.Lunge;
-      if (inp.isDown('KeyQ') || L('KeyQ')) b |= Btn.Ability1;
-      if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Ability2;
-      if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Ability3;
-      if (inp.isDown('KeyE') || L('KeyE')) b |= Btn.Interact;
-      if (inp.isDown('Space') || L('Space')) b |= Btn.Vault;
+      if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Secondary;
+      if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Lunge;
+      const s = this.self;
+      if (b & Btn.Primary && s && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None) this.swingUntil = performance.now() + (BALANCE.hunter.attack.swingTime + BALANCE.hunter.attack.windup) * 1000;
     } else {
-      const spaceHeld = inp.isDown('Space') && !this.skill.isActive;
-      if (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) b |= Btn.Run;
       if (inp.isDown('KeyC') || inp.isDown('ControlLeft')) b |= Btn.Crouch;
-      if (inp.isDown('KeyE') || L('KeyE')) b |= Btn.Interact;
-      if (spaceHeld || L('Space')) b |= Btn.Vault | Btn.HoldBreath;
-      if (inp.isDown('KeyF')) b |= Btn.Flash;
-      if (inp.buttons[2] || L('Mouse2') || inp.isDown('KeyG') || L('KeyG')) b |= Btn.UseItem;
+      const spaceHeld = inp.isDown('Space') && !this.skill.isActive;
+      if (spaceHeld || L('Space')) b |= Btn.Space;
     }
     const sw = this.o.app.screen.width;
     const sh = this.o.app.screen.height;
     const cam = this.camera(sw, sh);
-    const mx = inp.mouseX + cam.x;
-    const my = inp.mouseY + cam.y;
+    const z = this.zoom;
+    const mx = inp.mouseX / z + cam.x;
+    const my = inp.mouseY / z + cam.y;
     const dx = mx - this.renderPos.x;
     const dy = my - this.renderPos.y;
-    if (Math.hypot(dx, dy) > 4) {
+    if (Math.hypot(dx, dy) > 4 && !menus) {
       this.lastAim = Math.atan2(dy, dx);
       this.lastAimDist = Math.hypot(dx, dy);
     }
-    return { buttons: b, moveX: ax.x, moveY: ax.y, aim: this.lastAim, aimDist: this.lastAimDist };
+    const item = this.roleIsHunter || !this.self ? 0 : this.o.inventory.held(this.self.inv);
+    return { buttons: b, moveX: ax.x, moveY: ax.y, aim: this.lastAim, aimDist: this.lastAimDist, item };
   }
 
   private camera(sw: number, sh: number): { x: number; y: number } {
+    const z = this.zoom;
     const look = this.spectating() ? 0 : Math.min(this.lastAimDist, 260) * 0.22;
     return {
-      x: Math.round(this.renderPos.x + Math.cos(this.lastAim) * look - sw / 2),
-      y: Math.round(this.renderPos.y + Math.sin(this.lastAim) * look - sh / 2),
+      x: Math.round(this.renderPos.x + Math.cos(this.lastAim) * look - sw / (2 * z)),
+      y: Math.round(this.renderPos.y + Math.sin(this.lastAim) * look - sh / (2 * z)),
     };
   }
 
   private handleEvents(now: number): void {
-    const me = this.o.client.you;
-    const a = this.o.audio;
-    const m = this.o.client.match!;
-    for (const e of this.o.client.drainEvents()) this.onEvent(e, now, me, a, m.mw.geo);
+    for (const e of this.o.client.drainEvents()) this.onEvent(e, now);
   }
 
-  private onEvent(e: GameEvent, now: number, me: number, a: AudioEngine, geo: { hasLineOfSight(ax: number, ay: number, bx: number, by: number): boolean }): void {
-    const at = (x: number, y: number): { x: number; y: number; occluded: boolean } => ({ x, y, occluded: !geo.hasLineOfSight(this.renderPos.x, this.renderPos.y, x, y) });
+  private onEvent(e: GameEvent, now: number): void {
+    const me = this.o.client.you;
+    const a = this.o.audio;
     const name = (id: number): string => this.o.client.match?.players.get(id)?.name ?? 'Someone';
+    const near = (x: number, y: number, r: number): number => Math.max(0, 1 - Math.hypot(x - this.renderPos.x, y - this.renderPos.y) / r);
     switch (e.k) {
       case 'feed':
       case 'item':
@@ -218,80 +232,92 @@ export class GameView {
       case 'hit':
         this.overlays.addBlood(e.x, e.y);
         this.overlays.addBlood(e.x, e.y);
+        this.particles.burst(e.x, e.y, 16, { speed: 200, life: 0.5, tint: 0xff2a3a, size: 1.4 });
         if (e.victim === me) {
           this.damage = 1;
           this.shake = Math.max(this.shake, 14);
-          a.play('hit.self');
-        } else {
-          a.play('hit', at(e.x, e.y));
-          if (Math.hypot(e.x - this.renderPos.x, e.y - this.renderPos.y) < 300) this.shake = Math.max(this.shake, 6);
-        }
+        } else this.shake = Math.max(this.shake, 6 * near(e.x, e.y, 300));
         break;
       case 'down':
         if (e.victim === me) this.hud.center('You are down. Crawl, and wait for help.', 4000);
         break;
       case 'stun':
         if (e.target === me) {
-          this.hud.center(e.kind === 'flash' || e.kind === 'flare' ? 'BLINDED' : 'STUNNED', 1500);
+          this.hud.center('STUNNED', 1500);
           this.shake = Math.max(this.shake, 10);
         }
-        a.play(e.kind === 'flash' || e.kind === 'flare' ? 'stun.blind' : 'stun.hit');
         break;
       case 'staked':
         if (e.victim === me) this.hud.center(e.stage >= 2 ? 'Sacrificed.' : 'Staked. Your team has 60 seconds.', 4000);
         else this.hud.feed(`${name(e.victim)} ${e.stage >= 2 ? 'was sacrificed' : 'is on a stake'}`);
-        a.play('stake');
-        break;
-      case 'unstaked':
         break;
       case 'eliminated':
         if (e.victim === me) this.hud.center('You were sacrificed. Spectating.', 5000);
-        a.play('eliminated');
         break;
       case 'escaped':
         if (e.victim === me) this.hud.center('You escaped the woods.', 5000);
         break;
-      case 'genDone':
-        a.play('gen.done');
-        break;
       case 'gatePowered':
         this.hud.center('The exit gate has power', 4000);
-        a.play('gate.powered');
         break;
       case 'gateOpen':
         this.hud.center('THE GATE IS OPEN', 4000);
-        a.play('gate.open');
-        break;
-      case 'chase':
-        if (e.on && !this.chaseOn && !this.roleIsHunter) a.play('stinger');
-        this.chaseOn = e.on;
         break;
       case 'skill':
         this.skill.begin(e.id, e.delayMs, e.needleMs, e.zone, e.size, e.great, now);
-        a.play('skill.warn');
-        break;
-      case 'skillResult':
-        break;
-      case 'pulse':
-        this.overlays.addEchoes(e.echoes, now);
-        a.play('pulse');
         break;
       case 'trail':
-        this.overlays.setTrail(e.pts, now);
-        this.bloodhoundUntil = now + Math.max(600, (this.self?.bloodhoundT ?? 0) * 1000 + 100);
+        this.overlays.addScent(e.pts, now);
         break;
       case 'breath':
         this.overlays.addBreath(e.x, e.y, now);
-        a.play('breath', at(e.x, e.y));
         break;
-      case 'noise': {
-        const where = at(e.x, e.y);
-        a.play(e.s, { ...where, radius: e.r });
+      case 'noise':
         if (e.s === 'gen_explode' || e.s === 'gen_kick') this.particles.burst(e.x, e.y - 10, 40, { speed: 260, life: 0.7 });
-        else if (e.s === 'glass') this.particles.burst(e.x, e.y, 18, { speed: 140, life: 0.4, tint: 0xd8f0e0, size: 0.7 });
-        else if (e.s === 'smash' || e.s === 'barricade') this.particles.burst(e.x, e.y, 14, { speed: 120, life: 0.5, tint: 0x8a6a40, size: 1.2 });
-        const d = Math.hypot(e.x - this.renderPos.x, e.y - this.renderPos.y);
-        if ((e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash') && d < 450) this.shake = Math.max(this.shake, 7 * (1 - d / 450));
+        else if (e.s === 'glass') this.particles.burst(e.x, e.y, 22, { speed: 170, life: 0.45, tint: 0x9dffb0, size: 0.8 });
+        else if (e.s === 'smash' || e.s === 'barricade') this.particles.burst(e.x, e.y, 16, { speed: 140, life: 0.5, tint: 0xd09050, size: 1.3 });
+        if (e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash') this.shake = Math.max(this.shake, 7 * near(e.x, e.y, 450));
+        break;
+      case 'shot': {
+        this.entities.shot(e.x, e.y, e.a, e.len);
+        this.shake = Math.max(this.shake, 9 * near(e.x, e.y, 500));
+        if (e.hit) this.particles.burst(e.x + Math.cos(e.a) * e.len, e.y + Math.sin(e.a) * e.len, 20, { speed: 220, life: 0.4, tint: 0xffd23a });
+        break;
+      }
+      case 'burst':
+        this.overlays.addBurst(e.x, e.y, now);
+        break;
+      case 'scare':
+        this.hud.jumpScare(BALANCE.hunter.burst.scareTime * 1000);
+        a.playClip('scare');
+        break;
+      case 'jarvis':
+        if (e.by === me) {
+          this.hud.big('JARVIS ONLINE', 'jarvis');
+          this.minimap.revealAll();
+        } else this.hud.feed(`${name(e.by)} brought JARVIS online`);
+        a.announce('Jarvis online');
+        break;
+      case 'hemp':
+        if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
+        else this.hud.feed('Zach used a Hemp Battery');
+        a.announce('Hemp battery activated');
+        break;
+      case 'sexton':
+        this.entities.say(e.say, this.time);
+        break;
+      case 'tablet':
+        this.entities.handTablet(e.x, e.y, e.to);
+        break;
+      case 'gas':
+        this.particles.burst(e.x, e.y, 40, { speed: 320, life: 0.6, tint: 0xc86aff, size: 1.6 });
+        break;
+      case 'barricadeHit':
+        this.mapRenderer.damageBarricade(e.id, e.hits);
+        break;
+      case 'roles': {
+        const m = this.o.client.match;
+        if (m) this.entities.setRoster(m.players, this.roleIsHunter);
         break;
       }
     }
@@ -303,6 +329,11 @@ export class GameView {
       if (this.barricadeState[i] === b) return;
       this.barricadeState[i] = b;
       mr.setBarricade(i, (['up', 'down', 'broken'] as BarricadeVisual[])[b] ?? 'up');
+    });
+    ws.doors.forEach((open, i) => {
+      if (this.doorState[i] === open) return;
+      this.doorState[i] = open;
+      mr.setDoor(i, open);
     });
     if (ws.gateOpen !== this.gateOpen) {
       this.gateOpen = ws.gateOpen;
@@ -321,76 +352,43 @@ export class GameView {
     const c = this.o.client;
     if (s.spectating || s.role === 2) return null;
     if (s.hideState === 2 || s.health === Health.Carried || s.health === Health.Escaped || s.health === Health.Eliminated) return null;
+    const p = c.predicted;
     let state = s.health & EF.HealthMask;
     if (s.role === 1) state |= EF.Hunter;
     if (s.carrying) state |= EF.Carrying;
     if (s.stunT > 0) state |= EF.Stunned;
-    if ((c.predicted?.lungeT ?? 0) > 0) state |= EF.Lunging;
-    if (s.action === Action.FlashAim) state |= EF.FlashBeam;
-    if (s.blindT > 0) state |= EF.Blinded;
-    if (s.action === Action.Vault) state |= EF.Vaulting;
+    if ((p?.lungeT ?? 0) > 0) state |= EF.Lunging;
+    if (s.gogglesOn) state |= EF.Goggles;
+    if (s.hempT > 0) state |= EF.Hemp;
+    if (s.gassed) state |= EF.Gassed;
+    if (performance.now() < this.swingUntil) state |= EF.Attacking;
+    const stamina = p?.stamina ?? s.stamina;
+    const locked = (p?.staminaLock ?? s.staminaLock) > 0;
+    if (locked) state |= EF.StaminaLock;
+    if (p?.sprinting) state |= EF.Sprinting;
     state |= (Gait.Walk & 3) << EF.GaitShift;
-    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0 };
+    const cap = maxStamina(s.role === 1 ? 'hunter' : 'survivor', p?.boostT ?? s.boostT);
+    const held = s.role === 1 ? 0 : this.o.inventory.held(s.inv);
+    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux: held, stamina: cap > 0 ? (stamina / cap) * 255 : 0 };
   }
 
-  private surfaceStep(x: number, y: number): string {
-    return `step.${this.o.client.match!.mw.surfaceAt(x, y)}`;
-  }
-
-  /** Footsteps for everyone audible, generator hums, chase music. */
-  private updateSounds(dt: number, ents: ReturnType<GameClient['interpolated']>, ws: WorldState, s: SelfState, spect: boolean): void {
+  /** Atmosphere and the two positional music sources (generators, Sexton's reel). */
+  private updateSounds(ents: InterpEntity[], ws: WorldState): void {
     const a = this.o.audio;
     const m = this.o.client.match!;
     const geo = m.mw.geo;
     const lx = this.renderPos.x;
     const ly = this.renderPos.y;
-    const seen = new Set<number>();
-    for (const e of ents) {
-      if (e.kind !== 0 || e.id === s.id) continue;
-      seen.add(e.id);
-      const gait = (e.state & EF.GaitMask) >> EF.GaitShift;
-      const hunter = (e.state & EF.Hunter) !== 0;
-      if (gait === Gait.Idle) {
-        this.footTimers.set(e.id, 0);
-        continue;
-      }
-      const interval = hunter ? 0.5 : gait === Gait.Run ? 0.3 : gait === Gait.Crouch ? 0.75 : 0.48;
-      const t = (this.footTimers.get(e.id) ?? 0) - dt;
-      if (t <= 0) {
-        const vol = hunter ? 1 : gait === Gait.Run ? 0.75 : gait === Gait.Crouch ? 0.2 : 0.45;
-        const occluded = !geo.hasLineOfSight(lx, ly, e.x, e.y);
-        a.play(hunter ? 'step.heavy' : this.surfaceStep(e.x, e.y), { x: e.x, y: e.y, volume: vol, occluded, radius: hunter ? BALANCE.hunter.noise + 200 : 600 });
-        this.footTimers.set(e.id, interval);
-      } else this.footTimers.set(e.id, t);
-    }
-    for (const id of this.footTimers.keys()) if (!seen.has(id)) this.footTimers.delete(id);
-
-    // Own footsteps from how fast we actually moved.
-    if (!spect && s.health !== Health.Carried && s.hideState === 0) {
-      const speed = Math.hypot(lx - this.lastSelfPos.x, ly - this.lastSelfPos.y) / Math.max(dt, 1e-3);
-      this.selfStepT -= dt;
-      if (speed > 25 && speed < 1000 && this.selfStepT <= 0) {
-        const run = speed > 150;
-        a.play(this.roleIsHunter ? 'step.heavy' : this.surfaceStep(lx, ly), { volume: this.roleIsHunter ? 0.55 : run ? 0.45 : speed < 90 ? 0.12 : 0.28 });
-        this.selfStepT = this.roleIsHunter ? 0.5 : run ? 0.3 : speed < 90 ? 0.75 : 0.48;
-      }
-    }
-    this.lastSelfPos.x = lx;
-    this.lastSelfPos.y = ly;
-
-    // Generators: hum when restored, rattle while someone repairs.
     ws.gens.forEach((g, i) => {
       const d = m.map.generators[i];
       const dist = Math.hypot(d.x - lx, d.y - ly);
-      const repaired = (g.flags & 1) !== 0;
-      const busy = (g.flags & 2) !== 0;
-      const id = dist > 1100 ? null : repaired ? 'gen.hum' : busy ? 'gen.repair' : null;
-      a.loop(`gen${i}`, id, { x: d.x, y: d.y, volume: repaired ? 0.5 : 0.8, occluded: !geo.hasLineOfSight(lx, ly, d.x, d.y), radius: 1000 });
+      const on = (g.flags & 1) !== 0 && dist < 1100;
+      a.loop(`gen${i}`, on ? 'gen.hum' : null, { x: d.x, y: d.y, volume: 0.45, occluded: !geo.hasLineOfSight(lx, ly, d.x, d.y), radius: 1000 });
     });
-
-    // Chase music.
-    const chasing = this.chaseOn && !spect && s.health !== Health.Eliminated && s.health !== Health.Escaped;
-    a.loop('chase', chasing ? 'chase' : null, { volume: this.roleIsHunter ? 0.25 : 0.5 });
+    const sx = ents.find((e) => e.kind === EntityKind.Sexton && (e.state & SextonFlag.Dead) === 0);
+    const X = BALANCE.sexton.audio;
+    if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near });
+    else a.loop('sexton', null);
   }
 
   frame(dtMs: number, now: number): void {
@@ -405,6 +403,15 @@ export class GameView {
       if (inp.wasPressed('Mouse0') || inp.wasPressed('ArrowRight')) c.send({ t: 'spectate', dir: 1 });
       if (inp.wasPressed('ArrowLeft')) c.send({ t: 'spectate', dir: -1 });
     }
+    const s0 = this.self;
+    if (inp.wasPressed('KeyM')) this.minimap.toggle();
+    if (inp.wasPressed('KeyT') && s0?.testMode) c.send({ t: 'switchRole' });
+    if (!this.roleIsHunter && s0 && !this.spectating()) {
+      if (inp.wasPressed('Tab')) this.hud.toggleEditor(s0);
+      for (let i = 0; i < 5; i++) if (inp.wasPressed(`Digit${i + 1}`)) this.o.inventory.select(i);
+      const wheel = inp.takeWheel();
+      if (wheel !== 0 && !this.hud.editorOpen) this.o.inventory.scroll(wheel > 0 ? 1 : -1, s0.inv);
+    } else inp.takeWheel();
     inp.endFrame();
     c.decaySmoothing(dt);
     this.handleEvents(now);
@@ -417,6 +424,8 @@ export class GameView {
 
     // Where the camera and vision come from.
     let viewer: ViewerInfo;
+    let xrayOn = false;
+    let hemp = false;
     if (spect) {
       const t = ents.find((e) => e.id === s.spectating);
       const tx = t ? t.x : s.x;
@@ -424,14 +433,18 @@ export class GameView {
       this.renderPos.x += (tx - this.renderPos.x) * Math.min(1, dt * 12);
       this.renderPos.y += (ty - this.renderPos.y) * Math.min(1, dt * 12);
       const info = c.match!.players.get(s.spectating);
+      const goggles = t ? (t.state & EF.Goggles) !== 0 : false;
+      hemp = t ? (t.state & EF.Hemp) !== 0 : false;
+      xrayOn = goggles || hemp;
       viewer = {
         x: this.renderPos.x,
         y: this.renderPos.y,
         facing: t?.facing ?? 0,
         hunter: info?.role === 'hunter',
-        blind: t ? (t.state & EF.Blinded) !== 0 : false,
         downed: t ? (t.state & EF.HealthMask) === Health.Downed : false,
         hidden: null,
+        coneMul: goggles ? BALANCE.items.goggles.coneMul : 1,
+        xray: 0,
       };
     } else {
       const p = c.predicted;
@@ -445,36 +458,51 @@ export class GameView {
         this.renderPos.x = carrier ? carrier.x : s.x;
         this.renderPos.y = carrier ? carrier.y : s.y;
       }
+      hemp = s.hempT > 0;
+      xrayOn = s.gogglesOn === 1 || hemp;
       viewer = {
         x: this.renderPos.x,
         y: this.renderPos.y,
         facing: this.lastAim,
         hunter: this.roleIsHunter,
-        blind: s.blindT > 0,
         downed: s.health === Health.Downed,
         hidden: s.hideState === 2 && s.hideSpot >= 0 ? c.match!.map.hidingSpots[s.hideSpot] : null,
+        coneMul: s.gogglesOn ? BALANCE.items.goggles.coneMul : 1,
+        xray: 0,
       };
     }
+    // See-through light fades in over 1.5 s; the Hemp Battery zooms out over 1 s.
+    this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt * 3);
+    viewer.xray = this.xrayK;
+    this.zoomK = hemp && viewer.hunter ? Math.min(1, this.zoomK + dt) : Math.max(0, this.zoomK - dt);
 
     const ws = snap.worldState;
     this.syncProps(ws);
+    if (c.doorVersion !== this.doorVersion) {
+      this.doorVersion = c.doorVersion;
+      this.sources.invalidate();
+    }
     this.entities.update(ents, this.selfRender(s), ws, this.time);
 
     const sw = this.o.app.screen.width;
     const sh = this.o.app.screen.height;
+    const z = this.zoom;
     const cam = this.camera(sw, sh);
     this.shake = Math.max(0, this.shake - dt * 30);
     if (this.shake > 0.3) {
       cam.x += Math.round((Math.random() - 0.5) * this.shake);
       cam.y += Math.round((Math.random() - 0.5) * this.shake);
     }
-    this.world.position.set(-cam.x, -cam.y);
-    this.entityWorld.position.set(-cam.x, -cam.y);
-    this.senses.position.set(-cam.x, -cam.y);
-    this.mapRenderer.update(cam.x, cam.y, sw, sh, this.time);
-    this.fog.update(this.time, cam.x, cam.y);
+    for (const layer of [this.world, this.entityWorld, this.senses]) {
+      layer.scale.set(z);
+      layer.position.set(-cam.x * z, -cam.y * z);
+    }
+    const vw = sw / z;
+    const vh = sh / z;
+    this.mapRenderer.update(cam.x, cam.y, vw, vh, this.time, dt);
+    this.fog.update(this.time, cam.x, cam.y, vw, vh);
 
-    // Lights: map lights, restored generators, burning flares.
+    // Lights: map lights and running generators.
     const map = c.match!.map;
     const lights: LightInfo[] = map.lights.map((l, i) => ({
       key: `l${i}`,
@@ -487,37 +515,38 @@ export class GameView {
     ws.gens.forEach((g, i) => {
       if (g.flags & 1) lights.push({ key: `g${i}`, x: map.generators[i].x, y: map.generators[i].y, radius: BALANCE.lights.generatorRadius, intensity: 0.95, static: true });
     });
-    for (const e of ents) {
-      if (e.kind === 1) lights.push({ key: `f${e.id}`, x: e.x, y: e.y, radius: BALANCE.tools.flare.lightRadius, intensity: 0.8 + 0.2 * Math.sin(this.time * 25 + e.id), static: false });
+    const sources = this.sources.build(viewer, lights, Math.hypot(vw, vh) / 2);
+    this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources, z);
+
+    // Your map fills in with what you actually see.
+    if (!spect && now - this.lastReveal > 120) {
+      this.lastReveal = now;
+      const own = sources.own.map((p) => p.poly);
+      if (sources.xray) own.push(sources.xray.poly);
+      this.minimap.reveal(own, sources.lights.map((l) => l.poly), sources.los);
     }
-    const sources = this.sources.build(viewer, lights, Math.hypot(sw, sh) / 2);
-    this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources);
 
     // Screen effects.
     this.damage = Math.max(0, this.damage - dt * 1.4);
-    const blindTarget = viewer.blind ? 0.8 : 0;
-    this.blindFx += (blindTarget - this.blindFx) * Math.min(1, dt * (blindTarget > this.blindFx ? 12 : 1.5));
-    const terror = this.roleIsHunter && !spect ? 0 : s.terror;
-    const flicker = 0.965 + 0.035 * Math.sin(this.time * 2.3) * Math.sin(this.time * 5.7) - terror * 0.08 * Math.max(0, Math.sin(this.time * 17) * Math.sin(this.time * 3.3));
-    this.vision.setEffects({ time: this.time, terror, flicker, blind: this.blindFx, damage: this.damage + (s.health === Health.Downed && !spect ? 0.35 : 0) });
+    const flicker = 0.975 + 0.025 * Math.sin(this.time * 2.3) * Math.sin(this.time * 5.7);
+    this.vision.setEffects({ time: this.time, flicker, damage: this.damage + (s.health === Health.Downed && !spect ? 0.3 : 0) });
 
     // Senses overlay.
     const auras: { x: number; y: number }[] = [];
     if (!this.roleIsHunter) ws.stakes.forEach((occ, i) => occ && occ !== c.you && auras.push(map.stakes[i]));
-    this.overlays.update(now, auras, this.bloodhoundUntil);
+    this.overlays.update(now, auras, { x: cam.x, y: cam.y, w: vw, h: vh });
 
     this.skill.draw(now);
     if (this.skill.isActive && s.action !== Action.Repair) this.skill.cancel();
     this.hud.update(s, ws);
+    this.minimap.update({ x: this.renderPos.x, y: this.renderPos.y, facing: spect ? viewer.facing : this.lastAim, world: ws, now });
 
     this.particles.update(dt);
-    for (const e of ents) if (e.kind === 1 && Math.random() < dt * 25) this.particles.burst(e.x, e.y, 1, { speed: 60, life: 0.5, tint: 0xff5a30 });
 
-    // Audio listener, heartbeat, ambience, footsteps and loops.
+    // Audio: listener, ambience, generator hum, Sexton's reel.
     const a = this.o.audio;
     a.setListener(this.renderPos.x, this.renderPos.y);
-    this.updateSounds(dt, ents, ws, s, spect);
-    a.setHeartbeat(this.roleIsHunter && !spect ? 0 : s.terror);
+    this.updateSounds(ents, ws);
     a.setAmbience(c.match!.mw.inWarehouse(this.renderPos.x, this.renderPos.y), true);
     a.update(dt);
   }

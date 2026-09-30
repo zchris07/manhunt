@@ -10,7 +10,7 @@ async function audio(page: Page): Promise<{ state: string; buffers: number; loop
   return page.evaluate(() => (window.__manhunt as unknown as { audioStats: { state: string; buffers: number; loops: string[] } | null }).audioStats);
 }
 
-test('horror layer: procedural audio, generator hum, terror radius', async ({ browser }) => {
+test('horror layer: ambience, generator hum, Sexton reel', async ({ browser }) => {
   const errors: string[] = [];
   const surv = await newPlayer(browser, '/?dev=1');
   surv.on('pageerror', (e) => errors.push(e.message));
@@ -36,13 +36,10 @@ test('horror layer: procedural audio, generator hum, terror radius', async ({ br
   await dev(surv, 'tp', [gen.x + 90, gen.y]);
   await expect.poll(async () => (await audio(surv))?.loops ?? [], { timeout: 10000 }).toContain('gen0');
 
-  // Terror radius: Zach close -> high terror for the survivor.
-  const terror = (): Promise<number> => surv.evaluate(() => (window.__manhunt.client as unknown as { self: { terror: number } }).self.terror);
-  expect(await terror()).toBeLessThan(0.2);
-  const survId = await surv.evaluate(() => window.__manhunt.client!.you);
-  await dev(zach, 'tpTo', [survId, 120, 0]);
-  await expect.poll(terror, { timeout: 10000 }).toBeGreaterThan(0.6);
+  // Sexton Science's reel plays around him (louder the closer you are).
+  await dev(surv, 'sexton', [60, 0]);
+  await expect.poll(async () => (await audio(surv))?.loops ?? [], { timeout: 10000 }).toContain('sexton');
   // Enough sounds were synthesised without errors.
-  expect((await audio(surv))!.buffers).toBeGreaterThan(5);
+  expect((await audio(surv))!.buffers).toBeGreaterThan(2);
   expect(errors).toEqual([]);
 });

@@ -59,17 +59,17 @@ export async function createHarness(names: string[], link?: LinkConditions, seed
   return h;
 }
 
-export function move(dx: number, dy: number, buttons = 0, aim = 0): Omit<InputCmd, 'seq'> {
+export function move(dx: number, dy: number, buttons = 0, aim = 0, item = 0): Omit<InputCmd, 'seq'> {
   const l = Math.hypot(dx, dy) || 1;
-  return { buttons, moveX: dx / l, moveY: dy / l, aim, aimDist: 200 };
+  return { buttons, moveX: dx / l, moveY: dy / l, aim, aimDist: 200, item };
 }
 
-export const idle = (buttons = 0, aim = 0): Omit<InputCmd, 'seq'> => ({ buttons, moveX: 0, moveY: 0, aim, aimDist: 200 });
+export const idle = (buttons = 0, aim = 0, item = 0): Omit<InputCmd, 'seq'> => ({ buttons, moveX: 0, moveY: 0, aim, aimDist: 200, item });
 
 /** Readies everyone and starts a match with the given hunter count. */
-export function startMatch(h: Harness, hunters = 1, seed = 'test-seed'): void {
+export function startMatch(h: Harness, hunters = 1, seed = 'test-seed', testMode = false): void {
   const owner = h.clients.find((c) => c.isOwner)!;
-  owner.send({ t: 'settings', settings: { hunters, survivors: 9, seed, difficulty: 1, escapeFraction: 0.5 } });
+  owner.send({ t: 'settings', settings: { hunters, survivors: 9, seed, difficulty: 1, escapeFraction: 0.5, testMode } });
   for (const c of h.clients) if (c !== owner) c.send({ t: 'ready', ready: true });
   h.run(500);
   owner.send({ t: 'start' });

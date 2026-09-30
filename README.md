@@ -3,14 +3,16 @@
 A browser-based, top-down 2D, asymmetric multiplayer horror game for up to 10 friends.
 
 Zach Branch plays the masked killer on the upcoming TV series *Crystal Lake*. Tonight he stopped
-acting. Survivors scavenge fuel and wire in the woods and an abandoned studio warehouse, repair
-generators, power the exit gate and escape before he finds them. They can stun and blind him,
-but they can never kill him.
+acting. Survivors start every generator in the woods and an abandoned studio warehouse, power
+the exit gate and escape before he finds them. They can stun him with bottles and shotguns,
+slow him with gas traps and outsmart him, but they can never kill him.
 
-- **Feel:** Darkwood-style limited vision. Everything outside your flashlight cone is desaturated
-  and dark, and people outside it are invisible even if they're right next to you.
-- **Structure:** Dead by Daylight-style asymmetric play. Loops, windows, barricades, hooks
-  (scarecrow stakes), a terror radius and skill checks.
+- **Feel:** Darkwood-style limited vision in a bright, comic-book style. Outside your flashlight
+  cone the world is pitch black, and people outside it are invisible even if they're right next
+  to you. A minimap fills in only what you've actually seen (**M** opens the full map).
+- **Structure:** Dead by Daylight-style asymmetric play. Loops, doors, barricades, hooks
+  (scarecrow stakes) and skill checks. Survivors carry items; Zach has a lunge, the Soundcloud
+  Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor.
 - **Hiding:** Outlast-style lockers, wardrobes, beds, barrels and tall grass, with a slatted
   peek view and breath holding.
 - **Play like a .io game:** no accounts. Pick a name, share a 4-letter code, play.
@@ -91,21 +93,39 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Survivor | |
 |---|---|
 | WASD / mouse | Move / aim your flashlight |
-| Shift | Run (loud) |
+| Shift | Sprint (8 s meter, refills in 10 s; after it runs dry you wait 1.5 s) |
 | C or Ctrl | Crouch (quiet, slow) |
-| E (hold) | Loot, install parts, repair, heal, revive, unstake, hide, open the gate |
-| Space | Vault a window or dropped barricade · slam a barricade · skill checks · hold breath while hidden |
-| F (hold) | Flashlight flash: keep the beam on Zach for about 2 s to blind him (uses a battery) |
-| Right mouse / G | Use item: light a flare, or throw a bottle at the cursor as a noise decoy |
+| E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton |
+| Left mouse | Use the selected item |
+| Mouse wheel / 1–5 | Select an inventory slot |
+| Tab | Rearrange your inventory slots (drag and drop) |
+| Q | JARVIS, once you have Sexton's tablet: reveals the whole map for you and shows Zach for 10 s |
+| Space | Slam a barricade down · skill checks · hold breath while hidden |
+| M | Full map (only the parts you've explored) |
+
+**Items** (at most 2 of each; you start with nothing):
+
+| Item | |
+|---|---|
+| Bottle (20 on the map) | Throw it at the cursor. A hit stuns Zach. |
+| Night vision goggles (3) | Toggle on and off. A 15 s meter that never refills; your light passes through walls and the cone is 20% wider. |
+| Shotgun (2) | 3 shells, 2 s reload. Stuns Zach for 0.8 s and blasts him back. |
+| Energy drink (8) | For 20 s your sprint refills 1.5× faster and the meter holds 2 s more. |
+| Galaxy gas trap (8) | Plant it. It's hard for Zach to spot. When he comes near it bursts into gas that slows him a lot. |
+| Duck confit (6) | Not a slot (it shows on the HUD). Revive a downed teammate, or free a staked one, instantly. |
 
 | Zach Branch | |
 |---|---|
-| Left mouse | Attack |
-| Right mouse / Shift | Lunge |
-| Q | Stalker's Pulse: shows recent survivor noise as fading echoes |
-| R | Bloodhound: shows footprints and blood trails |
-| F | Vault Smash: crash through a window or barricade |
-| E / Space | Pick up, stake, search a hiding spot, damage a generator / vault, break a barricade |
+| WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
+| Shift | Sprint (6 s meter, refills in 6 s) |
+| Left mouse | Machete swipe (two swipes break a barricade) |
+| F | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. |
+| Right mouse | Soundcloud Burst (12 s): a ring of sound through every wall that jump-scares every survivor it passes |
+| Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
+| E | Pick up, stake, search a hiding spot, damage a generator, open and close doors |
+| M | Full map. Zach knows the whole map and every stake. |
+
+Zach always sees a red scent trail left by anyone sprinting or bleeding.
 
 Press **Esc** for settings (volume, controls, leave). The game keeps running while it's open.
 
@@ -144,8 +164,8 @@ replace the slot:
   "char.hunter":  { "file": "sprites/zach.png" }
 },
 "sounds": {
-  "heartbeat":    { "file": "audio/heartbeat.ogg" },
-  "step.concrete": { "file": "audio/step_concrete.ogg" }
+  "amb.wind":     { "file": "audio/wind.ogg" },
+  "scare":        { "file": "audio/scare.mp3", "offset": 17, "duration": 4 }
 }
 ```
 
@@ -157,21 +177,27 @@ replace the slot:
   that match the current art: survivor 64×64, Zach 80×80, trees 160×160, generator 80×64,
   locker 48×40, loot icons 36×36. Survivor sprites are tinted per player, so draw them light and
   greyscale.
-- **Sounds** are mono. Positional sounds are panned and attenuated in-game. Loops
-  (`amb.wind`, `amb.indoor`, `gen.hum`, `gen.repair`, `chase`) should loop seamlessly.
-- The full list of ids is in the manifest. Sound ids used by the host's noise events (`vault`,
-  `glass`, `scream`, `gen_explode`…) are listed in `client/src/audio/AudioEngine.ts`.
+- Textures may set `"anchor": [x, y]` (the pivot as fractions of the image). Trees are anchored
+  at the base of the trunk.
+- **Sounds:** the game plays only ambience (wind, crickets, indoor hum and random night noises),
+  the generator hum, the jump-scare track (`scare`, which plays 4 s from 17 s in) and Sexton's
+  reel (`sexton.reel`, a positional loop that gets louder the closer you are). Sounds may set
+  `offset` and `duration` in seconds. Loops should loop seamlessly.
+- The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`).
+- The full list of ids is in the manifest. Everything under `client/public/assets/` is public
+  once the site is deployed, including the supplied music and image.
 
 ---
 
 ## Balance and telemetry
 
 All tunable numbers live in [`shared/src/balance.ts`](shared/src/balance.ts): speeds, vision
-cones, timings, noise radii, cooldowns, loot and objective counts.
+cones, stamina, cooldowns, item counts and effects, and objective counts.
 
 **Target:** Zach wins about 60% of matches at 1 hunter vs 4 survivors. Other lobby shapes are
 auto-balanced by pressure `P = survivors / hunters` against a reference `P0 = 4`:
-`scale = sqrt(P / P0)`, clamped, drives repair time, Zach's speed, stun length and loot density.
+`scale = sqrt(P / P0)`, clamped, drives repair time, Zach's speed and stun length. Item
+counts are fixed.
 The required generator count is `clamp(ceil(S / sqrt(H)) + 1, 3, 7)`. The lobby's difficulty
 slider multiplies on top.
 
@@ -217,13 +243,21 @@ The host itself is trusted.
 cast at ±ε around wall endpoints and tree silhouettes, and 256 angular bins keep ray tests cheap.
 It computes the flashlight cone, a proximity circle, a 360° line of sight and up to 6 light
 polygons. These are drawn into a half-resolution three-channel mask and blurred. A GLSL filter
-keeps full colour inside the mask and desaturates and darkens everything else, with vignette,
-grain, flicker and terror effects. A second filter hides entities outside the mask with a hard
-threshold.
+keeps full colour inside the mask and renders everything else black. Areas you can see but that
+aren't lit show at 70% brightness. Night vision and the Hemp Battery add an x-ray cone that
+passes through walls and fades in over 1.5 s. A second filter hides entities outside the mask
+with a hard threshold.
+
+**Testing mode.** Press **Testing mode** on the landing page to play alone. You get every item
+and ability with infinite uses (Zach's Hemp Battery toggles on and off), there's no win
+condition, Sexton comes back 10 s after he's slain, and **T** switches you between Zach and a
+survivor. A lobby owner can also tick **Testing mode** in the lobby settings to test with
+friends.
 
 Dev URL flags: `?lag=100` simulates 100 ms of latency on your connection, `?handicap=N`
 overrides the host handicap, and `?dev=1` (host only) enables test commands used by the e2e
-suite. Never use `?dev=1` for real games.
+suite (`tp`, `tpTo`, `give [item, count]`, `confit`, `jarvis`, `hemp`, `sexton`, `gens`, `gate`,
+`time`, `heal`…; see `host/src/dev/devCommands.ts`). Never use `?dev=1` for real games.
 
 ## Moving to a dedicated server later
 

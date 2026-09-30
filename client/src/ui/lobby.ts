@@ -165,7 +165,7 @@ export class LobbyScreen {
     const s = v.settings;
     const pv = rolePreview(v);
     const allReady = v.players.filter((p) => p.connected).every((p) => p.ready);
-    const canStart = owner && allReady && pv.h >= 1 && pv.s >= 1;
+    const canStart = owner && allReady && (s.testMode || (pv.h >= 1 && pv.s >= 1));
     const rb = resolveBalance({ hunters: Math.max(1, pv.h), survivors: Math.max(1, pv.s), difficulty: s.difficulty, escapeFraction: s.escapeFraction });
     const settings = $(this.root, '#settings');
     const focused = document.activeElement?.id;
@@ -186,10 +186,12 @@ export class LobbyScreen {
         <input type="range" id="diff" min="0.5" max="1.5" step="0.05" value="${s.difficulty}" ${owner ? '' : 'disabled'}></div>
       <div class="field"><label>Survivors needed to escape: ${Math.round(s.escapeFraction * 100)}%</label>
         <input type="range" id="esc" min="0.1" max="1" step="0.05" value="${s.escapeFraction}" ${owner ? '' : 'disabled'}></div>
+      <label class="toggle"><input type="checkbox" id="testmode" ${s.testMode ? 'checked' : ''} ${owner ? '' : 'disabled'}>
+        <span><b>Testing mode</b> · T switches Zach/survivor, infinite items and abilities, nobody wins</span></label>
       <div class="preview">
         Next match: <b>${pv.h}</b> Zach · <b>${pv.s}</b> survivors${pv.spec ? ` · ${pv.spec} spectating` : ''}<br>
-        Auto-balance: ${rb.requiredGenerators} of ${rb.totalGenerators} generators, ${Math.round(rb.repairTime)} s each,
-        Zach speed ${Math.round(rb.hunterSpeed)}, stuns ×${rb.stunMul.toFixed(2)}, ${rb.escapeNeeded} must escape.
+        Auto-balance: all ${rb.requiredGenerators} generators, ${Math.round(rb.repairTime)} s each,
+        Zach walk ${Math.round(rb.hunterSpeed)}, stuns ×${rb.stunMul.toFixed(2)}, ${rb.escapeNeeded} must escape.
       </div>
       ${
         owner
@@ -198,7 +200,7 @@ export class LobbyScreen {
               <span style="flex:1"></span>
               <button class="primary" id="start" ${canStart ? '' : 'disabled'}>Start the night</button>
             </div>
-            <div class="note" style="margin-top:6px">${allReady ? (pv.h < 1 || pv.s < 1 ? 'Need at least 1 hunter and 1 survivor.' : 'Everyone is ready.') : 'Waiting for everyone to ready up.'}</div>`
+            <div class="note" style="margin-top:6px">${allReady ? ((pv.h < 1 || pv.s < 1) && !s.testMode ? 'Need at least 1 hunter and 1 survivor.' : 'Everyone is ready.') : 'Waiting for everyone to ready up.'}</div>`
           : `<div class="note" style="margin-top:12px">Waiting for the host to start.</div>`
       }`;
     if (!owner) return;
@@ -219,6 +221,8 @@ export class LobbyScreen {
     diff.addEventListener('change', () => this.sendSettings({ difficulty: Number(diff.value) }));
     const escIn = $(settings, '#esc') as HTMLInputElement;
     escIn.addEventListener('change', () => this.sendSettings({ escapeFraction: Number(escIn.value) }));
+    const test = $(settings, '#testmode') as HTMLInputElement;
+    test.addEventListener('change', () => this.sendSettings({ testMode: test.checked }));
     $(settings, '#shuffle').addEventListener('click', () => this.client.send({ t: 'shuffle' }));
     $(settings, '#start').addEventListener('click', () => this.client.send({ t: 'start' }));
   }

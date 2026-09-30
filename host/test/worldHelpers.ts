@@ -2,7 +2,7 @@ import { Health, generateMap, hashString, mapParamsFor, resolveBalance, type Inp
 import { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
-export function makeWorld(opts: { hunters?: number; survivors?: number; seed?: string; lagMs?: number } = {}): World {
+export function makeWorld(opts: { hunters?: number; survivors?: number; seed?: string; lagMs?: number; testMode?: boolean } = {}): World {
   const H = opts.hunters ?? 1;
   const S = opts.survivors ?? 2;
   const rb = resolveBalance({ hunters: H, survivors: S, difficulty: 1 });
@@ -10,7 +10,7 @@ export function makeWorld(opts: { hunters?: number; survivors?: number; seed?: s
   const players: MatchPlayerInfo[] = [];
   for (let i = 0; i < H; i++) players.push({ id: i + 1, name: `Zach${i + 1}`, role: 'hunter', tint: 0 });
   for (let i = 0; i < S; i++) players.push({ id: H + i + 1, name: `Surv${i + 1}`, role: 'survivor', tint: i });
-  return new World({ map, balance: rb, players, seed: 7, viewLagMs: () => opts.lagMs ?? 0 });
+  return new World({ map, balance: rb, players, seed: 7, viewLagMs: () => opts.lagMs ?? 0, testMode: opts.testMode });
 }
 
 /** Feeds one input per tick per player, like a client would. */
@@ -21,7 +21,7 @@ export class Driver {
   input(id: number, cmd: Partial<Omit<InputCmd, 'seq'>>): void {
     const s = (this.seq.get(id) ?? 0) + 1;
     this.seq.set(id, s);
-    this.w.enqueueInputs(id, [{ seq: s, buttons: 0, moveX: 0, moveY: 0, aim: 0, aimDist: 100, ...cmd }]);
+    this.w.enqueueInputs(id, [{ seq: s, buttons: 0, moveX: 0, moveY: 0, aim: 0, aimDist: 100, item: 0, ...cmd }]);
   }
 
   /** Runs n ticks, giving every player the input `each(id)` returns (idle by default). */
@@ -60,3 +60,24 @@ export function openSpot(w: World, index = 1): { x: number; y: number } {
 }
 
 export const alive = (p: SimPlayer): boolean => p.health === Health.Healthy || p.health === Health.Wounded;
+
+/** Keeps Sexton Science out of the way (far corner) so he doesn't wander into a test. */
+export function parkSexton(w: World): void {
+  w.sexton.x = 60;
+  w.sexton.y = w.map.height - 60;
+}
+
+/** A spot with a clear, straight east-west lane of `half` units either side (no trees or walls). */
+export function clearLane(w: World, half = 450): { x: number; y: number } {
+  for (const c of w.map.clearings) {
+    for (let oy = -120; oy <= 120; oy += 40) {
+      const x = c.x;
+      const y = c.y + oy;
+      if (x - half < 50 || x + half > w.map.width - 50) continue;
+      let ok = true;
+      for (const dy of [-28, 0, 28]) if (!w.geo.hasLineOfSight(x - half, y + dy, x + half, y + dy)) ok = false;
+      if (ok) return { x, y };
+    }
+  }
+  throw new Error('no clear lane on this map');
+}

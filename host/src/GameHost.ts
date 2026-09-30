@@ -295,6 +295,16 @@ export class GameHost {
       case 'mapReq':
         this.sendMap(ps.id);
         break;
+      case 'switchRole': {
+        const w = this.world;
+        if (!w || !w.testMode || this.phase !== 'match') return;
+        if (w.switchRole(lp.id)) {
+          const info = w.playerInfo();
+          this.matchPlayers = info;
+          for (const p of w.order) this.sendToPlayer(p.id, { t: 'ev', e: { k: 'roles', players: info } });
+        }
+        break;
+      }
       case 'dev':
         if (this.opts.dev && this.world) devCommand(this.world, lp.id, msg.cmd, msg.args);
         break;
@@ -360,11 +370,11 @@ export class GameHost {
     }
     const rng = new Rng((this.random() * 2 ** 32) >>> 0);
     const split = this.lobby.resolveRoles(rng);
-    if (split.hunters.length < 1 || split.survivors.length < 1) {
+    const s = this.lobby.settings;
+    if (!s.testMode && (split.hunters.length < 1 || split.survivors.length < 1)) {
       this.send(ownerPeer.id, { t: 'err', msg: 'A match needs at least 1 hunter and 1 survivor' });
       return;
     }
-    const s = this.lobby.settings;
     this.matchSeed = s.seed ? hashString(s.seed) : (this.random() * 2 ** 32) >>> 0;
     this.balance = resolveBalance({ hunters: split.hunters.length, survivors: split.survivors.length, difficulty: s.difficulty, escapeFraction: s.escapeFraction });
     const params = mapParamsFor(this.matchSeed, this.balance);
@@ -382,6 +392,7 @@ export class GameHost {
       players: this.matchPlayers,
       seed: this.matchSeed,
       viewLagMs: (id) => this.viewLag(id),
+      testMode: s.testMode,
     });
     this.phase = 'match';
     this.startedAt = this.opts.now();
@@ -436,6 +447,10 @@ export class GameHost {
     const result = this.world.result;
     this.broadcast({ t: 'end', result });
     for (const p of this.lobby.players.values()) p.ready = false;
+    if (this.world.testMode) {
+      this.broadcastLobby();
+      return;
+    }
     this.opts.telemetry?.(
       matchLogEntry({
         seed: this.matchSeed,

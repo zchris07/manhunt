@@ -2,13 +2,15 @@ import {
   Action,
   BALANCE,
   BarricadeState,
-  Btn,
   Gait,
   Health,
+  ItemKind,
   MapWorld,
   MoveMode,
   Rng,
+  SLOT_ITEMS,
   TICK_DT,
+  newMoveState,
   resolveOverlaps,
   stepMovement,
   type GameEvent,
@@ -19,55 +21,61 @@ import {
   type ResolvedBalance,
 } from '@manhunt/shared';
 import { HISTORY_TICKS, createPlayer, type SimPlayer } from './player';
-import { updateInteractions, handlePresses, computePrompts } from './interact';
-import { updateCombat } from './combat';
-import { updateTools } from './tools';
+import { updateInteractions, handlePresses, computePrompts, exitHiding } from './interact';
+import { lungeContact, updateCombat } from './combat';
+import { updateItems } from './items';
 import { updateAbilities } from './abilities';
 import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
+import { Sexton, updateSexton } from './sexton';
 
 export interface GenState {
   progress: number;
   repaired: boolean;
-  fuel: boolean;
-  wire: boolean;
   regressing: boolean;
   workers: number;
 }
 
-export interface Flare {
+export interface ThrownBottle {
   id: number;
   x: number;
   y: number;
-  t: number;
+  dx: number;
+  dy: number;
+  travelled: number;
+  max: number;
   owner: number;
 }
 
-export interface Bottle {
+export interface Trap {
   id: number;
-  fx: number;
-  fy: number;
-  tx: number;
-  ty: number;
-  t: number;
-  dur: number;
-  owner: number;
-}
-
-export interface NoiseRecord {
   x: number;
   y: number;
-  t: number;
-  kind: string;
-  /** True if a survivor caused it (Stalker's Pulse only reports these). */
-  survivor: boolean;
+  owner: number;
+  armT: number;
+}
+
+export interface Gas {
+  id: number;
+  x: number;
+  y: number;
+  age: number;
+}
+
+export interface Burst {
+  x: number;
+  y: number;
+  t0: number;
+  by: number;
+  hit: Set<number>;
 }
 
 export interface TrailRecord {
+  id: number;
   x: number;
   y: number;
   t: number;
-  /** 0 footprint, 1 blood. */
+  /** 0 scent (sprinting), 1 blood. */
   kind: number;
 }
 
@@ -83,6 +91,8 @@ export interface WorldOptions {
   seed: number;
   /** Returns how far back (ms) a hunter's view lags, for lag compensation. */
   viewLagMs?: (playerId: number) => number;
+  /** Testing mode: role switching, infinite items, no win checks. */
+  testMode?: boolean;
 }
 
 /**
@@ -101,28 +111,42 @@ export class World {
   readonly gens: GenState[];
   readonly gate = { powered: false, progress: 0, open: false };
   readonly barricades: number[];
+  readonly barricadeHits: number[];
+  readonly doors: boolean[];
+  readonly doorCd: number[];
   readonly lootTaken: boolean[];
   readonly stakes: number[];
   readonly hiding: number[];
-  flares: Flare[] = [];
-  bottles: Bottle[] = [];
-  noises: NoiseRecord[] = [];
+  bottles: ThrownBottle[] = [];
+  traps: Trap[] = [];
+  gases: Gas[] = [];
+  bursts: Burst[] = [];
   trails: TrailRecord[] = [];
+  trailSeq = 1;
+  /** Per hunter: scent trail ids already sent. */
+  readonly trailSent = new Map<number, Set<number>>();
+  hempDrop: { id: number; x: number; y: number } | null = null;
+  readonly sexton: Sexton;
   events: OutEvent[] = [];
   result: MatchResult | null = null;
   nextEntityId = 32;
   skillSeq = 1;
   readonly survivorsTotal: number;
   readonly viewLagMs: (playerId: number) => number;
+  readonly testMode: boolean;
 
   constructor(opts: WorldOptions) {
     this.map = opts.map;
     this.mw = new MapWorld(opts.map);
     this.balance = opts.balance;
+    this.testMode = opts.testMode === true;
     this.rng = new Rng(opts.seed ^ 0x5eed);
     this.viewLagMs = opts.viewLagMs ?? (() => BALANCE.net.interpolationDelayMs);
-    this.gens = opts.map.generators.map(() => ({ progress: 0, repaired: false, fuel: false, wire: false, regressing: false, workers: 0 }));
+    this.gens = opts.map.generators.map(() => ({ progress: 0, repaired: false, regressing: false, workers: 0 }));
     this.barricades = opts.map.barricades.map(() => BarricadeState.Up);
+    this.barricadeHits = opts.map.barricades.map(() => 0);
+    this.doors = opts.map.doors.map((d) => !opts.map.dynamicSegments[d.dyn].active);
+    this.doorCd = opts.map.doors.map(() => 0);
     this.lootTaken = opts.map.loot.map(() => false);
     this.stakes = opts.map.stakes.map(() => 0);
     this.hiding = opts.map.hidingSpots.map(() => 0);
@@ -134,10 +158,11 @@ export class World {
           ? opts.map.hunterSpawns[hi++ % opts.map.hunterSpawns.length]
           : opts.map.survivorSpawns[si++ % opts.map.survivorSpawns.length];
       const p = createPlayer(info.id, info.name, info.role, info.tint, spawn.x, spawn.y);
-      if (info.role === 'survivor') p.flashCharges = BALANCE.survivor.startFlashCharges;
       this.addPlayer(p);
+      if (this.testMode) this.fillTestKit(p);
     }
     this.survivorsTotal = this.order.filter((p) => p.role === 'survivor').length;
+    this.sexton = new Sexton(this);
   }
 
   get geo() {
@@ -150,6 +175,52 @@ export class World {
     this.order.push(p);
     this.order.sort((a, b) => a.id - b.id);
     if (p.role === 'spectator') p.spectating = this.defaultSpectateTarget(p.id);
+  }
+
+  /** Testing mode: every item and ability, never used up. */
+  fillTestKit(p: SimPlayer): void {
+    if (p.role === 'survivor') {
+      for (const k of SLOT_ITEMS) p.inv[k] = BALANCE.items.maxStack;
+      p.goggles = [BALANCE.items.goggles.meter, BALANCE.items.goggles.meter];
+      p.shells = [BALANCE.items.shotgun.shells, BALANCE.items.shotgun.shells];
+      p.confit = 1;
+      p.jarvis = 3;
+    } else if (p.role === 'hunter') {
+      p.hemp = 2;
+    }
+  }
+
+  /** Testing mode: flips a player between Zach and survivor where they stand. */
+  switchRole(id: number): boolean {
+    const p = this.players.get(id);
+    if (!this.testMode || !p || p.role === 'spectator') return false;
+    if (p.carrying) {
+      const q = this.players.get(p.carrying);
+      if (q) {
+        q.health = Health.Wounded;
+        q.carriedBy = 0;
+      }
+    }
+    if (p.carriedBy) {
+      const h = this.players.get(p.carriedBy);
+      if (h) h.carrying = 0;
+    }
+    if (p.stakeId >= 0) this.stakes[p.stakeId] = 0;
+    if (p.hideState !== 0) exitHiding(this, p, false);
+    this.cancelAction(p);
+    const role = p.role === 'hunter' ? 'survivor' : 'hunter';
+    const fresh = createPlayer(p.id, p.name, role, p.tint, p.move.x, p.move.y);
+    fresh.connected = p.connected;
+    fresh.lastSeq = p.lastSeq;
+    fresh.inputs = p.inputs;
+    fresh.rtt = p.rtt;
+    fresh.facing = p.facing;
+    fresh.joinedTime = p.joinedTime;
+    Object.assign(p, fresh);
+    p.move = newMoveState(p.move.x, p.move.y, role);
+    resolveOverlaps(this.geo, p.move, p.radius);
+    this.fillTestKit(p);
+    return true;
   }
 
   defaultSpectateTarget(exclude: number): number {
@@ -179,15 +250,19 @@ export class World {
     if (ids.length) this.events.push({ to: ids, e });
   }
 
-  /** Emits a positional sound to everyone in earshot and records it for Stalker's Pulse. */
-  noise(x: number, y: number, r: number, kind: string, survivor: boolean): void {
-    this.noises.push({ x, y, t: this.time, kind, survivor });
+  /** Everyone whose view (own or spectated) is within r of (x,y). */
+  near(x: number, y: number, r: number): number[] {
     const to: number[] = [];
     for (const p of this.order) {
       const v = this.viewerFor(p);
-      if (!v) continue;
-      if (Math.hypot(v.move.x - x, v.move.y - y) <= r) to.push(p.id);
+      if (v && Math.hypot(v.move.x - x, v.move.y - y) <= r) to.push(p.id);
     }
+    return to;
+  }
+
+  /** A visual cue at a spot (particles for explosions, glass and splinters). */
+  noise(x: number, y: number, r: number, kind: string): void {
+    const to = this.near(x, y, r);
     if (to.length) this.emit(to, { k: 'noise', x: Math.round(x), y: Math.round(y), r: Math.round(r), s: kind });
   }
 
@@ -204,17 +279,16 @@ export class World {
 
   moveModeFor(p: SimPlayer): MoveMode {
     if (p.role === 'spectator') return MoveMode.Locked;
-    if (p.vault) return MoveMode.Locked;
     if (p.role === 'hunter') {
-      if (p.stunT > 0) return MoveMode.Locked;
-      if (p.action === Action.PickUp || p.action === Action.Stake || p.action === Action.Search || p.action === Action.BreakBarricade || p.action === Action.DamageGen) {
+      if (p.stunT > 0 || p.health === Health.Eliminated) return MoveMode.Locked;
+      if (p.action === Action.PickUp || p.action === Action.Stake || p.action === Action.Search || p.action === Action.DamageGen) {
         return MoveMode.Locked;
       }
       return MoveMode.Normal;
     }
     if (p.health === Health.Downed) return MoveMode.Crawl;
     if (p.health !== Health.Healthy && p.health !== Health.Wounded) return MoveMode.Locked;
-    if (p.hideState !== 0) return MoveMode.Locked;
+    if (p.hideState !== 0 || p.action === Action.Talk) return MoveMode.Locked;
     return MoveMode.Normal;
   }
 
@@ -236,11 +310,13 @@ export class World {
       }
     }
 
+    for (let i = 0; i < this.doorCd.length; i++) if (this.doorCd[i] > 0) this.doorCd[i] = Math.max(0, this.doorCd[i] - dt);
     computePrompts(this);
     updateInteractions(this, dt);
     updateCombat(this, dt);
-    updateTools(this, dt);
+    updateItems(this, dt);
     updateAbilities(this, dt);
+    updateSexton(this, dt);
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -259,7 +335,7 @@ export class World {
         p.stats.timeAlive = this.time - p.joinedTime;
       }
     }
-    checkWin(this);
+    if (!this.testMode) checkWin(this);
   }
 
   private applyInput(p: SimPlayer, cmd: InputCmd): void {
@@ -274,19 +350,25 @@ export class World {
       p.facing = cmd.aim;
       p.aimDist = cmd.aimDist;
     }
+    if (p.role === 'survivor') p.selItem = cmd.item >= ItemKind.Bottle && cmd.item <= ItemKind.Trap ? cmd.item : 0;
     handlePresses(this, p, cmd, pressed);
 
     // Moving cancels survivor interactions.
-    if ((cmd.moveX || cmd.moveY) && p.role === 'survivor' && p.action !== Action.None && p.action !== Action.Vault && p.action !== Action.HideEnter && p.action !== Action.HideExit) {
-      if (p.action !== Action.FlashAim) this.cancelAction(p);
+    if ((cmd.moveX || cmd.moveY) && p.role === 'survivor' && p.action !== Action.None && p.action !== Action.HideEnter && p.action !== Action.HideExit && p.action !== Action.Talk) {
+      this.cancelAction(p);
     }
 
     p.move.mode = this.moveModeFor(p);
     const role = p.role === 'hunter' ? 'hunter' : 'survivor';
-    const gait = stepMovement(p.move, cmd, { role, hunterSpeed: this.balance.hunterSpeed, carrying: p.carrying > 0 }, this.geo, TICK_DT);
+    const fromX = p.move.x;
+    const fromY = p.move.y;
+    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul, carrying: p.carrying > 0 }, this.geo, TICK_DT);
     p.gait = p.move.mode === MoveMode.Locked ? Gait.Idle : gait;
-    if (p.role === 'hunter' && cmd.buttons & Btn.Lunge && p.move.lungeT > 0 && !p.wasLunging) {
-      p.lungeHit = false;
+    if (p.role === 'hunter') {
+      const lunging = p.move.lungeT > 0 || (p.wasLunging && Math.hypot(p.move.x - fromX, p.move.y - fromY) > 0);
+      if (p.move.lungeT > 0 && !p.wasLunging) p.lungeHit = false;
+      if (lunging && !p.lungeHit) lungeContact(this, p, fromX, fromY);
+      p.wasLunging = p.move.lungeT > 0;
     }
   }
 
@@ -299,6 +381,7 @@ export class World {
 
   cancelAction(p: SimPlayer): void {
     if (p.action === Action.Repair && p.actionTarget >= 0) this.gens[p.actionTarget].workers = Math.max(0, this.gens[p.actionTarget].workers - 1);
+    if (p.action === Action.Talk) this.sexton.cancelTalk(p.id);
     p.action = Action.None;
     p.actionT = 0;
     p.actionDur = 0;
@@ -310,19 +393,33 @@ export class World {
   setBarricade(id: number, state: number): void {
     this.barricades[id] = state;
     this.geo.setDynamicActive(this.map.barricades[id].dyn, state === BarricadeState.Down);
-    if (state === BarricadeState.Down) {
-      // Push anyone standing in the gap out of the new collider.
-      for (const p of this.order) {
-        if (p.role === 'spectator' || p.health === Health.Carried || p.hideState === 2 || p.vault) continue;
-        resolveOverlaps(this.geo, p.move, p.radius);
-      }
+    if (state === BarricadeState.Down) this.pushOutOfColliders();
+  }
+
+  /** Opens or closes a door. Anyone standing in a closing doorway is pushed out. */
+  setDoor(id: number, open: boolean): void {
+    this.doors[id] = open;
+    this.doorCd[id] = 0.35;
+    this.geo.setDynamicActive(this.map.doors[id].dyn, !open);
+    if (!open) this.pushOutOfColliders();
+  }
+
+  private pushOutOfColliders(): void {
+    for (const p of this.order) {
+      if (p.role === 'spectator' || p.health === Health.Carried || p.hideState === 2) continue;
+      resolveOverlaps(this.geo, p.move, p.radius);
     }
+    this.sexton.unstick();
   }
 
   allocEntityId(): number {
-    const id = this.nextEntityId;
-    this.nextEntityId = this.nextEntityId >= 250 ? 32 : this.nextEntityId + 1;
-    return id;
+    // Entity ids share the byte range with player ids: skip any id a player has.
+    for (let i = 0; i < 230; i++) {
+      const id = this.nextEntityId;
+      this.nextEntityId = this.nextEntityId >= 250 ? 32 : this.nextEntityId + 1;
+      if (!this.players.has(id)) return id;
+    }
+    return 251;
   }
 
   setConnected(id: number, connected: boolean): void {
@@ -376,6 +473,7 @@ export function eliminate(w: World, p: SimPlayer, why: 'stake' | 'disconnected',
   p.carriedBy = 0;
   p.hideSpot = -1;
   p.hideState = 0;
+  p.gogglesOn = false;
   p.stats.outcome = 'eliminated';
   p.endedTime = w.time;
   p.spectating = w.defaultSpectateTarget(p.id);

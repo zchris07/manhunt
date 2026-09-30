@@ -6,7 +6,8 @@ import { Input } from '../input/Input';
 import { GameView } from '../game/GameView';
 import { parseRoomInput } from '../net/config';
 import { downloadMatchLog, readMatchLog } from '../net/matchLog';
-import { hostGame, joinGame, type Session } from '../net/session';
+import { hostGame, hostLocal, joinGame, type Session } from '../net/session';
+import { Inventory } from '../ui/hud';
 import { renderLanding, renderMessage } from '../ui/landing';
 import { LobbyScreen } from '../ui/lobby';
 import { renderResults } from '../ui/results';
@@ -31,6 +32,7 @@ export class App {
   private leaving = false;
   private wakeLock: { release(): Promise<void> } | null = null;
   private unsub: (() => void)[] = [];
+  private readonly inventory = new Inventory();
 
   async start(): Promise<void> {
     this.pixi = new Application();
@@ -97,6 +99,7 @@ export class App {
       {
         onCreate: (name) => void this.create(name),
         onJoin: (name, room) => void this.join(name, room),
+        onTest: (name) => void this.test(name),
         onDownloadLog: downloadMatchLog,
       },
     );
@@ -110,6 +113,18 @@ export class App {
       this.bind(s);
     } catch (e) {
       this.showLanding(`Could not create a lobby: ${(e as Error).message ?? e}. Check your connection and try again.`);
+    }
+  }
+
+  /** Solo testing mode: an offline match where T switches between Zach and survivor. */
+  private async test(name: string): Promise<void> {
+    storageSet('manhunt.name', name);
+    this.showLanding('', 'Setting up testing mode...');
+    try {
+      const s = await hostLocal(name);
+      this.bind(s);
+    } catch (e) {
+      this.showLanding(`Could not start testing mode: ${(e as Error).message ?? e}`);
     }
   }
 
@@ -142,8 +157,15 @@ export class App {
         history.replaceState(null, '', url);
       }),
       c.on('lobby', () => {
+        if (s.solo && c.lobby?.phase === 'lobby') {
+          // Testing mode on your own: skip the lobby.
+          if (!c.lobby.settings.testMode) c.send({ t: 'settings', settings: { ...c.lobby.settings, testMode: true } });
+          else c.send({ t: 'start' });
+          return;
+        }
         if (c.state === 'lobby' && this.screen !== 'lobby') this.showLobby();
       }),
+      c.on('role', () => this.showMatch()),
       c.on('start', () => this.showMatch()),
       c.on('end', (r) => this.showResults(r as MatchResult)),
       c.on('error', (msg) => {
@@ -151,7 +173,7 @@ export class App {
       }),
       c.on('close', (reason) => this.onClosed(String(reason))),
     ];
-    if (c.state === 'lobby' && c.lobby) this.showLobby();
+    if (c.state === 'lobby' && c.lobby && !s.solo) this.showLobby();
   }
 
   private onClosed(reason: string): void {
@@ -198,7 +220,7 @@ export class App {
     this.game?.destroy();
     this.screen = 'match';
     const s = this.session!;
-    this.game = new GameView({ app: this.pixi, assets: this.assets, audio: this.audio, client: s.client, uiRoot: this.ui, input: this.input });
+    this.game = new GameView({ app: this.pixi, assets: this.assets, audio: this.audio, client: s.client, uiRoot: this.ui, input: this.input, inventory: this.inventory });
     if (s.isHost) void this.requestWakeLock();
   }
 
@@ -233,7 +255,7 @@ export class App {
       isHost: s.isHost,
       onVolumes: (v) => this.audio.setVolumes(v),
       onLeave: () => this.leave(),
-      onEndMatch: () => s.client.send({ t: 'toLobby' }),
+      onEndMatch: () => (s.solo ? this.leave() : s.client.send({ t: 'toLobby' })),
       onDownloadLog: downloadMatchLog,
       onClose: () => {
         this.settingsEl = null;

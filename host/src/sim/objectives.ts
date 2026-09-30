@@ -28,7 +28,7 @@ export function skillCheckResult(w: World, p: SimPlayer, id: number, result: 'mi
   const def = w.map.generators[p.actionTarget];
   if (result === 'miss') {
     g.progress = Math.max(0, g.progress - O.skillCheck.failPenalty);
-    w.noise(def.x, def.y, O.skillCheck.failNoise, 'gen_explode', true);
+    w.noise(def.x, def.y, O.skillCheck.failNoise, 'gen_explode');
   } else if (result === 'great') {
     g.progress = Math.min(0.999, g.progress + O.skillCheck.greatBonus);
   }
@@ -42,12 +42,10 @@ export function updateObjectives(w: World, dt: number): void {
   w.gens.forEach((g, gi) => {
     g.workers = workers[gi];
     if (g.repaired) return;
-    const def = w.map.generators[gi];
     if (g.workers > 0 && !w.gate.powered) {
       const mul = O.coopMul[Math.min(g.workers, O.coopMul.length) - 1];
       g.progress += (mul / w.balance.repairTime) * dt;
       g.regressing = false;
-      if (Math.floor(w.time) !== Math.floor(w.time - dt)) w.noises.push({ x: def.x, y: def.y, t: w.time, kind: 'repair', survivor: true });
     } else if (g.regressing) {
       g.progress -= O.regressPerSec * dt;
       if (g.progress <= 0) {
@@ -61,7 +59,6 @@ export function updateObjectives(w: World, dt: number): void {
       g.regressing = false;
       for (const p of w.order) if (p.action === Action.Repair && p.actionTarget === gi) w.cancelAction(p);
       w.emit('all', { k: 'genDone', id: gi });
-      w.noise(def.x, def.y, BALANCE.noise.genDone, 'gen_done', false);
       const repaired = w.gens.filter((x) => x.repaired).length;
       w.feed(`Generator restored (${Math.min(repaired, w.balance.requiredGenerators)}/${w.balance.requiredGenerators})`);
       if (repaired >= w.balance.requiredGenerators && !w.gate.powered) {
@@ -85,15 +82,11 @@ export function updateObjectives(w: World, dt: number): void {
     const openers = w.order.filter((p) => p.action === Action.OpenGate);
     if (openers.length) {
       w.gate.progress = Math.min(1, w.gate.progress + dt / O.gateOpenTime);
-      if (Math.floor(w.time * 2) !== Math.floor((w.time - dt) * 2)) {
-        w.noise(w.map.gate.leverX, w.map.gate.leverY, O.gateNoise, 'gate', true);
-      }
       if (w.gate.progress >= 1) {
         w.gate.open = true;
         w.geo.setDynamicActive(w.map.gate.dyn, false);
         for (const p of openers) w.cancelAction(p);
         w.emit('all', { k: 'gateOpen' });
-        w.noise(w.map.gate.x, w.map.gate.y, BALANCE.noise.gateOpen, 'gate_open', false);
         w.feed('The gate is open. RUN.');
       }
     }
@@ -116,7 +109,7 @@ export function updateObjectives(w: World, dt: number): void {
 
   // Disconnected players past the grace period forfeit.
   for (const p of w.order) {
-    if (p.connected || p.disconnectedAt <= 0) continue;
+    if (p.connected || p.disconnectedAt <= 0 || w.testMode) continue;
     if (w.time - p.disconnectedAt > BALANCE.net.reconnectGraceSec) {
       p.disconnectedAt = -1;
       w.forfeit(p.id);

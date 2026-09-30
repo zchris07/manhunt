@@ -6,9 +6,12 @@ export interface ViewerInfo {
   y: number;
   facing: number;
   hunter: boolean;
-  blind: boolean;
   downed: boolean;
   hidden: HidingSpotDef | null;
+  /** Night vision goggles widen the flashlight cone. */
+  coneMul: number;
+  /** See-through light fading in (0..1), or 0 when off. */
+  xray: number;
 }
 
 export interface LightInfo {
@@ -24,9 +27,10 @@ export interface LightInfo {
 const SLATS = 7;
 
 /**
- * Builds the three mask channels for a viewer: own vision (cone + proximity, or a slatted
- * peek from a hiding spot), 360-degree line of sight, and up to 6 nearby light polygons.
- * Mirrors the host's visibility rules so what you see matches what you are sent.
+ * Builds the mask channels for a viewer: own vision (cone + proximity, or a slatted peek
+ * from a hiding spot), 360-degree line of sight, up to 6 nearby light polygons, and the
+ * see-through cone of goggles or the Hemp Battery. Mirrors the host's visibility rules so
+ * what you see matches what you are sent.
  */
 export class VisionSources {
   private readonly cache = new Map<string, number[]>();
@@ -36,13 +40,19 @@ export class VisionSources {
     private readonly map: MapData,
   ) {}
 
+  /** Doors opened or closed: cached light polygons are stale. */
+  invalidate(): void {
+    this.cache.clear();
+  }
+
   build(v: ViewerInfo, lights: LightInfo[], viewRadius: number): MaskSources {
     const own: MaskPolygon[] = [];
+    let xray: MaskSources['xray'] = null;
     if (v.hidden) {
       const grass = v.hidden.kind === 'grass';
       const pk = grass ? BALANCE.hiding.grassPeek : BALANCE.hiding.peek;
       if (grass) {
-        own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: pk.range }, []), ox: v.x, oy: v.y, range: pk.range, intensity: 0.8 });
+        own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: pk.range }, []), ox: v.x, oy: v.y, range: pk.range, intensity: 0.85 });
       } else {
         // Looking out through slats: the peek cone is split into thin wedges.
         const half = pk.coneHalfAngleDeg * DEG;
@@ -56,16 +66,16 @@ export class VisionSources {
       }
     } else {
       const cfg = v.hunter ? BALANCE.hunter.vision : BALANCE.survivor.vision;
-      const k = v.blind ? BALANCE.tools.flare.visionMul : v.downed ? BALANCE.survivor.downedVisionMul : 1;
+      const k = v.downed ? BALANCE.survivor.downedVisionMul : 1;
       const range = cfg.range * k;
-      own.push({
-        poly: this.vis.compute({ x: v.x, y: v.y, dir: v.facing, halfAngle: cfg.coneHalfAngleDeg * DEG, range }, []),
-        ox: v.x,
-        oy: v.y,
-        range,
-      });
-      const prox = cfg.proximity * (v.blind ? BALANCE.hunter.blindProximityMul : 1);
-      own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: prox }, []), ox: v.x, oy: v.y, range: prox, intensity: 0.8 });
+      const half = cfg.coneHalfAngleDeg * DEG * v.coneMul;
+      own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: v.facing, halfAngle: half, range }, []), ox: v.x, oy: v.y, range });
+      own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: cfg.proximity }, []), ox: v.x, oy: v.y, range: cfg.proximity, intensity: 0.9 });
+      if (v.xray > 0) {
+        // Light that ignores walls; it grows out of the torch while it fades in.
+        const ease = 1 - (1 - v.xray) * (1 - v.xray);
+        xray = { poly: conePolygon(v.x, v.y, v.facing, half, range * (0.35 + 0.65 * ease)), fade: ease };
+      }
     }
 
     const los = this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: BALANCE.lights.losRange }, []);
@@ -82,12 +92,23 @@ export class VisionSources {
       }
       return { poly, ox: l.x, oy: l.y, range: l.radius, intensity: l.intensity };
     });
-    return { own, los, lights: lightPolys };
+    return { own, los, lights: lightPolys, xray };
   }
 
   get mapData(): MapData {
     return this.map;
   }
+}
+
+/** An unoccluded cone polygon (origin first). */
+function conePolygon(x: number, y: number, dir: number, half: number, range: number): number[] {
+  const out = [x, y];
+  const n = Math.max(8, Math.ceil((half * 2) / (4 * DEG)));
+  for (let i = 0; i <= n; i++) {
+    const a = dir - half + (half * 2 * i) / n;
+    out.push(x + Math.cos(a) * range, y + Math.sin(a) * range);
+  }
+  return out;
 }
 
 function angleDelta(a: number, b: number): number {

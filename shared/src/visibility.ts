@@ -53,6 +53,7 @@ export class VisibilityComputer {
     const segs = geo.visSegGrid.query(ox - range, oy - range, ox + range, oy + range, this.segIds);
     const vs = geo.visSeg;
     for (let i = 0; i < segs.length; i++) {
+      if (!geo.visSegActive[segs[i]]) continue;
       const o = segs[i] * 4;
       const ax = vs[o];
       const ay = vs[o + 1];

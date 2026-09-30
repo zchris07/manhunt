@@ -1,5 +1,5 @@
 import { BlurFilter, Container, Filter, GlProgram, Graphics, Rectangle, RenderTexture, UniformGroup, type Renderer } from 'pixi.js';
-import { clampPolygon } from '@manhunt/shared';
+import { BALANCE, clampPolygon } from '@manhunt/shared';
 import { entityMaskFragment, screenVertex, visionFragment } from './shaders';
 
 /** A polygon drawn into one mask channel, with stepped distance falloff from its origin. */
@@ -18,26 +18,27 @@ export interface MaskSources {
   los: number[] | null;
   /** Light sources (R channel). */
   lights: MaskPolygon[];
+  /** See-through light (goggles / Hemp Battery): R at 70% and G, fading in. */
+  xray: { poly: number[]; fade: number } | null;
 }
 
 export interface VisionEffects {
   time: number;
-  terror: number;
   flicker: number;
-  blind: number;
   damage: number;
 }
 
 const MASK_SCALE = 0.5;
+/** Own vision: bright near you, a little dimmer toward the end of the beam. */
 const OWN_LAYERS: readonly [number, number][] = [
-  [1.0, 0.42],
-  [0.72, 0.3],
-  [0.45, 0.3],
+  [1.0, 0.8],
+  [0.8, 0.1],
+  [0.55, 0.1],
 ];
 const LIGHT_LAYERS: readonly [number, number][] = [
-  [1.0, 0.34],
-  [0.68, 0.33],
-  [0.38, 0.33],
+  [1.0, 0.62],
+  [0.7, 0.2],
+  [0.4, 0.18],
 ];
 
 /**
@@ -52,6 +53,7 @@ export class VisionRenderer {
   private readonly gOwn = new Graphics();
   private readonly gLos = new Graphics();
   private readonly gLight = new Graphics();
+  private readonly gXray = new Graphics();
   private readonly tmp: number[] = [];
   private readonly visionUniforms: UniformGroup;
   private readonly entityUniforms: UniformGroup;
@@ -66,7 +68,7 @@ export class VisionRenderer {
       height: Math.ceil(height * MASK_SCALE),
       resolution: 1,
     });
-    for (const g of [this.gLos, this.gLight, this.gOwn]) {
+    for (const g of [this.gLos, this.gLight, this.gOwn, this.gXray]) {
       g.blendMode = 'add';
       this.maskRoot.addChild(g);
     }
@@ -76,13 +78,11 @@ export class VisionRenderer {
       uMaskScale: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
       uScreenSize: { value: new Float32Array([width, height]), type: 'vec2<f32>' },
       uTime: { value: 0, type: 'f32' },
-      uOutsideDim: { value: 0.3, type: 'f32' },
-      uGrain: { value: 0.045, type: 'f32' },
+      uGrain: { value: 0.025, type: 'f32' },
       uFlicker: { value: 1, type: 'f32' },
-      uTerror: { value: 0, type: 'f32' },
-      uBlind: { value: 0, type: 'f32' },
       uDamage: { value: 0, type: 'f32' },
-      uTint: { value: new Float32Array([1.08, 1.0, 0.86]), type: 'vec3<f32>' },
+      uSaturation: { value: 1.18, type: 'f32' },
+      uTint: { value: new Float32Array([1.04, 1.0, 0.96]), type: 'vec3<f32>' },
     });
     this.visionFilter = new Filter({
       glProgram: GlProgram.from({ vertex: screenVertex, fragment: visionFragment, name: 'mh-vision' }),
@@ -133,21 +133,32 @@ export class VisionRenderer {
     if (this.viewport && this.entityViewport) this.applyFilterArea(this.viewport, this.entityViewport);
   }
 
-  /** Redraws the mask. camX/camY is the world position of the screen's top-left corner. */
-  renderMask(renderer: Renderer, camX: number, camY: number, sources: MaskSources): void {
-    this.maskRoot.scale.set(MASK_SCALE);
-    this.maskRoot.position.set(-camX * MASK_SCALE, -camY * MASK_SCALE);
+  /**
+   * Redraws the mask. camX/camY is the world position of the screen's top-left corner and
+   * `zoom` the camera scale (screen pixels per world unit).
+   */
+  renderMask(renderer: Renderer, camX: number, camY: number, sources: MaskSources, zoom = 1): void {
+    this.maskRoot.scale.set(MASK_SCALE * zoom);
+    this.maskRoot.position.set(-camX * MASK_SCALE * zoom, -camY * MASK_SCALE * zoom);
 
     const gl = this.gLos;
     gl.clear();
     if (sources.los) {
       gl.poly(sources.los).fill({ color: 0x00ff00, alpha: 1 });
     } else {
-      gl.rect(camX, camY, this.screenW, this.screenH).fill({ color: 0x00ff00, alpha: 1 });
+      gl.rect(camX, camY, this.screenW / zoom, this.screenH / zoom).fill({ color: 0x00ff00, alpha: 1 });
     }
 
     this.drawLayered(this.gOwn, sources.own, 0x0000ff, OWN_LAYERS);
     this.drawLayered(this.gLight, sources.lights, 0xff0000, LIGHT_LAYERS);
+
+    const gx = this.gXray;
+    gx.clear();
+    if (sources.xray && sources.xray.poly.length >= 6 && sources.xray.fade > 0.001) {
+      // R carries the brightness (70%), G opens line of sight through walls.
+      const r = Math.round(BALANCE.xray.brightness * 255);
+      gx.poly(sources.xray.poly).fill({ color: (r << 16) | 0x00ff00, alpha: sources.xray.fade });
+    }
 
     renderer.render({ container: this.maskRoot, target: this.maskTexture, clear: true, clearColor: [0, 0, 0, 0] });
   }
@@ -167,14 +178,8 @@ export class VisionRenderer {
   setEffects(fx: VisionEffects): void {
     const u = this.visionUniforms.uniforms;
     u.uTime = fx.time;
-    u.uTerror = fx.terror;
     u.uFlicker = fx.flicker;
-    u.uBlind = fx.blind;
     u.uDamage = fx.damage;
-  }
-
-  setOutsideDim(v: number): void {
-    this.visionUniforms.uniforms.uOutsideDim = v;
   }
 
   destroy(): void {

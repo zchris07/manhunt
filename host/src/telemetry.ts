@@ -2,7 +2,7 @@ import type { LobbySettings, MatchResult, ResolvedBalance } from '@manhunt/share
 
 /** One match outcome, stored by the host (localStorage) and downloadable for tuning. */
 export interface MatchLogEntry {
-  v: 1;
+  v: 2;
   at: string;
   seed: number;
   mapHash: number;
@@ -15,7 +15,6 @@ export interface MatchLogEntry {
   repairTime: number;
   hunterSpeed: number;
   stunMul: number;
-  lootMul: number;
   winner: MatchResult['winner'];
   reason: string;
   durationSec: number;
@@ -36,7 +35,7 @@ export function matchLogEntry(input: {
 }): MatchLogEntry {
   const { balance: b, result: r } = input;
   return {
-    v: 1,
+    v: 2,
     at: new Date().toISOString(),
     seed: input.seed,
     mapHash: input.mapHash,
@@ -49,7 +48,6 @@ export function matchLogEntry(input: {
     repairTime: Math.round(b.repairTime * 10) / 10,
     hunterSpeed: Math.round(b.hunterSpeed),
     stunMul: Math.round(b.stunMul * 100) / 100,
-    lootMul: Math.round(b.lootMul * 100) / 100,
     winner: r.winner,
     reason: r.reason,
     durationSec: r.durationSec,

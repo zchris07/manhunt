@@ -20,20 +20,25 @@ export interface CircleDef {
   move: boolean;
 }
 
-/** A movement-only segment that can be switched on and off (barricades, gate, broken windows). */
+/**
+ * A segment that can be switched on and off (barricades, the gate, doors). It always blocks
+ * movement while active; with `vision` it also blocks sight while active (doors).
+ */
 export interface DynamicSegmentDef {
   ax: number;
   ay: number;
   bx: number;
   by: number;
   active: boolean;
+  vision?: boolean;
 }
 
 const CELL = 128;
 
 /**
  * Static world geometry with separate broad-phase grids for vision occluders and movement
- * colliders. Circles are analytic (trees, boulders). Dynamic segments only affect movement.
+ * colliders. Circles are analytic (trees, boulders). Dynamic segments block movement and,
+ * for doors, sight.
  */
 export class Geometry {
   readonly visSeg: Float64Array;
@@ -41,6 +46,10 @@ export class Geometry {
   readonly moveSeg: Float64Array;
   readonly moveCircle: Float64Array;
   readonly moveSegActive: Uint8Array;
+  /** Per vision segment: 0 while a dynamic occluder (an open door) is switched off. */
+  readonly visSegActive: Uint8Array;
+  /** Dynamic segment index -> its vision segment index (or -1). */
+  private readonly dynVis: Int32Array;
   readonly visSegGrid: GridIndex;
   readonly visCircleGrid: GridIndex;
   readonly moveSegGrid: GridIndex;
@@ -57,15 +66,24 @@ export class Geometry {
     circles: readonly CircleDef[],
     dynamic: readonly DynamicSegmentDef[] = [],
   ) {
-    const vs = segments.filter((s) => s.vision);
+    const staticVis = segments.filter((s) => s.vision);
+    this.dynVis = new Int32Array(dynamic.length).fill(-1);
+    const vs: { ax: number; ay: number; bx: number; by: number; active: boolean }[] = staticVis.map((s) => ({ ...s, active: true }));
+    dynamic.forEach((d, i) => {
+      if (!d.vision) return;
+      this.dynVis[i] = vs.length;
+      vs.push({ ax: d.ax, ay: d.ay, bx: d.bx, by: d.by, active: d.active });
+    });
     const ms = segments.filter((s) => s.move);
     const vc = circles.filter((c) => c.vision);
     const mc = circles.filter((c) => c.move);
 
     this.visSeg = new Float64Array(vs.length * 4);
+    this.visSegActive = new Uint8Array(vs.length);
     this.visSegGrid = new GridIndex(width, height, CELL);
     vs.forEach((s, i) => {
       this.visSeg.set([s.ax, s.ay, s.bx, s.by], i * 4);
+      this.visSegActive[i] = s.active ? 1 : 0;
       this.visSegGrid.insert(i, Math.min(s.ax, s.bx), Math.min(s.ay, s.by), Math.max(s.ax, s.bx), Math.max(s.ay, s.by));
     });
 
@@ -98,6 +116,8 @@ export class Geometry {
   /** Enables or disables dynamic movement segment `index` (0-based among dynamic segments). */
   setDynamicActive(index: number, active: boolean): void {
     this.moveSegActive[this.dynamicBase + index] = active ? 1 : 0;
+    const v = this.dynVis[index];
+    if (v !== undefined && v >= 0) this.visSegActive[v] = active ? 1 : 0;
   }
 
   isDynamicActive(index: number): boolean {
@@ -113,6 +133,7 @@ export class Geometry {
     const segs = this.visSegGrid.query(minX, minY, maxX, maxY, this.tmpA);
     const vs = this.visSeg;
     for (let i = 0; i < segs.length; i++) {
+      if (!this.visSegActive[segs[i]]) continue;
       const o = segs[i] * 4;
       if (segmentsIntersect(ax, ay, bx, by, vs[o], vs[o + 1], vs[o + 2], vs[o + 3])) return false;
     }
@@ -135,6 +156,7 @@ export class Geometry {
     const segs = this.visSegGrid.query(Math.min(ox, ex), Math.min(oy, ey), Math.max(ox, ex), Math.max(oy, ey), this.tmpA);
     const vs = this.visSeg;
     for (let i = 0; i < segs.length; i++) {
+      if (!this.visSegActive[segs[i]]) continue;
       const o = segs[i] * 4;
       const t = raySegment(ox, oy, dx, dy, vs[o], vs[o + 1], vs[o + 2], vs[o + 3]);
       if (t < best) best = t;

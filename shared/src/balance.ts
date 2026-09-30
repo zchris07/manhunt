@@ -8,6 +8,15 @@
 
 export const DEG = Math.PI / 180;
 
+const SURVIVOR_RADIUS = 15;
+const HUNTER_RADIUS = 19;
+/** Zach's body width (diameter). Several ranges are defined as multiples of it. */
+const HUNTER_WIDTH = HUNTER_RADIUS * 2;
+/** Base speeds were raised 20% across the board. */
+const SPEED_UP = 1.2;
+const SURVIVOR_WALK = 120 * SPEED_UP;
+const SURVIVOR_RUN = 190 * SPEED_UP;
+
 export const BALANCE = {
   world: {
     size: 6000,
@@ -15,6 +24,8 @@ export const BALANCE = {
     matchTimeLimit: 15 * 60,
     /** Survivor team wins if at least this fraction of survivors escape. */
     escapeFraction: 0.5,
+    /** Fraction of the woods' tree positions that are kept (25% fewer trees). */
+    treeKeep: 0.75,
   },
 
   net: {
@@ -43,78 +54,83 @@ export const BALANCE = {
   },
 
   survivor: {
-    radius: 15,
-    walk: 120,
-    run: 190,
-    crouch: 70,
-    crawl: 32,
+    radius: SURVIVOR_RADIUS,
+    walk: SURVIVOR_WALK,
+    run: SURVIVOR_RUN,
+    crouch: 70 * SPEED_UP,
+    crawl: 32 * SPEED_UP,
+    /** Sprint meter: seconds of sprinting when full, seconds to refill from empty. */
+    stamina: { max: 8, refill: 10 },
     /** Speed burst after being hit (DBD-style), multiplier and duration. */
-    hitHasteMul: 1.35,
+    hitHasteMul: 1.3,
     hitHasteTime: 1.8,
     vision: { coneHalfAngleDeg: 50, range: 620, proximity: 95 },
     downedVisionMul: 0.6,
-    /** Hearing radius of each movement mode: how far away others can hear you. */
+    /** How far away others notice you moving (bots and hiding only; there is no audio for it). */
     noise: { idle: 0, crouch: 45, walk: 170, run: 430 },
     wiggleTime: 16,
     healTime: 12,
     reviveTime: 8,
     unstakeTime: 1.6,
-    vaultTime: 0.85,
-    fastVaultTime: 0.5,
-    installPartTime: 1.2,
-    pickupTime: 0.4,
-    maxParts: 2,
-    startFlashCharges: 1,
-    maxFlashCharges: 3,
+    pickupTime: 0.35,
   },
 
   hunter: {
-    radius: 19,
-    speed: 205,
+    radius: HUNTER_RADIUS,
+    /** Zach walks 10% slower than a survivor walks and sprints 20% faster than they do. */
+    walk: SURVIVOR_WALK * 0.9,
+    sprint: SURVIVOR_RUN * 1.2,
+    stamina: { max: 6, refill: 6 },
     carrySpeedMul: 0.9,
     vision: { coneHalfAngleDeg: 65, range: 470, proximity: 125 },
-    noise: 360,
-    terrorRadius: 700,
     attack: {
-      range: 62,
+      /** The swipe covers twice the old 62 u reach, in a 100 degree arc in front of him. */
+      range: 124,
       arcDeg: 100,
       windup: 0.15,
-      hitCooldown: 2.4,
+      /** Length of the visible swing animation. */
+      swingTime: 0.32,
+      hitCooldown: 2.2,
       hitSlowMul: 0.45,
-      missCooldown: 1.1,
+      missCooldown: 0.9,
       missSlowMul: 0.7,
+      /** Two melee hits break a dropped barricade. */
+      barricadeHits: 2,
     },
-    lunge: { mul: 2.0, duration: 0.6, cooldown: 12, reachBonus: 20, missPenalty: 1.5, missSlowMul: 0.55 },
-    pulse: { cooldown: 30, radius: 1800, historySec: 8, jitter: 70, echoDuration: 6 },
-    bloodhound: { cooldown: 35, duration: 8, trailHistorySec: 10, radius: 1200 },
-    vaultSmash: { cooldown: 20, time: 0.4 },
-    vaultTime: 1.5,
+    /**
+     * Lunge (F): a League-of-Legends-style dash. Speed starts at `peak` and eases out to zero
+     * over `duration` ((1 - t/T)^2 curve). Two charges; each recharges in `recharge` seconds,
+     * one at a time, starting as soon as one is spent.
+     */
+    lunge: { charges: 2, recharge: 7, duration: 0.5, peak: 1150, hitboxMul: 1.5 },
+    /** Soundcloud Burst (right click): a ring that passes through everything. */
+    burst: { cooldown: 12, speed: 2600, width: HUNTER_WIDTH * 6, scareTime: 4 },
+    /** Scent trail (always on): survivors running or bleeding leave red scent. */
+    scent: { radius: 1300, sendEvery: 0.5 },
+    /** Hemp Battery (Q, dropped by Sexton Science). */
+    hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
     breakBarricadeTime: 2.2,
     searchTime: 1.5,
     damageGenTime: 2.0,
     pickupTime: 1.0,
     stakeTime: 1.2,
-    chaseRange: 520,
-    chaseLoseSec: 5,
     windupSlowMul: 0.85,
     hitSlowFraction: 0.75,
     missSlowTime: 0.45,
     wiggleStun: 1.5,
-    smashBreakSlowMul: 0.6,
     /** Hunters only learn generator progress within this distance. */
     genKnownRadius: 750,
-    blindProximityMul: 0.5,
   },
+
+  /** Sprinting (everyone): after the meter empties you must wait this long to sprint again. */
+  sprintLockout: 1.5,
 
   hiding: {
     enterTime: 0.6,
     exitTime: 0.5,
-    noisyEnterRadius: 300,
-    enterNoise: 380,
     breathMax: 6,
     breathRegen: 0.6,
     breathingHearRadius: 130,
-    gaspNoise: 260,
     slamWindow: 0.7,
     slamStun: 1.5,
     peek: { coneHalfAngleDeg: 28, range: 420, proximity: 40 },
@@ -123,12 +139,39 @@ export const BALANCE = {
     gaspCooldown: 2,
   },
 
-  tools: {
-    flare: { radius: 190, blind: 3, burnTime: 10, lightRadius: 320, visionMul: 0.3 },
-    flash: { holdTime: 2.0, range: 360, halfAngleDeg: 14, blind: 2.5, decayPerSec: 0.5 },
-    barricade: { stun: 4, slamRadius: 60, breakTime: 2.2, dropTime: 0.2 },
-    bottle: { maxRange: 420, flightTime: 0.7, noiseRadius: 900, decaySec: 4 },
-    stunImmunity: 6,
+  items: {
+    /** Each item kind stacks to this many; a stack takes one inventory slot. */
+    maxStack: 2,
+    /** Items spread over the whole map. */
+    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 },
+    bottle: { speed: 760, maxRange: 460, stun: 1.4, hitRadius: 10 },
+    /** Night vision goggles: a 15 s meter that never refills, used in any number of bursts. */
+    goggles: { meter: 15, toggleDelay: 0.5, coneMul: 1.2 },
+    shotgun: { shells: 3, reload: 2, range: 420, spreadDeg: 9, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
+    /** Energy drink: stamina refills 1.5x faster and the meter holds 2 s more, fading over 20 s. */
+    energy: { duration: 20, refillMul: 1.5, bonusSec: 2 },
+    /** Galaxy gas trap: triggers within 5 Zach-widths, gas covers 10 Zach-widths. */
+    trap: { triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5 },
+    /** After a stun ends Zach can't be stunned again for this long (no chain-stuns). */
+    stunImmunity: 2.5,
+    barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
+  },
+
+  /** Penetrating light (goggles, Hemp Battery): brightness of what walls would hide. */
+  xray: { brightness: 0.7, fadeIn: 1.5 },
+
+  sexton: {
+    radius: 15,
+    walk: 70,
+    flee: 200,
+    fleeTime: 6,
+    hp: 3,
+    talkTime: 1.6,
+    handTime: 0.45,
+    reach: 72,
+    /** Reel audio: full volume within `near`, silent past `far`. */
+    audio: { near: 60, far: 950 },
+    jarvisRadarSec: 10,
   },
 
   objectives: {
@@ -155,42 +198,7 @@ export const BALANCE = {
       latencySlackMs: 250,
     },
     gateOpenTime: 20,
-    gateNoise: 900,
-    extraGenerators: 2,
     stakeStageTime: 60,
-    stakeNoise: 1000,
-  },
-
-  loot: {
-    /** Per-generator parts spawned (before density scaling). */
-    fuelPerGen: 1.6,
-    wirePerGen: 1.6,
-    flaresPerSurvivor: 0.75,
-    bottlesPerSurvivor: 1.0,
-    batteriesPerSurvivor: 0.75,
-  },
-
-  /** Hearing radius of discrete sound events (how far a noise event carries). */
-  noise: {
-    pulse: 900,
-    sniff: 300,
-    smash: 700,
-    windowSmash: 650,
-    swing: 220,
-    scream: 850,
-    grunt: 500,
-    search: 250,
-    vaultFast: 420,
-    vaultSlow: 160,
-    install: 200,
-    genKick: 500,
-    genDone: 2600,
-    gateOpen: 3000,
-    barricade: 750,
-    flare: 520,
-    hunterIdle: 120,
-    downed: 140,
-    woundedMin: 110,
   },
 
   /** Interaction reach (centre-to-centre distance). */
@@ -201,14 +209,14 @@ export const BALANCE = {
     loot: 48,
     hide: 58,
     barricade: 80,
-    window: 50,
+    door: 62,
     stake: 78,
     pickup: 68,
   },
 
   trails: {
-    footprintEvery: 0.35,
-    bloodEvery: 0.45,
+    scentEvery: 0.28,
+    bloodEvery: 0.4,
     maxAgeSec: 10,
   },
 
@@ -230,7 +238,6 @@ export const BALANCE = {
     hunterSpeedSlope: 0.06,
     hunterSpeedClamp: [0.95, 1.08] as readonly [number, number],
     stunClamp: [0.75, 1.3] as readonly [number, number],
-    lootClamp: [0.7, 1.3] as readonly [number, number],
     requiredGenClamp: [3, 7] as readonly [number, number],
     difficultyRange: [0.5, 1.5] as readonly [number, number],
   },
@@ -251,12 +258,15 @@ export interface ResolvedBalance {
   pressure: number;
   scale: number;
   difficulty: number;
+  /** Every generator on the map must be started; this is how many there are. */
   requiredGenerators: number;
   totalGenerators: number;
   repairTime: number;
+  /** Multiplier on Zach's walk and sprint speed. */
+  hunterSpeedMul: number;
+  /** Zach's walk speed after scaling (for display). */
   hunterSpeed: number;
   stunMul: number;
-  lootMul: number;
   escapeNeeded: number;
   timeLimit: number;
 }
@@ -268,7 +278,7 @@ function clampRange(v: number, r: readonly [number, number]): number {
 /**
  * Auto-balance: pressure P = survivors / hunters, reference P0 = 4.
  * scale = sqrt(P / P0), clamped. Higher pressure (more survivors per hunter) makes each
- * survivor's job harder: longer repairs, a slightly faster hunter, shorter stuns, less loot.
+ * survivor's job harder: longer repairs, a slightly faster hunter, shorter stuns.
  */
 export function resolveBalance(shape: LobbyShape): ResolvedBalance {
   const S = Math.max(1, Math.floor(shape.survivors));
@@ -280,10 +290,8 @@ export function resolveBalance(shape: LobbyShape): ResolvedBalance {
 
   const required = clampRange(Math.ceil(S / Math.sqrt(H)) + 1, sc.requiredGenClamp);
   const repairTime = BALANCE.objectives.repairTime * clampRange(scale, sc.repairTimeClamp) * d;
-  const hunterSpeed =
-    BALANCE.hunter.speed * clampRange(1 + sc.hunterSpeedSlope * (scale - 1), sc.hunterSpeedClamp) * (1 + 0.05 * (d - 1));
+  const hunterSpeedMul = clampRange(1 + sc.hunterSpeedSlope * (scale - 1), sc.hunterSpeedClamp) * (1 + 0.05 * (d - 1));
   const stunMul = clampRange(1 / scale, sc.stunClamp) / d;
-  const lootMul = clampRange(1 / scale, sc.lootClamp) / Math.sqrt(d);
   const fraction = shape.escapeFraction ?? BALANCE.world.escapeFraction;
   const escapeNeeded = Math.max(1, Math.ceil(S * fraction - 1e-9));
 
@@ -294,11 +302,11 @@ export function resolveBalance(shape: LobbyShape): ResolvedBalance {
     scale,
     difficulty: d,
     requiredGenerators: required,
-    totalGenerators: required + BALANCE.objectives.extraGenerators,
+    totalGenerators: required,
     repairTime,
-    hunterSpeed,
+    hunterSpeedMul,
+    hunterSpeed: BALANCE.hunter.walk * hunterSpeedMul,
     stunMul,
-    lootMul,
     escapeNeeded,
     timeLimit: BALANCE.world.matchTimeLimit,
   };

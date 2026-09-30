@@ -8,6 +8,7 @@ export class Input {
   mouseY = 0;
   readonly buttons = [false, false, false];
   enabled = true;
+  private wheel = 0;
 
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', this.onKeyDown);
@@ -17,6 +18,19 @@ export class Input {
     target.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
     target.addEventListener('contextmenu', (e) => e.preventDefault());
+    target.addEventListener('wheel', this.onWheel, { passive: false });
+  }
+
+  private onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    if (this.enabled) this.wheel += Math.sign(e.deltaY);
+  };
+
+  /** Returns and clears the mouse wheel steps since the last call (+1 = scrolled down). */
+  takeWheel(): number {
+    const w = this.wheel;
+    this.wheel = 0;
+    return w;
   }
 
   private isTyping(e: Event): boolean {
@@ -98,5 +112,6 @@ export class Input {
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('mousemove', this.onMouseMove);
     this.target.removeEventListener('mousedown', this.onMouseDown);
+    this.target.removeEventListener('wheel', this.onWheel);
   }
 }

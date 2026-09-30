@@ -3,13 +3,14 @@ import { hash32, Rng } from '../rng';
 import { pointInPolygon, pointSegDist2 } from '../math';
 import { overlapsCollider } from '../collision';
 import { poissonDisc } from './poisson';
-import { generateWarehouse, type OpeningSpot } from './warehouse';
+import { generateWarehouse, type DoorSpot, type OpeningSpot } from './warehouse';
 import { NavGrid } from './navgrid';
 import { MapWorld, inRect } from './world';
 import {
   LOOT_KINDS,
   SURFACES,
   type BarricadeDef,
+  type DoorDef,
   type GeneratorDef,
   type HidingSpotDef,
   type LightDef,
@@ -23,7 +24,6 @@ import {
   type Surface,
   type TreeDef,
   type WallSeg,
-  type WindowDef,
 } from './types';
 
 const W = BALANCE.world.size;
@@ -32,23 +32,13 @@ const WH_X = (W - WH) / 2;
 const WH_Y = (W - WH) / 2;
 const RASTER = 20;
 
-/** Map parameters for a match, derived from the resolved balance. */
+/** Map parameters for a match, derived from the resolved balance. Item counts are fixed. */
 export function mapParamsFor(seed: number, rb: ResolvedBalance): MapParams {
-  const L = BALANCE.loot;
   const S = rb.survivors;
-  const gens = rb.totalGenerators;
-  const need = rb.requiredGenerators;
-  const count = (v: number, min: number): number => Math.max(min, Math.round(v * rb.lootMul));
   return {
     seed: seed >>> 0,
-    generators: gens,
-    loot: {
-      fuel: count(need * L.fuelPerGen, need + 1),
-      wire: count(need * L.wirePerGen, need + 1),
-      flare: count(S * L.flaresPerSurvivor, 1),
-      bottle: count(S * L.bottlesPerSurvivor, 1),
-      battery: count(S * L.batteriesPerSurvivor, 1),
-    },
+    generators: rb.totalGenerators,
+    loot: { ...BALANCE.items.counts },
     stakes: Math.max(6, Math.min(12, S + 4)),
   };
 }
@@ -107,7 +97,7 @@ class KeepOut {
 interface Kit {
   walls: WallSeg[];
   rocks: RockDef[];
-  windows: OpeningSpot[];
+  doors: DoorSpot[];
   barricades: OpeningSpot[];
   wrecks: Rect[];
   radius: number;
@@ -128,7 +118,7 @@ function rot(x: number, y: number, k: number): [number, number] {
 
 /** Loop structures placed around woods generators (DBD-style "jungle gyms"). */
 function buildKit(type: number, cx: number, cy: number, k: number, rng: Rng): Kit {
-  const kit: Kit = { walls: [], rocks: [], windows: [], barricades: [], wrecks: [], radius: 150 };
+  const kit: Kit = { walls: [], rocks: [], doors: [], barricades: [], wrecks: [], radius: 150 };
   const seg = (ax: number, ay: number, bx: number, by: number, kind: WallSeg['kind'], vision = true): void => {
     const [x0, y0] = rot(ax, ay, k);
     const [x1, y1] = rot(bx, by, k);
@@ -140,23 +130,22 @@ function buildKit(type: number, cx: number, cy: number, k: number, rng: Rng): Ki
     return { x: cx + px, y: cy + py, angle: angle % Math.PI, length };
   };
   if (type === 0) {
-    // L-wall with a window.
+    // L-wall with a gap to cut through.
     seg(-130, -60, -35, -60, 'shack');
-    seg(-35, -60, 35, -60, 'window', false);
     seg(35, -60, 130, -60, 'shack');
     seg(130, -60, 130, 95, 'shack');
-    kit.windows.push(opening(0, -60, true, 70));
     kit.radius = 160;
   } else if (type === 1) {
-    // Shack: door gap on one side, window opposite.
+    // Shack: a door on one side, an open gap opposite (run in, run through).
     seg(-95, -65, -35, -65, 'shack');
-    seg(-35, -65, 35, -65, 'window', false);
     seg(35, -65, 95, -65, 'shack');
     seg(95, -65, 95, 65, 'shack');
     seg(95, 65, 40, 65, 'shack');
     seg(-40, 65, -95, 65, 'shack');
     seg(-95, 65, -95, -65, 'shack');
-    kit.windows.push(opening(0, -65, true, 70));
+    const [hx, hy] = rot(40, 65, k);
+    const [ex, ey] = rot(-40, 65, k);
+    kit.doors.push({ hx: cx + hx, hy: cy + hy, angle: Math.atan2(ey - hy, ex - hx), length: 80, swing: 1, open: rng.chance(0.5) });
     kit.radius = 140;
   } else {
     // Car wreck and boulders with a barricade in the gap between them.
@@ -222,7 +211,7 @@ function segIntersectsRect(ax: number, ay: number, bx: number, by: number, r: Re
 
 /**
  * Generates the full map from a seed. The same params produce the identical map on every
- * client and the host. Each attempt is validated (reachability, loops, enough parts); a
+ * client and the host. Each attempt is validated (reachability, loops, items placed); a
  * failed attempt deterministically re-rolls with a derived seed.
  */
 export function generateMap(params: MapParams): MapData {
@@ -347,7 +336,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   const cabins: Rect[] = [];
   const hidingSpots: Omit<HidingSpotDef, 'id'>[] = [];
   const lootCandidates: { x: number; y: number }[] = [...wh.lootSpots];
-  const windowSpots: OpeningSpot[] = [...wh.windows];
+  const doorSpots: DoorSpot[] = [...wh.doors];
   const barricadeSpots: OpeningSpot[] = [...wh.barricadeSpots];
   const cabinClearings = new Set<Circle>();
   for (const c of rng.shuffle(clearings.slice(1))) {
@@ -361,7 +350,6 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     cabins.push(rect);
     cabinClearings.add(c);
     const doorSide = rng.int(0, 3);
-    const winSide = (doorSide + 2) % 4;
     const sides: [number, number, number, number][] = [
       [rect.x, rect.y, rect.x + cw, rect.y],
       [rect.x + cw, rect.y, rect.x + cw, rect.y + ch],
@@ -373,13 +361,11 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       const my = (ay + by) / 2;
       const ux = (bx - ax) / Math.hypot(bx - ax, by - ay);
       const uy = (by - ay) / Math.hypot(bx - ax, by - ay);
-      if (side === doorSide || side === winSide) {
+      if (side === doorSide) {
         walls.push({ ax, ay, bx: mx - ux * 38, by: my - uy * 38, kind: 'cabin', vision: true, move: true });
         walls.push({ ax: mx + ux * 38, ay: my + uy * 38, bx, by, kind: 'cabin', vision: true, move: true });
-        if (side === winSide) {
-          walls.push({ ax: mx - ux * 38, ay: my - uy * 38, bx: mx + ux * 38, by: my + uy * 38, kind: 'window', vision: false, move: true });
-          windowSpots.push({ x: mx, y: my, angle: Math.atan2(uy, ux), length: 76 });
-        }
+        // Doors swing outward (to the right of a clockwise side is outside).
+        doorSpots.push({ hx: mx - ux * 38, hy: my - uy * 38, angle: Math.atan2(uy, ux), length: 76, swing: -1, open: false });
       } else {
         walls.push({ ax, ay, bx, by, kind: 'cabin', vision: true, move: true });
       }
@@ -467,7 +453,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       const kit = buildKit(type, kx, ky, rng.int(0, 3), rng);
       walls.push(...kit.walls);
       rocks.push(...kit.rocks);
-      windowSpots.push(...kit.windows);
+      doorSpots.push(...kit.doors);
       barricadeSpots.push(...kit.barricades);
       wreckRects.push(...kit.wrecks);
       kitCircles.push({ x: kx, y: ky, r: kit.radius });
@@ -644,9 +630,12 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   const tr = rng.fork(5);
   const pts = poissonDisc(tr, 45, 45, W - 45, W - 45, 88, (x, y) => !keep.blocked(x, y));
   for (const [x, y] of pts) {
+    // A quarter of the woods is thinned out.
+    if (tr.next() >= BALANCE.world.treeKeep) continue;
     const roll = tr.next();
-    if (roll < 0.07) rocks.push({ x, y, r: tr.range(24, 36), variant: tr.int(0, 2) });
-    else if (roll < 0.66) trees.push({ x, y, r: tr.range(14, 21), kind: 'pine', variant: tr.int(0, 3) });
+    if (roll < 0.08) rocks.push({ x, y, r: tr.range(24, 36), variant: tr.int(0, 2) });
+    else if (roll < 0.55) trees.push({ x, y, r: tr.range(14, 21), kind: 'pine', variant: tr.int(0, 3) });
+    else if (roll < 0.85) trees.push({ x, y, r: tr.range(15, 22), kind: 'oak', variant: tr.int(0, 3) });
     else trees.push({ x, y, r: tr.range(12, 17), kind: 'dead', variant: tr.int(0, 3) });
   }
   const bushes: MapData['bushes'] = [];
@@ -668,14 +657,20 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     return { x: hunterClearing.x + Math.cos(a) * 70, y: hunterClearing.y + Math.sin(a) * 70 };
   });
 
-  // Barricades and windows get ids; barricades get dynamic segments (inactive while standing).
+  // Barricades and doors get ids and dynamic segments (barricades inactive while standing,
+  // doors active while closed; doors also block sight).
   const barricades: BarricadeDef[] = barricadeSpots.map((b, id) => {
     const ux = Math.cos(b.angle) * (b.length / 2);
     const uy = Math.sin(b.angle) * (b.length / 2);
     const dyn = dynamicSegments.push({ ax: b.x - ux, ay: b.y - uy, bx: b.x + ux, by: b.y + uy, active: false }) - 1;
     return { id, x: b.x, y: b.y, angle: b.angle, length: b.length, dyn };
   });
-  const windows: WindowDef[] = windowSpots.map((w, id) => ({ id, x: w.x, y: w.y, angle: w.angle, length: w.length }));
+  const doors: DoorDef[] = doorSpots.map((d, id) => {
+    const bx = d.hx + Math.cos(d.angle) * d.length;
+    const by = d.hy + Math.sin(d.angle) * d.length;
+    const dyn = dynamicSegments.push({ ax: d.hx, ay: d.hy, bx, by, active: !d.open, vision: true }) - 1;
+    return { id, hx: d.hx, hy: d.hy, angle: d.angle, length: d.length, swing: d.swing, dyn };
+  });
 
   const partial: MapData = {
     params,
@@ -702,7 +697,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     loot: [],
     stakes: stakes.map((s, id) => ({ id, ...s })),
     barricades,
-    windows,
+    doors,
     gate: { ...wh.gate, dyn: gateDyn },
     lights,
     survivorSpawns,
@@ -780,14 +775,15 @@ export interface MapValidation {
 const LOOP_MIN_CELLS = 18;
 
 /**
- * Checks that everything important is reachable from the survivor spawn (with the gate open
- * and barricades standing), that enough parts exist, and that every generator has at least
- * two loopable structures nearby.
+ * Checks that everything important is reachable from the survivor spawn (with the gate and
+ * doors open and barricades standing), that every item was placed, and that every generator
+ * has at least two loopable structures nearby.
  */
 export function validateMap(d: MapData, nav?: NavGrid): MapValidation {
   const problems: string[] = [];
   const world = new MapWorld(d);
   world.geo.setDynamicActive(d.gate.dyn, false);
+  for (const door of d.doors) world.geo.setDynamicActive(door.dyn, false);
   const grid = nav ?? new NavGrid(world.geo, 20, 15);
   const start = grid.nearestWalkable(d.survivorSpawns[0].x, d.survivorSpawns[0].y, 6);
   if (start < 0) return { ok: false, problems: ['spawn blocked'], loopsPerGenerator: [] };
@@ -811,10 +807,9 @@ export function validateMap(d: MapData, nav?: NavGrid): MapValidation {
   if (!reachable(d.gate.leverX, d.gate.leverY)) problems.push('gate lever unreachable');
   if (!reachable(d.exitZone.x + d.exitZone.w / 2, d.exitZone.y + d.exitZone.h / 2, 4)) problems.push('exit unreachable');
   for (const h of d.hunterSpawns) if (!reachable(h.x, h.y, 4)) problems.push('hunter spawn unreachable');
-  const fuel = d.loot.filter((l) => l.item === 'fuel').length;
-  const wire = d.loot.filter((l) => l.item === 'wire').length;
-  const need = d.params.loot.fuel;
-  if (fuel < Math.min(need, d.generators.length) || wire < Math.min(d.params.loot.wire, d.generators.length)) problems.push('not enough parts');
+  const items = d.loot.length;
+  const wanted = Object.values(d.params.loot).reduce((a, b) => a + b, 0);
+  if (items < wanted) problems.push(`only ${items} of ${wanted} items placed`);
   if (d.generators.length < d.params.generators) problems.push('not enough generators');
 
   const loopsPerGenerator = d.generators.map((g) => countLoops(grid, reach, g.x, g.y, 480));

@@ -3,7 +3,6 @@ import {
   Gait,
   Health,
   Prompt,
-  ToolKind,
   emptyInput,
   newMoveState,
   type InputCmd,
@@ -13,15 +12,6 @@ import {
 } from '@manhunt/shared';
 
 export const HISTORY_TICKS = 16;
-
-export interface VaultState {
-  fx: number;
-  fy: number;
-  tx: number;
-  ty: number;
-  t: number;
-  dur: number;
-}
 
 /** Authoritative per-player state on the host. */
 export interface SimPlayer {
@@ -51,11 +41,9 @@ export interface SimPlayer {
   actionT: number;
   actionDur: number;
   actionTarget: number;
-  vault: VaultState | null;
 
   stunT: number;
   immuneT: number;
-  blindT: number;
   carrying: number;
   carriedBy: number;
   stakeId: number;
@@ -72,23 +60,32 @@ export interface SimPlayer {
   holdingBreath: boolean;
   gaspCd: number;
 
-  fuel: number;
-  wire: number;
-  tool: ToolKind;
-  toolCount: number;
-  flashCharges: number;
-  flashHold: number;
-  flashTarget: number;
+  /** Survivor inventory: count per ItemKind (index 0 unused). */
+  inv: number[];
+  /** Selected item kind (from the client's inventory slot). */
+  selItem: number;
+  /** Meter (seconds) of each pair of goggles carried, the one in use first. */
+  goggles: number[];
+  gogglesOn: boolean;
+  gogglesCd: number;
+  /** Shells left in each shotgun carried, the one in use first. */
+  shells: number[];
+  reloadT: number;
+  confit: number;
+  /** JARVIS: 0 none, 1 tablet in hand, 2 used, 3 infinite (testing mode). */
+  jarvis: number;
+  jarvisT: number;
+  scareT: number;
+  gassed: boolean;
 
   attackCd: number;
   attackWindup: number;
-  attackFromLunge: boolean;
+  swingT: number;
   lungeHit: boolean;
   wasLunging: boolean;
-  pulseCd: number;
-  bloodhoundCd: number;
-  bloodhoundT: number;
-  smashCd: number;
+  burstCd: number;
+  /** Hemp Battery: 0 none, 1 carried, 2 infinite (testing mode). */
+  hemp: number;
 
   noise: number;
   prompt: Prompt;
@@ -97,10 +94,8 @@ export interface SimPlayer {
   prompt2Target: number;
   stakedBy: number;
   slamWindow: number;
-  lastPrint: number;
+  lastScent: number;
   lastBlood: number;
-  chaseT: number;
-  inChase: boolean;
   terror: number;
 
   spectating: number;
@@ -120,7 +115,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     tint,
     connected: true,
     disconnectedAt: 0,
-    move: newMoveState(x, y),
+    move: newMoveState(x, y, role === 'hunter' ? 'hunter' : 'survivor'),
     facing: -Math.PI / 2,
     aimDist: 0,
     gait: Gait.Idle,
@@ -136,10 +131,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     actionT: 0,
     actionDur: 0,
     actionTarget: -1,
-    vault: null,
     stunT: 0,
     immuneT: 0,
-    blindT: 0,
     carrying: 0,
     carriedBy: 0,
     stakeId: -1,
@@ -153,22 +146,25 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     breath: 1,
     holdingBreath: false,
     gaspCd: 0,
-    fuel: 0,
-    wire: 0,
-    tool: ToolKind.None,
-    toolCount: 0,
-    flashCharges: 0,
-    flashHold: 0,
-    flashTarget: 0,
+    inv: [0, 0, 0, 0, 0, 0],
+    selItem: 0,
+    goggles: [],
+    gogglesOn: false,
+    gogglesCd: 0,
+    shells: [],
+    reloadT: 0,
+    confit: 0,
+    jarvis: 0,
+    jarvisT: 0,
+    scareT: 0,
+    gassed: false,
     attackCd: 0,
     attackWindup: 0,
-    attackFromLunge: false,
+    swingT: 0,
     lungeHit: false,
     wasLunging: false,
-    pulseCd: 0,
-    bloodhoundCd: 0,
-    bloodhoundT: 0,
-    smashCd: 0,
+    burstCd: 0,
+    hemp: 0,
     noise: 0,
     prompt: Prompt.None,
     promptTarget: -1,
@@ -176,10 +172,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     prompt2Target: -1,
     stakedBy: 0,
     slamWindow: 0,
-    lastPrint: 0,
+    lastScent: 0,
     lastBlood: 0,
-    chaseT: 0,
-    inChase: false,
     terror: 0,
     spectating: 0,
     history: new Float32Array(HISTORY_TICKS * 2),
@@ -224,6 +218,6 @@ export function inPlay(p: SimPlayer): boolean {
 /** Can walk around and interact (not downed, carried, staked, hidden). */
 export function canAct(p: SimPlayer): boolean {
   if (p.role === 'spectator') return false;
-  if (p.role === 'hunter') return p.stunT <= 0;
-  return (p.health === Health.Healthy || p.health === Health.Wounded) && p.hideState === 0 && !p.vault;
+  if (p.role === 'hunter') return p.stunT <= 0 && p.health !== Health.Eliminated;
+  return (p.health === Health.Healthy || p.health === Health.Wounded) && p.hideState === 0;
 }

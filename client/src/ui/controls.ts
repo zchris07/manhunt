@@ -1,30 +1,34 @@
 export const SURVIVOR_CONTROLS: [string, string][] = [
   ['W A S D', 'Move'],
   ['Mouse', 'Aim your flashlight'],
-  ['Shift', 'Run (loud)'],
-  ['C / Ctrl', 'Crouch (quiet, slow)'],
-  ['E', 'Interact: loot, repair, heal, revive, unstake, hide, open gate'],
-  ['Space', 'Vault a window or barricade · slam a barricade down · skill checks · hold breath while hidden'],
-  ['F (hold)', 'Flashlight flash: hold the beam on Zach ~2 s to blind him (uses a battery)'],
-  ['Right mouse / G', 'Use item: light a flare or throw a bottle at the cursor'],
+  ['Shift', 'Sprint (8 s meter, refills in 10 s; wait 1.5 s after it runs dry)'],
+  ['C / Ctrl', 'Crouch (slow and quiet)'],
+  ['E', 'Interact: start generators, pick up, heal, revive, unstake, hide, doors, talk to Sexton'],
+  ['Left mouse', 'Use the selected item'],
+  ['Mouse wheel / 1-5', 'Select an inventory slot'],
+  ['Tab', 'Rearrange your inventory (drag and drop)'],
+  ['Q', "JARVIS (after Sexton Science hands you his tablet): reveals the map and shows Zach for 10 s"],
+  ['Space', 'Slam a barricade down · skill checks · hold breath while hidden'],
   ['E while hidden', 'Leave (press again to stay) · burst out if Zach is searching your spot'],
   ['Move keys while carried', 'Struggle free'],
+  ['M', 'Full map (only what you have seen)'],
 ];
 
 export const HUNTER_CONTROLS: [string, string][] = [
-  ['W A S D', 'Move'],
+  ['W A S D', 'Move (you walk a little slower than survivors)'],
+  ['Shift', 'Sprint (6 s meter, 20% faster than survivors)'],
   ['Mouse', 'Look'],
-  ['Left mouse', 'Attack'],
-  ['Right mouse / Shift', 'Lunge'],
-  ['Q', "Stalker's Pulse: reveal recent survivor noise"],
-  ['R', 'Bloodhound: see footprints and blood trails'],
-  ['F', 'Vault Smash: crash through a window or barricade'],
-  ['E', 'Pick up · stake · search hiding spot · damage generator'],
-  ['Space', 'Vault a window · break a barricade'],
+  ['Left mouse', 'Machete swipe (two swipes break a barricade)'],
+  ['F', 'Lunge: a quick dash; 2 charges, 7 s each; touching a survivor hits them'],
+  ['Right mouse', 'Soundcloud Burst: a ring through every wall that jump-scares survivors (12 s)'],
+  ['Q', 'Hemp Battery (slay Sexton Science to get one): wider view and light through walls for 8 s'],
+  ['E', 'Pick up · stake · search a hiding spot · damage a generator · doors'],
+  ['M', 'Full map (you know the whole map and every stake)'],
 ];
 
 export const GENERAL_CONTROLS: [string, string][] = [
   ['Esc', 'Settings and controls (the game keeps running)'],
+  ['T', 'Testing mode only: switch between Zach and survivor'],
   ['Click / ← →', 'Switch who you spectate'],
 ];
 
@@ -39,10 +43,14 @@ export function controlsHtml(which: 'survivor' | 'hunter' | 'both'): string {
 }
 
 export const HOW_TO_PLAY = `
-<p class="note">Survivors: scavenge <b>fuel</b> and <b>wire</b> in the woods and the warehouse, install them in
-generators and repair them. Once enough generators run, the exit gate on the far side of the warehouse gets power.
-Hold it open for 20 seconds, then escape through the yard. Your team wins if enough of you escape.</p>
-<p class="note">Zach Branch can't be killed, only stunned and blinded, and he gets a few seconds of immunity after each
-stun. He hits you from healthy to wounded to downed, carries you to a scarecrow stake, and a second staking
-eliminates you. Teammates can revive you and cut you down.</p>
+<p class="note">Survivors: start <b>every generator</b> on the map (hold E, and hit the skill checks with Space).
+Then the exit gate on the far side of the warehouse gets power: hold it open for 20 seconds and escape through the yard.
+Your team wins if enough of you escape. Pick up items on the way (2 of each at most): bottles and shotguns stun Zach,
+galaxy gas traps slow him, night vision goggles see through walls, energy drinks keep you sprinting, and duck confit
+revives a teammate instantly.</p>
+<p class="note">Zach Branch can't be killed, only stunned, and after each stun he is briefly immune. He hits you from
+healthy to wounded to downed, carries you to a scarecrow stake, and a second staking eliminates you. He always smells
+anyone sprinting or bleeding (a red trail), and he knows the whole map.</p>
+<p class="note">Sexton Science wanders the woods playing his tunes. Talk to him for a tablet (JARVIS). Zach can slay him
+for a Hemp Battery.</p>
 `;

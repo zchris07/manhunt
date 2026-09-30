@@ -7,23 +7,43 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(b.pressure).toBe(4);
     expect(b.scale).toBe(1);
     expect(b.repairTime).toBe(BALANCE.objectives.repairTime);
-    expect(b.hunterSpeed).toBe(BALANCE.hunter.speed);
+    expect(b.hunterSpeedMul).toBe(1);
+    expect(b.hunterSpeed).toBe(BALANCE.hunter.walk);
     expect(b.stunMul).toBe(1);
-    expect(b.lootMul).toBe(1);
-    // required generators = clamp(ceil(S / sqrt(H)) + 1, 3, 7)
+    // required generators = clamp(ceil(S / sqrt(H)) + 1, 3, 7); every generator is required.
     expect(b.requiredGenerators).toBe(5);
-    expect(b.totalGenerators).toBe(5 + BALANCE.objectives.extraGenerators);
+    expect(b.totalGenerators).toBe(5);
     expect(b.escapeNeeded).toBe(2);
   });
 
-  it('matches the prompt defaults: walk 120, run 190, crouch 70, Zach 205, lunge x2 for 0.6 s every 12 s', () => {
-    expect(BALANCE.survivor.walk).toBe(120);
-    expect(BALANCE.survivor.run).toBe(190);
-    expect(BALANCE.survivor.crouch).toBe(70);
-    expect(BALANCE.hunter.speed).toBe(205);
-    expect(BALANCE.hunter.lunge).toMatchObject({ mul: 2, duration: 0.6, cooldown: 12 });
-    expect(BALANCE.hunter.speed).toBeGreaterThan(BALANCE.survivor.run);
-    expect(BALANCE.tools.stunImmunity).toBe(6);
+  it('movement: everything 20% faster; Zach walks 10% slower and sprints 20% faster than survivors', () => {
+    expect(BALANCE.survivor.walk).toBeCloseTo(144);
+    expect(BALANCE.survivor.run).toBeCloseTo(228);
+    expect(BALANCE.survivor.crouch).toBeCloseTo(84);
+    expect(BALANCE.hunter.walk).toBeCloseTo(BALANCE.survivor.walk * 0.9);
+    expect(BALANCE.hunter.sprint).toBeCloseTo(BALANCE.survivor.run * 1.2);
+    expect(BALANCE.survivor.stamina).toEqual({ max: 8, refill: 10 });
+    expect(BALANCE.hunter.stamina).toEqual({ max: 6, refill: 6 });
+    expect(BALANCE.sprintLockout).toBe(1.5);
+  });
+
+  it('matches the requested kit numbers', () => {
+    expect(BALANCE.hunter.lunge).toMatchObject({ charges: 2, recharge: 7, duration: 0.5, hitboxMul: 1.5 });
+    expect(BALANCE.hunter.attack.range).toBe(124);
+    expect(BALANCE.hunter.burst.cooldown).toBe(12);
+    expect(BALANCE.hunter.burst.width).toBe(BALANCE.hunter.radius * 2 * 6);
+    expect(BALANCE.hunter.burst.scareTime).toBe(4);
+    expect(BALANCE.hunter.hemp).toMatchObject({ duration: 8, zoomOut: 1.2, speedMul: 1.1 });
+    expect(BALANCE.items.counts).toEqual({ bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 });
+    expect(BALANCE.items.maxStack).toBe(2);
+    expect(BALANCE.items.goggles).toMatchObject({ meter: 15, toggleDelay: 0.5, coneMul: 1.2 });
+    expect(BALANCE.items.shotgun).toMatchObject({ shells: 3, reload: 2, stun: 0.8 });
+    expect(BALANCE.items.energy).toMatchObject({ duration: 20, refillMul: 1.5, bonusSec: 2 });
+    expect(BALANCE.items.trap.triggerRadius).toBe(BALANCE.hunter.radius * 2 * 5);
+    expect(BALANCE.items.trap.gasRadius).toBe(BALANCE.hunter.radius * 2 * 10);
+    expect(BALANCE.items.trap.spreadTime).toBe(0.5);
+    expect(BALANCE.xray.brightness).toBe(0.7);
+    expect(BALANCE.world.treeKeep).toBe(0.75);
   });
 
   it('keeps every lobby shape within the clamps', () => {
@@ -34,8 +54,8 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
         expect(b.requiredGenerators).toBeLessThanOrEqual(7);
         expect(b.repairTime).toBeGreaterThanOrEqual(BALANCE.objectives.repairTime * 0.75 - 1e-9);
         expect(b.repairTime).toBeLessThanOrEqual(BALANCE.objectives.repairTime * 1.35 + 1e-9);
-        expect(b.hunterSpeed).toBeGreaterThanOrEqual(BALANCE.hunter.speed * 0.95 - 1e-9);
-        expect(b.hunterSpeed).toBeLessThanOrEqual(BALANCE.hunter.speed * 1.08 + 1e-9);
+        expect(b.hunterSpeedMul).toBeGreaterThanOrEqual(0.95 - 1e-9);
+        expect(b.hunterSpeedMul).toBeLessThanOrEqual(1.08 + 1e-9);
         expect(b.stunMul).toBeGreaterThanOrEqual(0.75 - 1e-9);
         expect(b.stunMul).toBeLessThanOrEqual(1.3 + 1e-9);
         expect(b.escapeNeeded).toBeGreaterThanOrEqual(1);
@@ -50,7 +70,6 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(high.repairTime).toBeGreaterThan(low.repairTime);
     expect(high.hunterSpeed).toBeGreaterThan(low.hunterSpeed);
     expect(high.stunMul).toBeLessThan(low.stunMul);
-    expect(high.lootMul).toBeLessThan(low.lootMul);
     expect(high.requiredGenerators).toBeGreaterThan(low.requiredGenerators);
   });
 

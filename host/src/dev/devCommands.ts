@@ -1,4 +1,4 @@
-import { Health, resolveOverlaps } from '@manhunt/shared';
+import { BALANCE, Health, ItemKind, resolveOverlaps } from '@manhunt/shared';
 import type { World } from '../sim/World';
 
 /** DEV-ONLY: test hooks for end-to-end tests and debugging (host must run with dev: true). */
@@ -21,23 +21,38 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       break;
     }
     case 'health':
-      if (p.role === 'survivor') p.health = args[0] as Health;
+      if (p.role === 'survivor') p.health = args[0] as typeof p.health;
       break;
-    case 'parts':
-      p.fuel = 1;
-      p.wire = 1;
+    case 'give': {
+      // args: [ItemKind, count]
+      const kind = args[0] as ItemKind;
+      if (kind < ItemKind.Bottle || kind > ItemKind.Trap) break;
+      const n = Math.max(0, Math.min(BALANCE.items.maxStack, args[1] ?? 1));
+      p.inv[kind] = n;
+      if (kind === ItemKind.Goggles) p.goggles = Array.from({ length: n }, () => BALANCE.items.goggles.meter);
+      if (kind === ItemKind.Shotgun) p.shells = Array.from({ length: n }, () => BALANCE.items.shotgun.shells);
       break;
-    case 'give':
-      // args: [toolKind (1 flare, 2 bottle), count, batteries]
-      p.tool = (args[0] ?? 0) as typeof p.tool;
-      p.toolCount = args[1] ?? 1;
-      p.flashCharges = Math.max(p.flashCharges, args[2] ?? 0);
+    }
+    case 'confit':
+      p.confit = 1;
       break;
+    case 'jarvis':
+      p.jarvis = 1;
+      break;
+    case 'hemp':
+      p.hemp = 1;
+      break;
+    case 'sexton': {
+      // Bring Sexton next to this player.
+      const s = w.sexton;
+      s.x = p.move.x + (args[0] ?? 60);
+      s.y = p.move.y + (args[1] ?? 0);
+      s.unstick();
+      break;
+    }
     case 'gens':
-      // Nearly finish the required generators; the objective system completes them next tick.
-      for (let i = 0; i < w.balance.requiredGenerators; i++) {
-        const g = w.gens[i];
-        g.fuel = g.wire = true;
+      // Nearly finish every generator; the objective system completes them next tick.
+      for (const g of w.gens) {
         g.regressing = false;
         g.progress = 1;
       }
@@ -56,6 +71,9 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
     }
     case 'time':
       w.balance.timeLimit = w.time + Math.max(1, args[0]);
+      break;
+    case 'heal':
+      if (p.role === 'survivor' && p.health !== Health.Eliminated && p.health !== Health.Escaped) p.health = Health.Healthy;
       break;
   }
 }

@@ -29,15 +29,17 @@ test('vision sandbox: entities are visible in the cone and culled outside it', a
     window.__sandbox.setEnemy(1640, 1200);
   });
   await page.waitForTimeout(600);
-  const [inCone] = await samplePixels(page, [[782, 360]]);
-  // The hockey mask is near-white inside the cone.
-  expect(Math.min(...inCone)).toBeGreaterThan(120);
+  // Sample a small patch around the enemy: the white hockey mask shows inside the cone.
+  const patch: [number, number][] = [];
+  for (let dx = -12; dx <= 12; dx += 4) for (let dy = -12; dy <= 12; dy += 4) patch.push([780 + dx, 360 + dy]);
+  const inCone = await samplePixels(page, patch);
+  expect(Math.max(...inCone.map((c) => Math.min(...c)))).toBeGreaterThan(95);
 
   await page.evaluate(() => window.__sandbox.setPlayer(1500, 1200, Math.PI));
   await page.waitForTimeout(600);
-  const [behind] = await samplePixels(page, [[782, 360]]);
-  // Physically close but outside the vision mask: fully culled, only dark terrain remains.
-  expect(Math.max(...behind)).toBeLessThan(70);
+  const behind = await samplePixels(page, patch);
+  // Physically close but outside the vision mask: fully culled, only darkness remains.
+  expect(Math.max(...behind.map((c) => Math.max(...c)))).toBeLessThan(70);
 
   expect(errors).toEqual([]);
   // The per-frame visibility work (cone, proximity, 360-degree line of sight, lights) must

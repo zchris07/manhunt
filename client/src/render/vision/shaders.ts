@@ -1,11 +1,14 @@
 /**
- * GLSL ES 3.0 shaders for the Darkwood-style vision system.
+ * GLSL ES 3.0 shaders for the vision system.
  *
  * The visibility mask is a half-resolution RenderTexture with three channels:
  *   B = the viewer's own vision (flashlight cone + proximity circle), with distance falloff
  *   G = the viewer's 360-degree line of sight (binary, long range)
- *   R = light sources (campfires, lit generators, flares), with distance falloff
+ *   R = light sources (campfires, lamps, running generators), with distance falloff
  * visible = max(B, R * G): you see your own cone, plus lit areas you have line of sight to.
+ * See-through light (night vision goggles, the Hemp Battery) is drawn into both R (at 70%)
+ * and G, so areas behind walls show up at 70% brightness.
+ * Anything not visible is pitch black.
  */
 
 /** Filter vertex shader that also outputs the fragment's screen-space UV for mask lookups. */
@@ -44,11 +47,17 @@ float visibilityAt(vec2 screenUV)
     float los = smoothstep(0.25, 0.75, m.g);
     return clamp(max(m.b, m.r * los), 0.0, 1.0);
 }
+
+/** How brightly something with this visibility is lit (0 = black). */
+float lightAt(float v)
+{
+    return clamp(v * 1.06, 0.0, 1.06);
+}
 `;
 
 /**
- * Post-process: full colour inside vision, desaturated and dimmed outside.
- * out = mix(desaturate(scene) * dim, scene, mask), plus vignette, film grain and flicker.
+ * Post-process for the world layer: full, vivid colour where you can see, fading into pure
+ * black. Plus a light vignette, a whisper of grain and a damage flash.
  */
 export const visionFragment = /* glsl */ `
 precision highp float;
@@ -61,12 +70,10 @@ uniform sampler2D uMask;
 uniform vec2 uMaskScale;
 uniform vec2 uScreenSize;
 uniform float uTime;
-uniform float uOutsideDim;
 uniform float uGrain;
 uniform float uFlicker;
-uniform float uTerror;
-uniform float uBlind;
 uniform float uDamage;
+uniform float uSaturation;
 uniform vec3 uTint;
 
 ${maskLookup}
@@ -83,35 +90,29 @@ void main(void)
     vec4 scene = texture(uTexture, vTextureCoord);
     float vis = visibilityAt(vScreenUV);
 
+    // A touch more saturation for the comic-book palette.
     float lum = dot(scene.rgb, vec3(0.299, 0.587, 0.114));
-    vec3 outside = vec3(lum) * vec3(0.78, 0.86, 0.92) * uOutsideDim;
-    vec3 inside = scene.rgb * uTint * (0.5 + 0.8 * vis);
-    vec3 col = mix(outside, inside, smoothstep(0.02, 0.45, vis));
-
-    // Terror radius: the world drains of colour and darkens as Zach closes in.
-    float tl = dot(col, vec3(0.3333));
-    col = mix(col, vec3(tl) * vec3(1.05, 0.82, 0.8), uTerror * 0.4);
-    col *= 1.0 - uTerror * 0.3;
+    vec3 vivid = mix(vec3(lum), scene.rgb, uSaturation);
+    vec3 col = vivid * uTint * lightAt(vis) * smoothstep(0.0, 0.14, vis);
     col *= uFlicker;
 
     vec2 d = vScreenUV - 0.5;
     d.x *= uScreenSize.x / uScreenSize.y;
-    float vig = smoothstep(1.0, 0.3, length(d) + uTerror * 0.18);
-    col *= mix(0.2, 1.0, vig);
-    col += vec3(0.4, 0.0, 0.0) * uDamage * (1.0 - vig * 0.7);
-
-    col = mix(col, vec3(0.96, 0.93, 0.86), uBlind);
+    float vig = smoothstep(1.05, 0.35, length(d));
+    col *= mix(0.55, 1.0, vig);
+    col += vec3(0.55, 0.0, 0.05) * uDamage * (1.0 - vig * 0.6);
 
     float n = hash(vScreenUV * uScreenSize + fract(uTime * 7.31) * 311.0) - 0.5;
-    col += n * uGrain;
+    col += n * uGrain * step(0.02, vis);
 
     finalColor = vec4(max(col, 0.0), 1.0);
 }
 `;
 
 /**
- * Entity occlusion: dynamic entities are multiplied by a hard threshold of the mask, so they
- * are fully invisible outside vision even when physically close.
+ * Entity occlusion: dynamic entities are cut by a hard threshold of the mask, so they are
+ * fully invisible outside vision even when physically close. Inside, they are lit like the
+ * ground around them (70% brightness in see-through light).
  */
 export const entityMaskFragment = /* glsl */ `
 precision highp float;
@@ -130,6 +131,8 @@ ${maskLookup}
 void main(void)
 {
     vec4 c = texture(uTexture, vTextureCoord);
-    finalColor = c * step(uThreshold, visibilityAt(vScreenUV));
+    float vis = visibilityAt(vScreenUV);
+    float k = min(1.0, lightAt(vis));
+    finalColor = vec4(c.rgb * k, c.a) * step(uThreshold, vis);
 }
 `;

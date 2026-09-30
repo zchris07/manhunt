@@ -1,7 +1,7 @@
 export type Surface = 'forest' | 'dirt' | 'grass' | 'concrete' | 'wood' | 'water';
 export const SURFACES: readonly Surface[] = ['forest', 'dirt', 'grass', 'concrete', 'wood', 'water'];
 
-export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'window' | 'dock' | 'yard' | 'log';
+export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'dock' | 'yard' | 'log';
 
 export interface WallSeg {
   ax: number;
@@ -13,7 +13,7 @@ export interface WallSeg {
   move: boolean;
 }
 
-export type TreeKind = 'pine' | 'dead';
+export type TreeKind = 'pine' | 'oak' | 'dead';
 
 export interface TreeDef {
   x: number;
@@ -58,8 +58,8 @@ export interface HidingSpotDef {
   exitY: number;
 }
 
-export type LootKind = 'fuel' | 'wire' | 'flare' | 'bottle' | 'battery';
-export const LOOT_KINDS: readonly LootKind[] = ['fuel', 'wire', 'flare', 'bottle', 'battery'];
+export type LootKind = 'bottle' | 'goggles' | 'confit' | 'shotgun' | 'energy' | 'trap';
+export const LOOT_KINDS: readonly LootKind[] = ['goggles', 'shotgun', 'confit', 'energy', 'trap', 'bottle'];
 
 export interface LootSpawnDef {
   id: number;
@@ -94,13 +94,20 @@ export interface BarricadeDef {
   dyn: number;
 }
 
-/** A vaultable window: blocks movement, not vision. */
-export interface WindowDef {
+/**
+ * A hinged door. Closed, its panel runs from the hinge (hx,hy) along `angle` for `length`
+ * units and blocks movement and sight; open, it swings 90 degrees out of the way.
+ */
+export interface DoorDef {
   id: number;
-  x: number;
-  y: number;
+  hx: number;
+  hy: number;
   angle: number;
   length: number;
+  /** Which way the panel swings open (+1 or -1 quarter turn). */
+  swing: number;
+  /** Index into MapData.dynamicSegments. */
+  dyn: number;
 }
 
 export interface GateDef {
@@ -139,7 +146,7 @@ export interface MapData {
   width: number;
   height: number;
   walls: WallSeg[];
-  dynamicSegments: { ax: number; ay: number; bx: number; by: number; active: boolean }[];
+  dynamicSegments: { ax: number; ay: number; bx: number; by: number; active: boolean; vision?: boolean }[];
   trees: TreeDef[];
   rocks: RockDef[];
   logs: LogDef[];
@@ -159,7 +166,7 @@ export interface MapData {
   loot: LootSpawnDef[];
   stakes: StakeDef[];
   barricades: BarricadeDef[];
-  windows: WindowDef[];
+  doors: DoorDef[];
   gate: GateDef;
   lights: LightDef[];
   survivorSpawns: { x: number; y: number }[];

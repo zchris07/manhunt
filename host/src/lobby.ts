@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: LobbySettings = {
   seed: '',
   difficulty: 1,
   escapeFraction: BALANCE.world.escapeFraction,
+  testMode: false,
 };
 
 export interface RoleSplit {
@@ -73,6 +74,7 @@ export class Lobby {
       seed: s.seed.slice(0, 32),
       difficulty: Math.max(0.5, Math.min(1.5, s.difficulty)),
       escapeFraction: Math.max(0.1, Math.min(1, s.escapeFraction)),
+      testMode: s.testMode === true,
     };
   }
 

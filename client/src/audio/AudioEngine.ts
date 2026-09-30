@@ -12,18 +12,13 @@ export interface PlayOptions {
   radius?: number;
 }
 
-/** Default mapping from sound ids to procedural generators (the manifest can override). */
+/**
+ * Default mapping from sound ids to procedural generators (the manifest can override).
+ * The game only has atmosphere: wind, crickets, owls, the warehouse hum, running generators.
+ * Everything else (footsteps, hits, abilities, chase music) was removed on purpose so
+ * nothing gives Zach or the survivors away by sound.
+ */
 const DEFAULT_SOUNDS: Record<string, string> = {
-  'step.forest': 'footstepForest',
-  'step.dirt': 'footstepDirt',
-  'step.grass': 'footstepGrass',
-  'step.concrete': 'footstepConcrete',
-  'step.wood': 'footstepWood',
-  'step.water': 'footstepWater',
-  'step.heavy': 'footstepHeavy',
-  heartbeat: 'heartbeat',
-  stinger: 'stinger',
-  chase: 'chase',
   'amb.wind': 'wind',
   'amb.crickets': 'crickets',
   'amb.owl': 'owl',
@@ -32,43 +27,9 @@ const DEFAULT_SOUNDS: Record<string, string> = {
   'amb.drip': 'drip',
   'amb.creak': 'creak',
   'gen.hum': 'genHum',
-  'gen.repair': 'genRepair',
-  'gen.done': 'genDone',
-  gen_done: 'genDone',
-  gen_explode: 'genExplode',
-  gen_kick: 'genKick',
-  hit: 'hit',
-  'hit.self': 'hitSelf',
-  scream: 'scream',
-  'stun.hit': 'stunHit',
-  'stun.blind': 'stunBlind',
-  barricade: 'barricade',
-  vault: 'vault',
-  locker: 'locker',
-  rustle: 'rustle',
-  glass: 'glass',
-  flare: 'flare',
-  swing: 'swing',
-  stake: 'stake',
-  gasp: 'gasp',
-  breath: 'breath',
-  pulse: 'pulse',
-  sniff: 'sniff',
-  smash: 'smash',
-  gate: 'gateAlarm',
-  gate_open: 'gateOpen',
-  'gate.powered': 'gatePowered',
-  'gate.open': 'gateOpen',
-  'skill.warn': 'skillWarn',
-  'skill.good': 'skillGood',
-  'skill.fail': 'skillFail',
-  grunt: 'grunt',
-  install: 'install',
-  eliminated: 'eliminated',
-  search: 'search',
 };
 
-export const SOUND_IDS = Object.keys(DEFAULT_SOUNDS);
+export const SOUND_IDS = [...Object.keys(DEFAULT_SOUNDS), 'scare', 'sexton.reel'];
 
 interface Loop {
   id: string;
@@ -78,13 +39,13 @@ interface Loop {
   panner: PannerNode | null;
 }
 
-const MAX_VOICES = 40;
+const MAX_VOICES = 24;
 
 /**
- * Procedural positional audio on WebAudio. Sources are PannerNodes in a top-down plane
- * (world x -> audio x, world y -> audio z), muffled by a low-pass filter when a wall is in
- * the way. Every sound id has a slot in assets/manifest.json: a file there replaces the
- * procedural version.
+ * Positional audio on WebAudio. Sources are PannerNodes in a top-down plane (world x ->
+ * audio x, world y -> audio z), muffled by a low-pass filter when a wall is in the way.
+ * Every sound id has a slot in assets/manifest.json: a file there replaces the procedural
+ * version (the jump scare and Sexton's reel are files).
  */
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -96,13 +57,12 @@ export class AudioEngine {
   private volumes = { master: 0.8, sfx: 0.9, ambience: 0.7 };
   private readonly listener = { x: 0, y: 0 };
   private readonly loops = new Map<string, Loop>();
-  private heartbeat = 0;
-  private nextBeat = 0;
   private indoors = false;
   private ambienceOn = false;
   private nextAmbient = 0;
   private voices = 0;
   private seed = 1;
+  private clip: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   constructor(readonly assets: AssetManager) {}
 
@@ -135,8 +95,8 @@ export class AudioEngine {
       } else {
         l.setOrientation(0, 0, -1, 0, 1, 0);
       }
-      // Warm the buffers used constantly.
-      for (const id of ['step.forest', 'step.dirt', 'heartbeat', 'amb.wind', 'amb.indoor']) this.getSound(id);
+      // Warm up the ambience beds and the two music files.
+      for (const id of ['amb.wind', 'amb.indoor', 'scare', 'sexton.reel']) this.getSound(id);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -157,7 +117,7 @@ export class AudioEngine {
   /**
    * getSound(id): the file named in assets/manifest.json once it has loaded, otherwise the
    * procedural version (the counterpart of AssetManager.getTexture). Null before the audio
-   * context exists (browsers need a user gesture first).
+   * context exists (browsers need a user gesture first) or while a file-only sound loads.
    */
   getSound(id: string): AudioBuffer | null {
     const ctx = this.ctx;
@@ -171,7 +131,7 @@ export class AudioEngine {
         .then((r) => r.arrayBuffer())
         .then((ab) => ctx.decodeAudioData(ab))
         .then((b) => void this.buffers.set(id, b))
-        .catch(() => console.warn(`[audio] could not load ${entry.file}, using procedural ${id}`));
+        .catch(() => console.warn(`[audio] could not load ${entry.file}`));
     }
     const genName = entry?.procedural ?? DEFAULT_SOUNDS[id];
     const gen = genName ? SOUND_GENERATORS[genName] : undefined;
@@ -199,12 +159,12 @@ export class AudioEngine {
     }
   }
 
-  private makePanner(x: number, y: number, radius: number): PannerNode {
+  private makePanner(x: number, y: number, radius: number, near = 60): PannerNode {
     const p = this.ctx!.createPanner();
     p.panningModel = 'equalpower';
     p.distanceModel = 'linear';
-    p.refDistance = 60;
-    p.maxDistance = Math.max(80, radius);
+    p.refDistance = near;
+    p.maxDistance = Math.max(near + 20, radius);
     p.rolloffFactor = 1;
     if (p.positionX) {
       p.positionX.value = x;
@@ -246,7 +206,7 @@ export class AudioEngine {
       node.connect(p);
       node = p;
     }
-    node.connect(this.sfx);
+    node.connect(this.amb);
     this.voices++;
     src.onended = () => {
       this.voices--;
@@ -255,8 +215,38 @@ export class AudioEngine {
     src.start();
   }
 
+  /**
+   * Plays a section of a (music) file: from the manifest's `offset` for its `duration`,
+   * fading out smoothly over the last second. Restarts if already playing.
+   */
+  playClip(id: string, fadeOut = 1): boolean {
+    const ctx = this.ctx;
+    if (!ctx) return false;
+    const b = this.getSound(id);
+    if (!b) return false;
+    this.clip?.src.stop();
+    const entry = this.assets.soundEntry(id);
+    const offset = Math.min(Math.max(0, entry?.offset ?? 0), Math.max(0, b.duration - 0.1));
+    const dur = Math.min(entry?.duration ?? b.duration, b.duration - offset);
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = b;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(1, t + 0.05);
+    gain.gain.setValueAtTime(1, t + Math.max(0.06, dur - fadeOut));
+    gain.gain.linearRampToValueAtTime(0.0001, t + dur);
+    src.connect(gain).connect(this.sfx);
+    src.start(t, offset, dur + 0.05);
+    this.clip = { src, gain };
+    src.onended = () => {
+      if (this.clip?.src === src) this.clip = null;
+    };
+    return true;
+  }
+
   /** Starts, updates or (with id null) stops a named looping sound. */
-  loop(key: string, id: string | null, o: PlayOptions = {}): void {
+  loop(key: string, id: string | null, o: PlayOptions & { near?: number } = {}): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const cur = this.loops.get(key);
@@ -297,18 +287,50 @@ export class AudioEngine {
     let panner: PannerNode | null = null;
     const bus = key.startsWith('amb') ? this.amb : this.sfx;
     if (o.x !== undefined && o.y !== undefined) {
-      panner = this.makePanner(o.x, o.y, o.radius ?? 900);
+      panner = this.makePanner(o.x, o.y, o.radius ?? 900, o.near ?? 60);
       filter.connect(panner).connect(bus);
     } else {
       filter.connect(bus);
     }
-    src.start(t, this.rnd() * b.duration);
+    // Long files keep playing "continuously": join them where a clock started at 0 would be.
+    const at = b.duration > 20 ? t % b.duration : this.rnd() * b.duration;
+    src.start(t, at);
     this.loops.set(key, { id, src, gain, filter, panner });
   }
 
+  /** A robot voice announcement (speech synthesis, pitched down). */
+  announce(text: string): void {
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.pitch = 0.1;
+      u.rate = 0.85;
+      u.volume = Math.min(1, this.volumes.master * 1.1);
+      const voices = synth.getVoices();
+      const pick = voices.find((v) => /en/i.test(v.lang) && /male|david|daniel|fred|google uk/i.test(v.name)) ?? voices.find((v) => /^en/i.test(v.lang));
+      if (pick) u.voice = pick;
+      synth.cancel();
+      synth.speak(u);
+      this.lastAnnouncement = text;
+    } catch {
+      // Speech isn't available (some headless browsers): the on-screen text still shows.
+    }
+  }
+
+  lastAnnouncement = '';
+
   /** Diagnostics for tests and the debug overlay. */
-  stats(): { state: string; buffers: number; loops: string[]; voices: number } {
-    return { state: this.ctx?.state ?? 'none', buffers: this.buffers.size, loops: [...this.loops.keys()], voices: this.voices };
+  stats(): { state: string; buffers: number; loops: string[]; voices: number; clip: boolean; loaded: string[]; announced: string } {
+    return {
+      state: this.ctx?.state ?? 'none',
+      buffers: this.buffers.size,
+      loops: [...this.loops.keys()],
+      voices: this.voices,
+      clip: this.clip !== null,
+      loaded: [...this.buffers.keys()],
+      announced: this.lastAnnouncement,
+    };
   }
 
   hasLoop(key: string): boolean {
@@ -321,11 +343,8 @@ export class AudioEngine {
 
   stopAllLoops(): void {
     for (const key of [...this.loops.keys()]) if (!key.startsWith('amb')) this.loop(key, null);
-  }
-
-  /** Heartbeat intensity from the terror radius (0 = calm, 1 = Zach is right there). */
-  setHeartbeat(intensity: number): void {
-    this.heartbeat = Math.max(0, Math.min(1, intensity));
+    this.clip?.src.stop();
+    this.clip = null;
   }
 
   setAmbience(indoors: boolean, enabled: boolean): void {
@@ -337,11 +356,6 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     const t = ctx.currentTime;
-    // Heartbeat, faster and louder as the terror radius tightens.
-    if (this.heartbeat > 0.02 && t >= this.nextBeat) {
-      this.play('heartbeat', { volume: 0.25 + 0.75 * this.heartbeat, rate: 1 });
-      this.nextBeat = t + 1.3 - 0.85 * this.heartbeat;
-    }
     // Ambience beds crossfade between the woods and the warehouse.
     const outdoorVol = this.ambienceOn ? (this.indoors ? 0.12 : 0.55) : 0;
     const indoorVol = this.ambienceOn ? (this.indoors ? 0.6 : 0) : 0;

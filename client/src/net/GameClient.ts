@@ -20,7 +20,6 @@ import {
   entityY,
   generateMap,
   mapHash,
-  newMoveState,
   quantizeInput,
   stepMovement,
   type ClientMessage,
@@ -34,6 +33,7 @@ import {
   type MapData,
   type MatchPlayerInfo,
   type MatchResult,
+  type MoveContext,
   type MoveState,
   type Phase,
   type ResolvedBalance,
@@ -67,6 +67,8 @@ export interface InterpEntity {
   state: number;
   action: number;
   extra: number;
+  aux: number;
+  stamina: number;
 }
 
 export interface GameClientOptions {
@@ -105,6 +107,8 @@ export class GameClient {
   /** Visual correction offset that decays toward zero after reconciliation. */
   readonly smooth = { x: 0, y: 0 };
   corrections = 0;
+  /** Bumped whenever a door opens or closes (cached light polygons must be rebuilt). */
+  doorVersion = 0;
 
   private readonly pending: InputCmd[] = [];
   private seq = 0;
@@ -114,7 +118,8 @@ export class GameClient {
   private mapChunks: string[] = [];
   private pendingStart: Extract<HostMessage, { t: 'start' }> | null = null;
   private readonly events: GameEvent[] = [];
-  private readonly listeners: { [K in 'lobby' | 'start' | 'end' | 'close' | 'chat' | 'error' | 'welcome']: ((arg: unknown) => void)[] } = {
+  private readonly listeners: { [K in 'lobby' | 'start' | 'end' | 'close' | 'chat' | 'error' | 'welcome' | 'role']: ((arg: unknown) => void)[] } = {
+    role: [],
     lobby: [],
     start: [],
     end: [],
@@ -218,6 +223,18 @@ export class GameClient {
         }
         break;
       case 'ev':
+        if (m.e.k === 'roles' && this.match) {
+          // Testing mode: someone switched between Zach and survivor.
+          this.match.players = new Map(m.e.players.map((p) => [p.id, p]));
+          const mine = this.match.players.get(this.you);
+          if (mine && mine.role !== this.match.role) {
+            this.match.role = mine.role;
+            this.predicted = null;
+            this.prevPredicted = null;
+            this.pending.length = 0;
+            this.emit('role', mine.role);
+          }
+        }
         this.events.push(m.e);
         break;
       case 'end':
@@ -306,18 +323,27 @@ export class GameClient {
     this.buffer.push({ tick: snap.tick, entities: snap.entities });
     while (this.buffer.length > 40) this.buffer.shift();
 
-    // Dynamic colliders follow the world state (barricades, gate).
+    // Dynamic colliders follow the world state (barricades, gate, doors).
     const geo = this.match.mw.geo;
     const ws = snap.worldState;
     this.match.map.barricades.forEach((b, i) => geo.setDynamicActive(b.dyn, ws.barricades[i] === 1));
     geo.setDynamicActive(this.match.map.gate.dyn, !ws.gateOpen);
+    let doorsChanged = false;
+    this.match.map.doors.forEach((d, i) => {
+      const open = ws.doors[i] === true;
+      if (geo.isDynamicActive(d.dyn) === open) {
+        geo.setDynamicActive(d.dyn, !open);
+        doorsChanged = true;
+      }
+    });
+    if (doorsChanged) this.doorVersion++;
 
     this.reconcile(snap);
   }
 
-  private moveCtx(): { role: 'hunter' | 'survivor'; hunterSpeed: number; carrying: boolean } {
+  private moveCtx(): MoveContext {
     const m = this.match!;
-    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeed: m.balance.hunterSpeed, carrying: (this.self?.carrying ?? 0) > 0 };
+    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul, carrying: (this.self?.carrying ?? 0) > 0 };
   }
 
   private reconcile(snap: DecodedSnapshot): void {
@@ -329,13 +355,29 @@ export class GameClient {
       return;
     }
     while (this.pending.length && this.pending[0].seq <= snap.lastSeq) this.pending.shift();
-    const base = newMoveState(s.x, s.y);
-    base.mode = s.mode;
-    base.lungeT = s.lungeT;
-    base.lungeCd = s.lungeCd;
-    base.hasteT = s.hasteT;
-    base.slowT = s.slowT;
-    base.slowMul = s.slowMul || 1;
+    const base: MoveState = {
+      x: s.x,
+      y: s.y,
+      mode: s.mode,
+      lungeT: s.lungeT,
+      lungeAng: s.lungeAng,
+      lungeCharges: s.lungeCharges,
+      lungeRecharge: s.lungeRecharge,
+      kbT: s.kbT,
+      kbDur: s.kbDur,
+      kbPeak: s.kbPeak,
+      kbAng: s.kbAng,
+      hasteT: s.hasteT,
+      slowT: s.slowT,
+      slowMul: s.slowMul || 1,
+      stamina: s.stamina,
+      staminaLock: s.staminaLock,
+      sprintBlocked: s.sprintBlocked,
+      boostT: s.boostT,
+      hempT: s.hempT,
+      prevButtons: s.prevButtons,
+      sprinting: s.sprinting,
+    };
     if (this.opts.prediction !== false) {
       const ctx = this.moveCtx();
       for (const cmd of this.pending) stepMovement(base, cmd, ctx, m.mw.geo, TICK_DT);
@@ -345,7 +387,7 @@ export class GameClient {
       const ey = this.predicted.y - base.y;
       const err = Math.hypot(ex, ey);
       if (err > 120) {
-        // Teleport (vault, carried, stake): snap.
+        // Teleport (carried, stake, hiding): snap.
         this.smooth.x = 0;
         this.smooth.y = 0;
         this.prevPredicted = copyMoveState(base);
@@ -429,6 +471,8 @@ export class GameClient {
         state: eb.state,
         action: eb.action,
         extra: eb.extra,
+        aux: eb.aux,
+        stamina: eb.stamina,
       });
     }
     return out;

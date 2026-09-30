@@ -13,10 +13,20 @@ export interface OpeningSpot {
   length: number;
 }
 
+/** A door in a wall: hinge, direction of the closed panel, length, swing side. */
+export interface DoorSpot {
+  hx: number;
+  hy: number;
+  angle: number;
+  length: number;
+  swing: number;
+  open: boolean;
+}
+
 export interface WarehouseResult {
   walls: WallSeg[];
   barricadeSpots: OpeningSpot[];
-  windows: OpeningSpot[];
+  doors: DoorSpot[];
   lockers: { x: number; y: number; facing: number; exitX: number; exitY: number }[];
   barrels: Spot[];
   racks: Rect[];
@@ -30,7 +40,9 @@ export interface WarehouseResult {
 }
 
 const N = 10;
-type Edge = 'wall' | 'open' | 'window' | 'gate';
+type Edge = 'wall' | 'open' | 'door' | 'gate';
+/** Width of a warehouse door; the rest of the cell edge is wall. */
+const DOOR_W = 72;
 
 interface RoomRect {
   x: number;
@@ -41,9 +53,10 @@ interface RoomRect {
 
 /**
  * Central warehouse: an N x N cell grid. BSP picks rooms, a recursive backtracker carves
- * corridors between every room and cell, then extra walls are removed to create loops and
- * some become vaultable windows. Rooms get free-standing racks (loopable), lockers line
- * corridors, and the exit gate sits in the north wall with a fenced exit yard beyond it.
+ * corridors between every room and cell, then extra walls are removed to create loops.
+ * Room entrances and exterior entrances get hinged doors. Rooms get free-standing racks
+ * (loopable), lockers line corridors, and the exit gate sits in the north wall with a
+ * fenced exit yard beyond it.
  */
 export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number): WarehouseResult {
   const C = size / N;
@@ -150,7 +163,7 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
     visit(nr * N + nc);
   }
 
-  // Braid: remove extra walls for loops; turn some into windows.
+  // Braid: remove extra walls for loops.
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       for (const [dr, dc] of [
@@ -161,16 +174,15 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
         const nc = c + dc;
         if (nr >= N || nc >= N) continue;
         if (edgeBetween(r, c, nr, nc) !== 'wall') continue;
-        const roll = rng.next();
-        if (roll < 0.13) {
+        if (rng.next() < 0.16) {
           openBetween(r, c, nr, nc, 'open');
           doorways.push([r, c, nr, nc]);
-        } else if (roll < 0.2) openBetween(r, c, nr, nc, 'window');
+        }
       }
     }
   }
 
-  // Exterior: gate in the north wall, entrances on every side, a few windows.
+  // Exterior: gate in the north wall, entrances on every side.
   const gateCol = rng.int(3, N - 4);
   h[0][gateCol] = 'gate';
   const entrances: WarehouseResult['entrances'] = [];
@@ -205,17 +217,36 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
     entrances.push({ x: x0 + size + 70, y: y0 + (k + 0.5) * C, side: 'e' });
     exteriorOpenings.push({ x: x0 + size, y: y0 + (k + 0.5) * C, angle: Math.PI / 2, length: C - 10 });
   }
-  for (const k of pickCols(2, [])) if (h[N][k] === 'wall') h[N][k] = 'window';
-  for (const k of pickCols(1, [gateCol])) if (h[0][k] === 'wall') h[0][k] = 'window';
-  for (const k of pickCols(1, [])) if (v[k][0] === 'wall') v[k][0] = 'window';
-  for (const k of pickCols(1, [])) if (v[k][N] === 'wall') v[k][N] = 'window';
+  // Doors: exterior entrances without a barricade, and about half the room entrances.
+  const barricadeSpots: OpeningSpot[] = [];
+  const exteriorEdges: { spot: OpeningSpot; set(e: Edge): void }[] = [];
+  entrances.forEach((en, i) => {
+    const o = exteriorOpenings[i];
+    let set: (e: Edge) => void;
+    if (en.side === 's') set = (e) => (h[N][Math.round((o.x - x0) / C - 0.5)] = e);
+    else if (en.side === 'n') set = (e) => (h[0][Math.round((o.x - x0) / C - 0.5)] = e);
+    else if (en.side === 'w') set = (e) => (v[Math.round((o.y - y0) / C - 0.5)][0] = e);
+    else set = (e) => (v[Math.round((o.y - y0) / C - 0.5)][N] = e);
+    exteriorEdges.push({ spot: o, set });
+  });
+  for (const ex of exteriorEdges) {
+    if (rng.chance(0.4)) barricadeSpots.push(ex.spot);
+    else ex.set('door');
+  }
+  for (const [r0, c0, r1, c1] of doorways) {
+    if (edgeBetween(r0, c0, r1, c1) !== 'open') continue;
+    const mixed = room[r0 * N + c0] !== room[r1 * N + c1];
+    if (mixed && rng.chance(0.5)) openBetween(r0, c0, r1, c1, 'door');
+  }
 
-  // Convert edges into merged wall segments plus window segments.
+  // Convert edges into merged wall segments; door edges get short wall stubs either side.
   const walls: WallSeg[] = [];
-  const windows: OpeningSpot[] = [];
+  const doors: DoorSpot[] = [];
   const pushWall = (ax: number, ay: number, bx: number, by: number): void => {
     walls.push({ ax, ay, bx, by, kind: 'warehouse', vision: true, move: true });
   };
+  const stub = (C - DOOR_W) / 2;
+  const exterior = (r: number, c: number, horizontal: boolean): boolean => (horizontal ? r === 0 || r === N : c === 0 || c === N);
   for (let r = 0; r <= N; r++) {
     let runStart = -1;
     for (let c = 0; c <= N; c++) {
@@ -225,13 +256,12 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
       } else {
         if (runStart >= 0) pushWall(x0 + runStart * C, y0 + r * C, x0 + c * C, y0 + r * C);
         runStart = -1;
-        if (e === 'window') {
-          const cx = x0 + (c + 0.5) * C;
+        if (e === 'door') {
           const y = y0 + r * C;
-          pushWall(x0 + c * C, y, cx - 35, y);
-          pushWall(cx + 35, y, x0 + (c + 1) * C, y);
-          walls.push({ ax: cx - 35, ay: y, bx: cx + 35, by: y, kind: 'window', vision: false, move: true });
-          windows.push({ x: cx, y, angle: 0, length: 70 });
+          pushWall(x0 + c * C, y, x0 + c * C + stub, y);
+          pushWall(x0 + (c + 1) * C - stub, y, x0 + (c + 1) * C, y);
+          const swing = r === 0 ? 1 : r === N ? -1 : rng.chance(0.5) ? 1 : -1;
+          doors.push({ hx: x0 + c * C + stub, hy: y, angle: 0, length: DOOR_W, swing, open: !exterior(r, c, true) && rng.chance(0.45) });
         }
       }
     }
@@ -245,13 +275,12 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
       } else {
         if (runStart >= 0) pushWall(x0 + c * C, y0 + runStart * C, x0 + c * C, y0 + r * C);
         runStart = -1;
-        if (e === 'window') {
-          const cy = y0 + (r + 0.5) * C;
+        if (e === 'door') {
           const x = x0 + c * C;
-          pushWall(x, y0 + r * C, x, cy - 35);
-          pushWall(x, cy + 35, x, y0 + (r + 1) * C);
-          walls.push({ ax: x, ay: cy - 35, bx: x, by: cy + 35, kind: 'window', vision: false, move: true });
-          windows.push({ x, y: cy, angle: Math.PI / 2, length: 70 });
+          pushWall(x, y0 + r * C, x, y0 + r * C + stub);
+          pushWall(x, y0 + (r + 1) * C - stub, x, y0 + (r + 1) * C);
+          const swing = c === 0 ? -1 : c === N ? 1 : rng.chance(0.5) ? 1 : -1;
+          doors.push({ hx: x, hy: y0 + r * C + stub, angle: Math.PI / 2, length: DOOR_W, swing, open: !exterior(r, c, false) && rng.chance(0.45) });
         }
       }
     }
@@ -268,8 +297,7 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
   fence(gx + yardW / 2, y0, gx + yardW / 2, y0 - yardH);
   fence(gx - yardW / 2, y0 - yardH, gx + yardW / 2, y0 - yardH);
 
-  // Barricades in a subset of doorways and exterior entrances.
-  const barricadeSpots: OpeningSpot[] = [];
+  // Barricades in a subset of the remaining open doorways.
   const cellCenter = (r: number, c: number): Spot => ({ x: x0 + (c + 0.5) * C, y: y0 + (r + 0.5) * C });
   for (const [r0, c0, r1, c1] of rng.shuffle(doorways.slice())) {
     if (barricadeSpots.length >= 7) break;
@@ -283,7 +311,6 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
     if (barricadeSpots.some((s) => Math.hypot(s.x - spot.x, s.y - spot.y) < C * 1.5)) continue;
     barricadeSpots.push(spot);
   }
-  for (const o of exteriorOpenings) if (rng.chance(0.5)) barricadeSpots.push(o);
 
   // Generator rooms: the largest rooms with space for racks around the generator.
   const roomOrder = rooms.map((rr, i) => ({ rr, i })).sort((a, b) => b.rr.w * b.rr.h - a.rr.w * a.rr.h);
@@ -373,7 +400,7 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
   return {
     walls,
     barricadeSpots,
-    windows,
+    doors,
     lockers,
     barrels,
     racks,

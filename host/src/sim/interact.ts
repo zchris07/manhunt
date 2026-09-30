@@ -1,22 +1,9 @@
-import {
-  Action,
-  BALANCE,
-  BarricadeState,
-  Btn,
-  Gait,
-  Health,
-  Prompt,
-  ToolKind,
-  pointSegDist2,
-  resolveOverlaps,
-  type InputCmd,
-  type LootKind,
-} from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, Health, ItemKind, Prompt, pointSegDist2, resolveOverlaps, type InputCmd, type LootKind } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { attemptAttack, carrySurvivor, damageSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, lockerSlam, useTool } from './tools';
-import { tryPulse, tryBloodhound, tryVaultSmash } from './abilities';
+import { dropBarricade, lockerSlam, useItem } from './items';
+import { tryBurst, tryHemp, tryJarvis } from './abilities';
 
 const R = BALANCE.reach;
 
@@ -27,33 +14,6 @@ function nearestIndex<T extends { x: number; y: number }>(list: readonly T[], x:
     const it = list[i];
     const d = (it.x - x) ** 2 + (it.y - y) ** 2;
     if (d < bd && ok(it, i)) {
-      bd = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
-/** Distance from p to a window/barricade line if p is alongside it (within its span). */
-function spanDist(px: number, py: number, cx: number, cy: number, angle: number, length: number): number {
-  const ux = Math.cos(angle);
-  const uy = Math.sin(angle);
-  const ax = cx - ux * (length / 2);
-  const ay = cy - uy * (length / 2);
-  const bx = cx + ux * (length / 2);
-  const by = cy + uy * (length / 2);
-  const along = (px - cx) * ux + (py - cy) * uy;
-  if (Math.abs(along) > length / 2 + 6) return Infinity;
-  return Math.sqrt(pointSegDist2(px, py, ax, ay, bx, by));
-}
-
-export function nearbyWindow(w: World, p: SimPlayer): number {
-  const ws = w.map.windows;
-  let best = -1;
-  let bd: number = R.window;
-  for (let i = 0; i < ws.length; i++) {
-    const d = spanDist(p.move.x, p.move.y, ws[i].x, ws[i].y, ws[i].angle, ws[i].length);
-    if (d < bd) {
       bd = d;
       best = i;
     }
@@ -76,12 +36,36 @@ export function nearbyBarricade(w: World, p: SimPlayer, state: number, reach: nu
   return best;
 }
 
-function canCarry(p: SimPlayer, item: LootKind): boolean {
-  if (item === 'fuel' || item === 'wire') return p.fuel + p.wire < BALANCE.survivor.maxParts;
-  if (item === 'battery') return p.flashCharges < BALANCE.survivor.maxFlashCharges;
-  const kind = item === 'flare' ? ToolKind.Flare : ToolKind.Bottle;
-  return p.tool === ToolKind.None || (p.tool === kind && p.toolCount < 3);
+/** Closest door (by distance to its closed panel) within reach. */
+export function nearbyDoor(w: World, x: number, y: number, reach: number = R.door): number {
+  let best = -1;
+  let bd = reach * reach;
+  w.map.doors.forEach((d, i) => {
+    const bx = d.hx + Math.cos(d.angle) * d.length;
+    const by = d.hy + Math.sin(d.angle) * d.length;
+    const d2 = pointSegDist2(x, y, d.hx, d.hy, bx, by);
+    if (d2 < bd) {
+      bd = d2;
+      best = i;
+    }
+  });
+  return best;
 }
+
+/** How many of a loot kind a survivor may still pick up. */
+export function roomFor(p: SimPlayer, item: LootKind): boolean {
+  if (item === 'confit') return p.confit < 1;
+  const kind = LOOT_TO_ITEM[item];
+  return p.inv[kind] < BALANCE.items.maxStack;
+}
+
+export const LOOT_TO_ITEM: Record<Exclude<LootKind, 'confit'>, ItemKind> = {
+  bottle: ItemKind.Bottle,
+  goggles: ItemKind.Goggles,
+  shotgun: ItemKind.Shotgun,
+  energy: ItemKind.Energy,
+  trap: ItemKind.Trap,
+};
 
 /** Works out the E and Space prompts for every player. */
 export function computePrompts(w: World): void {
@@ -91,7 +75,7 @@ export function computePrompts(w: World): void {
     p.prompt2 = Prompt.None;
     p.prompt2Target = -1;
     if (p.role === 'survivor') survivorPrompts(w, p);
-    else if (p.role === 'hunter' && canAct(p) && p.health !== Health.Eliminated) hunterPrompts(w, p);
+    else if (p.role === 'hunter' && canAct(p)) hunterPrompts(w, p);
   }
 }
 
@@ -111,34 +95,31 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   // Teammates first.
   let mate: SimPlayer | undefined;
   let mateD: number = R.teammate;
+  const pri = (q: SimPlayer): number => (q.health === Health.Staked ? 0 : q.health === Health.Downed ? 1 : 2);
   for (const q of w.order) {
     if (q === p || q.role !== 'survivor') continue;
-    if (q.health !== Health.Staked && q.health !== Health.Downed && !(q.health === Health.Wounded && q.hideState === 0 && !q.vault)) continue;
+    if (q.health !== Health.Staked && q.health !== Health.Downed && !(q.health === Health.Wounded && q.hideState === 0)) continue;
     const d = Math.hypot(q.move.x - x, q.move.y - y);
-    const pri = q.health === Health.Staked ? 0 : q.health === Health.Downed ? 1 : 2;
-    const cur = mate ? (mate.health === Health.Staked ? 0 : mate.health === Health.Downed ? 1 : 2) : 9;
-    if (d < R.teammate && (pri < cur || (pri === cur && d < mateD))) {
+    const cur = mate ? pri(mate) : 9;
+    if (d < R.teammate && (pri(q) < cur || (pri(q) === cur && d < mateD))) {
       mate = q;
       mateD = d;
     }
   }
-  if (mate) set(mate.health === Health.Staked ? Prompt.Unstake : mate.health === Health.Downed ? Prompt.Revive : Prompt.Heal, mate.id);
+  if (mate) {
+    if (mate.health === Health.Staked) set(p.confit > 0 ? Prompt.ConfitUnstake : Prompt.Unstake, mate.id);
+    else if (mate.health === Health.Downed) set(p.confit > 0 ? Prompt.ConfitRevive : Prompt.Revive, mate.id);
+    else set(Prompt.Heal, mate.id);
+  }
 
+  if (p.prompt === Prompt.None && w.sexton.canTalk(p)) set(Prompt.TalkSexton, 0);
   if (p.prompt === Prompt.None) {
     const li = nearestIndex(w.map.loot, x, y, R.loot, (_l, i) => !w.lootTaken[i]);
-    if (li >= 0) set(canCarry(p, w.map.loot[li].item) ? Prompt.Loot : Prompt.InventoryFull, li);
+    if (li >= 0) set(roomFor(p, w.map.loot[li].item) ? Prompt.Loot : Prompt.InventoryFull, li);
   }
   if (p.prompt === Prompt.None || p.prompt === Prompt.InventoryFull) {
     const gi = nearestIndex(w.map.generators, x, y, R.generator, (_g, i) => !w.gens[i].repaired);
-    if (gi >= 0) {
-      const g = w.gens[gi];
-      // Parts go in in any order.
-      if (!g.fuel && p.fuel > 0) set(Prompt.InstallFuel, gi);
-      else if (!g.wire && p.wire > 0) set(Prompt.InstallWire, gi);
-      else if (!g.fuel || !g.wire) set(Prompt.NeedParts, gi);
-      else if (w.gate.powered) set(Prompt.None, -1);
-      else set(Prompt.Repair, gi);
-    }
+    if (gi >= 0 && !w.gate.powered) set(Prompt.Repair, gi);
   }
   if (p.prompt === Prompt.None && Math.hypot(w.map.gate.leverX - x, w.map.gate.leverY - y) < R.gate && !w.gate.open) {
     set(w.gate.powered ? Prompt.OpenGate : Prompt.GatePowerless, 0);
@@ -147,32 +128,27 @@ function survivorPrompts(w: World, p: SimPlayer): void {
     const hi = nearestIndex(w.map.hidingSpots, x, y, R.hide, (h, i) => w.hiding[i] === 0 && Math.hypot(h.exitX - x, h.exitY - y) < R.hide + 10);
     if (hi >= 0) set(Prompt.Hide, hi);
   }
+  if (p.prompt === Prompt.None) {
+    const di = nearbyDoor(w, x, y);
+    if (di >= 0) set(w.doors[di] ? Prompt.CloseDoor : Prompt.OpenDoor, di);
+  }
 
   const bi = nearbyBarricade(w, p, BarricadeState.Up);
   if (bi >= 0) {
     p.prompt2 = Prompt.DropBarricade;
     p.prompt2Target = bi;
-  } else {
-    const wi = nearbyWindow(w, p);
-    const di = nearbyBarricade(w, p, BarricadeState.Down, R.window + 10);
-    if (wi >= 0) {
-      p.prompt2 = Prompt.Vault;
-      p.prompt2Target = wi;
-    } else if (di >= 0) {
-      p.prompt2 = Prompt.Vault;
-      p.prompt2Target = 1000 + di;
-    }
   }
 }
 
 function hunterPrompts(w: World, p: SimPlayer): void {
   const { x, y } = p.move;
+  const set = (prompt: Prompt, target: number): void => {
+    p.prompt = prompt;
+    p.promptTarget = target;
+  };
   if (p.carrying) {
     const si = nearestIndex(w.map.stakes, x, y, R.stake, (_s, i) => w.stakes[i] === 0);
-    if (si >= 0) {
-      p.prompt = Prompt.Stake;
-      p.promptTarget = si;
-    }
+    if (si >= 0) set(Prompt.Stake, si);
   } else {
     let target: SimPlayer | undefined;
     let bd: number = R.pickup;
@@ -184,56 +160,40 @@ function hunterPrompts(w: World, p: SimPlayer): void {
         target = q;
       }
     }
-    if (target) {
-      p.prompt = Prompt.PickUp;
-      p.promptTarget = target.id;
-    } else {
+    if (target) set(Prompt.PickUp, target.id);
+    else if (w.hempDrop && Math.hypot(w.hempDrop.x - x, w.hempDrop.y - y) < R.pickup) set(Prompt.TakeHemp, 0);
+    else {
       const hi = nearestIndex(w.map.hidingSpots, x, y, R.hide + 8, () => true);
-      if (hi >= 0) {
-        p.prompt = Prompt.Search;
-        p.promptTarget = hi;
-      } else {
+      if (hi >= 0) set(Prompt.Search, hi);
+      else {
         const gi = nearestIndex(w.map.generators, x, y, R.generator, (_g, i) => !w.gens[i].repaired && w.gens[i].progress > 0.01 && !w.gens[i].regressing);
-        if (gi >= 0) {
-          p.prompt = Prompt.DamageGen;
-          p.promptTarget = gi;
-        }
+        if (gi >= 0) set(Prompt.DamageGen, gi);
       }
     }
   }
-  const bi = nearbyBarricade(w, p, BarricadeState.Down);
-  if (bi >= 0) {
-    p.prompt2 = Prompt.BreakBarricade;
-    p.prompt2Target = bi;
-  } else if (!p.carrying) {
-    const wi = nearbyWindow(w, p);
-    if (wi >= 0) {
-      p.prompt2 = Prompt.Vault;
-      p.prompt2Target = wi;
-    }
+  if (p.prompt === Prompt.None) {
+    const di = nearbyDoor(w, x, y);
+    if (di >= 0) set(w.doors[di] ? Prompt.CloseDoor : Prompt.OpenDoor, di);
   }
 }
 
 /** Edge-triggered button handling for one input. */
-const HOLD_PROMPTS: readonly Prompt[] = [Prompt.Repair, Prompt.InstallFuel, Prompt.InstallWire, Prompt.Heal, Prompt.Revive, Prompt.Unstake, Prompt.OpenGate];
+const HOLD_PROMPTS: readonly Prompt[] = [Prompt.Repair, Prompt.Heal, Prompt.Revive, Prompt.Unstake, Prompt.OpenGate];
 
 export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: number): void {
   if (p.role === 'survivor') {
     // Holding E starts hold-to-act interactions as soon as they become available.
     const heldStart = cmd.buttons & Btn.Interact && p.action === Action.None && p.hideState === 0 && HOLD_PROMPTS.includes(p.prompt);
     if (pressed & Btn.Interact || heldStart) survivorInteract(w, p);
-    if (pressed & Btn.Vault && canAct(p) && p.action === Action.None) {
-      if (p.prompt2 === Prompt.DropBarricade) dropBarricade(w, p, p.prompt2Target);
-      else if (p.prompt2 === Prompt.Vault) startVault(w, p, p.prompt2Target, cmd);
-    }
-    if (pressed & Btn.UseItem && canAct(p)) useTool(w, p, cmd);
+    if (pressed & Btn.Space && canAct(p) && p.action === Action.None && p.prompt2 === Prompt.DropBarricade) dropBarricade(w, p, p.prompt2Target);
+    if (pressed & Btn.Primary && canAct(p)) useItem(w, p, cmd);
+    if (pressed & Btn.Ability) tryJarvis(w, p);
     return;
   }
   if (p.role !== 'hunter' || !canAct(p)) return;
-  if (pressed & Btn.Attack) attemptAttack(w, p);
-  if (pressed & Btn.Ability1) tryPulse(w, p);
-  if (pressed & Btn.Ability2) tryBloodhound(w, p);
-  if (pressed & Btn.Ability3) tryVaultSmash(w, p);
+  if (pressed & Btn.Primary) attemptAttack(w, p);
+  if (pressed & Btn.Secondary) tryBurst(w, p);
+  if (pressed & Btn.Ability) tryHemp(w, p);
   if (p.action !== Action.None || p.attackWindup > 0) return;
   if (pressed & Btn.Interact) {
     const H = BALANCE.hunter;
@@ -248,18 +208,29 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         w.startAction(p, Action.Search, H.searchTime, p.promptTarget);
         const occupant = w.players.get(w.hiding[p.promptTarget]);
         if (occupant) occupant.slamWindow = BALANCE.hiding.slamWindow;
-        w.noise(w.map.hidingSpots[p.promptTarget].x, w.map.hidingSpots[p.promptTarget].y, BALANCE.noise.search, 'search', false);
         break;
       }
       case Prompt.DamageGen:
         w.startAction(p, Action.DamageGen, H.damageGenTime, p.promptTarget);
         break;
+      case Prompt.TakeHemp:
+        if (w.hempDrop) {
+          p.hemp = Math.max(p.hemp, 1);
+          w.hempDrop = null;
+          w.emit([p.id], { k: 'item', text: 'Hemp Battery acquired. Press Q to use it.' });
+        }
+        break;
+      case Prompt.OpenDoor:
+      case Prompt.CloseDoor:
+        toggleDoor(w, p.promptTarget);
+        break;
     }
   }
-  if (pressed & Btn.Vault) {
-    if (p.prompt2 === Prompt.BreakBarricade) w.startAction(p, Action.BreakBarricade, BALANCE.hunter.breakBarricadeTime, p.prompt2Target);
-    else if (p.prompt2 === Prompt.Vault) startVault(w, p, p.prompt2Target, cmd);
-  }
+}
+
+function toggleDoor(w: World, id: number): void {
+  if (id < 0 || w.doorCd[id] > 0) return;
+  w.setDoor(id, !w.doors[id]);
 }
 
 function survivorInteract(w: World, p: SimPlayer): void {
@@ -286,11 +257,8 @@ function survivorInteract(w: World, p: SimPlayer): void {
       w.hiding[p.promptTarget] = p.id;
       p.hideSpot = p.promptTarget;
       p.hideState = 1;
+      p.gogglesOn = false;
       w.startAction(p, Action.HideEnter, BALANCE.hiding.enterTime, p.promptTarget);
-      break;
-    case Prompt.InstallFuel:
-    case Prompt.InstallWire:
-      w.startAction(p, Action.Install, S.installPartTime, p.promptTarget);
       break;
     case Prompt.Repair:
       w.startAction(p, Action.Repair, 0, p.promptTarget);
@@ -306,56 +274,40 @@ function survivorInteract(w: World, p: SimPlayer): void {
     case Prompt.Unstake:
       w.startAction(p, Action.Unstake, S.unstakeTime, p.promptTarget);
       break;
+    case Prompt.ConfitRevive:
+    case Prompt.ConfitUnstake: {
+      const q = w.players.get(p.promptTarget);
+      if (!q) break;
+      if (!w.testMode) p.confit = 0;
+      if (q.health === Health.Downed) {
+        q.health = Health.Wounded;
+        p.stats.revives++;
+        w.feed(`${p.name} fed ${q.name} duck confit. Back on their feet!`);
+      } else if (q.health === Health.Staked) {
+        releaseFromStake(w, q);
+        p.stats.unstakes++;
+        w.feed(`${p.name} fed ${q.name} duck confit and cut them down`);
+      }
+      break;
+    }
     case Prompt.OpenGate:
       w.startAction(p, Action.OpenGate, BALANCE.objectives.gateOpenTime, 0);
+      break;
+    case Prompt.TalkSexton:
+      w.sexton.startTalk(p);
+      break;
+    case Prompt.OpenDoor:
+    case Prompt.CloseDoor:
+      toggleDoor(w, p.promptTarget);
       break;
   }
 }
 
-/** Starts a vault over window `target` (or barricade `target - 1000`). */
-export function startVault(w: World, p: SimPlayer, target: number, cmd: InputCmd | null, fast = false): boolean {
-  const isBarricade = target >= 1000;
-  const def = isBarricade ? w.map.barricades[target - 1000] : w.map.windows[target];
-  if (!def) return false;
-  const ux = Math.cos(def.angle);
-  const uy = Math.sin(def.angle);
-  const nx = -uy;
-  const ny = ux;
-  const rel = (p.move.x - def.x) * nx + (p.move.y - def.y) * ny;
-  const side = rel >= 0 ? 1 : -1;
-  const along = Math.max(-def.length / 2 + p.radius, Math.min(def.length / 2 - p.radius, (p.move.x - def.x) * ux + (p.move.y - def.y) * uy));
-  const off = p.radius + 24;
-  const tx = def.x + ux * along - nx * off * side;
-  const ty = def.y + uy * along - ny * off * side;
-  let dur: number;
-  if (p.role === 'hunter') dur = fast ? BALANCE.hunter.vaultSmash.time : BALANCE.hunter.vaultTime;
-  else dur = cmd && cmd.buttons & Btn.Run && p.gait === Gait.Run ? BALANCE.survivor.fastVaultTime : BALANCE.survivor.vaultTime;
-  p.vault = { fx: p.move.x, fy: p.move.y, tx, ty, t: 0, dur };
-  w.startAction(p, Action.Vault, dur, target);
-  const loud = p.role === 'hunter' || dur <= BALANCE.survivor.fastVaultTime;
-  w.noise(def.x, def.y, loud ? BALANCE.noise.vaultFast : BALANCE.noise.vaultSlow, 'vault', p.role === 'survivor');
-  return true;
-}
-
-/** Progresses timed interactions and vaults. */
+/** Progresses timed interactions. */
 export function updateInteractions(w: World, dt: number): void {
   for (const p of w.order) {
     if (p.slamWindow > 0) p.slamWindow = Math.max(0, p.slamWindow - dt);
-    if (p.vault) {
-      const v = p.vault;
-      v.t += dt;
-      const k = Math.min(1, v.t / v.dur);
-      p.move.x = v.fx + (v.tx - v.fx) * k;
-      p.move.y = v.fy + (v.ty - v.fy) * k;
-      p.actionT = v.t;
-      if (k >= 1) {
-        p.vault = null;
-        p.action = Action.None;
-        resolveOverlaps(w.geo, p.move, p.radius);
-      }
-      continue;
-    }
-    if (p.action === Action.None || p.action === Action.Attack || p.action === Action.FlashAim) continue;
+    if (p.action === Action.None || p.action === Action.Attack || p.action === Action.Talk) continue;
     const holding = (p.lastCmd.buttons & Btn.Interact) !== 0;
     const H = BALANCE.hunter;
     switch (p.action) {
@@ -368,26 +320,6 @@ export function updateInteractions(w: World, dt: number): void {
         }
         p.stats.repairSec += dt;
         p.actionT += dt;
-        continue;
-      }
-      case Action.Install: {
-        const g = w.gens[p.actionTarget];
-        if (!holding || !canAct(p)) {
-          w.cancelAction(p);
-          continue;
-        }
-        p.actionT += dt;
-        if (p.actionT >= p.actionDur) {
-          if (!g.fuel && p.fuel > 0) {
-            g.fuel = true;
-            p.fuel--;
-          } else if (!g.wire && p.wire > 0) {
-            g.wire = true;
-            p.wire--;
-          }
-          w.noise(w.map.generators[p.actionTarget].x, w.map.generators[p.actionTarget].y, BALANCE.noise.install, 'install', true);
-          p.action = Action.None;
-        }
         continue;
       }
       case Action.Heal:
@@ -430,18 +362,23 @@ export function updateInteractions(w: World, dt: number): void {
         if (p.actionT < p.actionDur) continue;
         const li = p.actionTarget;
         const item = w.map.loot[li];
-        if (!w.lootTaken[li] && canCarry(p, item.item)) {
-          w.lootTaken[li] = true;
-          if (item.item === 'fuel') p.fuel++;
-          else if (item.item === 'wire') p.wire++;
-          else if (item.item === 'battery') p.flashCharges++;
-          else {
-            p.tool = item.item === 'flare' ? ToolKind.Flare : ToolKind.Bottle;
-            p.toolCount++;
-          }
-          w.emit([p.id], { k: 'item', text: `Picked up ${item.item}` });
-        }
         p.action = Action.None;
+        if (w.lootTaken[li] || !roomFor(p, item.item)) continue;
+        w.lootTaken[li] = true;
+        if (w.testMode) {
+          w.emit([p.id], { k: 'item', text: 'Testing mode: your items are already infinite' });
+          continue;
+        }
+        if (item.item === 'confit') {
+          p.confit = 1;
+          w.emit([p.id], { k: 'item', text: 'Duck confit! Press E on a downed or staked teammate to rescue them instantly.' });
+          continue;
+        }
+        const kind = LOOT_TO_ITEM[item.item];
+        p.inv[kind]++;
+        if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
+        if (kind === ItemKind.Shotgun) p.shells.push(BALANCE.items.shotgun.shells);
+        w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_TEXT[item.item]}` });
         continue;
       }
       case Action.HideEnter: {
@@ -454,8 +391,6 @@ export function updateInteractions(w: World, dt: number): void {
           p.move.y = spot.y;
           p.hideState = 2;
           p.action = Action.None;
-          const hunterNear = w.order.some((h) => h.role === 'hunter' && Math.hypot(h.move.x - spot.x, h.move.y - spot.y) < BALANCE.hiding.noisyEnterRadius);
-          if (hunterNear) w.noise(spot.x, spot.y, BALANCE.hiding.enterNoise, spot.kind === 'grass' ? 'rustle' : 'locker', true);
         }
         continue;
       }
@@ -492,17 +427,6 @@ export function updateInteractions(w: World, dt: number): void {
         }
         continue;
       }
-      case Action.BreakBarricade: {
-        p.actionT += dt;
-        if (p.actionT < p.actionDur) continue;
-        p.action = Action.None;
-        if (w.barricades[p.actionTarget] === BarricadeState.Down) {
-          w.setBarricade(p.actionTarget, BarricadeState.Broken);
-          const b = w.map.barricades[p.actionTarget];
-          w.noise(b.x, b.y, BALANCE.noise.smash, 'smash', false);
-        }
-        continue;
-      }
       case Action.DamageGen: {
         p.actionT += dt;
         if (p.actionT < H.damageGenTime) continue;
@@ -513,7 +437,7 @@ export function updateInteractions(w: World, dt: number): void {
           g.regressing = true;
           p.stats.gensDamaged++;
           const def = w.map.generators[p.actionTarget];
-          w.noise(def.x, def.y, BALANCE.noise.genKick, 'gen_kick', false);
+          w.noise(def.x, def.y, 700, 'gen_kick');
         }
         continue;
       }
@@ -521,14 +445,21 @@ export function updateInteractions(w: World, dt: number): void {
   }
 }
 
-export function exitHiding(w: World, p: SimPlayer, forced: boolean): void {
+const ITEM_TEXT: Record<LootKind, string> = {
+  bottle: 'bottle (throw it at Zach)',
+  goggles: 'night vision goggles',
+  confit: 'duck confit',
+  shotgun: 'shotgun (3 shells)',
+  energy: 'energy drink',
+  trap: 'galaxy gas trap',
+};
+
+export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {
   const spot = w.map.hidingSpots[p.hideSpot];
   if (p.hideSpot >= 0) w.hiding[p.hideSpot] = 0;
   if (spot) {
     p.move.x = spot.exitX;
     p.move.y = spot.exitY;
-    const hunterNear = w.order.some((h) => h.role === 'hunter' && Math.hypot(h.move.x - spot.x, h.move.y - spot.y) < BALANCE.hiding.noisyEnterRadius);
-    if (hunterNear || forced) w.noise(spot.x, spot.y, BALANCE.hiding.enterNoise, spot.kind === 'grass' ? 'rustle' : 'locker', true);
   }
   p.hideSpot = -1;
   p.hideState = 0;

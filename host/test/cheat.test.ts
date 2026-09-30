@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JSON_TAG, MSG_SNAPSHOT, decodeJson, decodeSnapshot, type DecodedSnapshot } from '@manhunt/shared';
+import { Btn, JSON_TAG, MSG_SNAPSHOT, decodeJson, decodeSnapshot, type DecodedSnapshot } from '@manhunt/shared';
 import { createHarness, idle, startMatch } from './harness';
 
 describe('interest management against a modified guest client', () => {
@@ -25,7 +25,7 @@ describe('interest management against a modified guest client', () => {
     hp.move.x = spot.exitX + 2000;
     hp.move.y = spot.exitY;
     h.run(200, () => hider.pushInput(idle()));
-    h.run(34, () => hider.pushInput(idle(4)));
+    h.run(34, () => hider.pushInput(idle(Btn.Interact)));
     h.run(1200, () => hider.pushInput(idle()));
     expect(sp.hideState).toBe(2);
 
@@ -37,7 +37,7 @@ describe('interest management against a modified guest client', () => {
     const hiddenFromIndex = raw.length;
     h.run(4000, () => {
       hunter.pushInput(idle(0, look));
-      hider.pushInput(idle(0x800)); // holding breath
+      hider.pushInput(idle(Btn.Space)); // holding breath
     });
     expect(sp.hideState).toBe(2);
 

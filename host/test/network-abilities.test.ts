@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { BarricadeState, Btn, EntityKind, Health, ToolKind, type GameEvent } from '@manhunt/shared';
+import { BarricadeState, Btn, Health, ItemKind, type GameEvent } from '@manhunt/shared';
 import { createHarness, idle, move, startMatch, type Harness } from './harness';
+import { clearLane } from './worldHelpers';
 import type { GameClient } from '../../client/src/net/GameClient';
 
-// Each hiding / tool / ability mechanic driven purely by client inputs over a transport.
-async function duel(): Promise<{ h: Harness; hunter: GameClient; surv: GameClient }> {
+// Each hiding / item / ability mechanic driven purely by client inputs over a transport.
+async function duel(testMode = false): Promise<{ h: Harness; hunter: GameClient; surv: GameClient }> {
   const h = await createHarness(['Hunter', 'Surv']);
   const owner = h.clients[0];
   const other = h.clients[1];
   owner.send({ t: 'rolePref', pref: 'hunter' });
   other.send({ t: 'rolePref', pref: 'survivor' });
   h.run(100);
-  startMatch(h, 1);
+  startMatch(h, 1, 'test-seed', testMode);
   const hunter = h.clients.find((c) => c.match!.role === 'hunter')!;
   const surv = h.clients.find((c) => c.match!.role === 'survivor')!;
+  const w = h.host.world!;
+  w.sexton.x = 60;
+  w.sexton.y = w.map.height - 60;
   h.run(300);
   return { h, hunter, surv };
 }
@@ -34,14 +38,14 @@ function place(h: Harness, c: GameClient, x: number, y: number): void {
 
 function tap(h: Harness, c: GameClient, buttons: number, extra: Partial<ReturnType<typeof idle>> = {}): void {
   h.run(34, () => c.pushInput({ ...idle(buttons), ...extra }));
-  h.run(100, () => c.pushInput(idle(0, extra.aim ?? 0)));
+  h.run(100, () => c.pushInput({ ...idle(0, extra.aim ?? 0), item: extra.item ?? 0 }));
 }
 
 function events(c: GameClient): GameEvent[] {
   return c.drainEvents();
 }
 
-describe('M5 mechanics over the network', () => {
+describe('mechanics over the network', () => {
   it('hiding: enter via E, vanish from Zach, get dragged out by a search', async () => {
     const { h, hunter, surv } = await duel();
     const w = h.host.world!;
@@ -61,29 +65,18 @@ describe('M5 mechanics over the network', () => {
     expect(surv.self!.health).toBe(Health.Wounded);
   });
 
-  it('flare: lights up and blinds Zach (visible to both sides)', async () => {
+  it('bottle: a click with the bottle slot selected stuns Zach; the inventory updates', async () => {
     const { h, hunter, surv } = await duel();
-    const c = h.host.world!.map.clearings[2];
+    const c = clearLane(h.host.world!, 350);
     place(h, surv, c.x, c.y);
-    place(h, hunter, c.x + 90, c.y);
-    const s = sp(h, surv);
-    s.tool = ToolKind.Flare;
-    s.toolCount = 1;
+    place(h, hunter, c.x + 200, c.y);
+    sp(h, surv).inv[ItemKind.Bottle] = 2;
     h.run(100, () => surv.pushInput(idle()));
-    tap(h, surv, Btn.UseItem);
-    expect(hunter.self!.blindT).toBeGreaterThan(0);
-    expect([...hunter.latest!.entities.values()].some((e) => e.kind === EntityKind.Flare)).toBe(true);
-    expect(events(hunter).some((e) => e.k === 'stun' && e.kind === 'flare')).toBe(true);
-  });
-
-  it('flashlight flash: hold F on Zach for 2 s', async () => {
-    const { h, hunter, surv } = await duel();
-    const c = h.host.world!.map.clearings[3];
-    place(h, surv, c.x, c.y);
-    place(h, hunter, c.x + 150, c.y);
-    h.run(2300, () => surv.pushInput({ ...idle(Btn.Flash, 0) }));
-    expect(hunter.self!.blindT).toBeGreaterThan(0);
-    expect(surv.self!.flashCharges).toBe(0);
+    tap(h, surv, Btn.Primary, { aim: 0, aimDist: 300, item: ItemKind.Bottle });
+    h.run(300, () => surv.pushInput(idle()));
+    expect(hunter.self!.stunT).toBeGreaterThan(0);
+    expect(surv.self!.inv[ItemKind.Bottle]).toBe(1);
+    expect(events(hunter).some((e) => e.k === 'stun' && e.kind === 'bottle')).toBe(true);
   });
 
   it('barricade: Space slams it on Zach; both clients see it down and Zach stunned', async () => {
@@ -94,62 +87,59 @@ describe('M5 mechanics over the network', () => {
     place(h, surv, b.x + nx * 45, b.y + ny * 45);
     place(h, hunter, b.x, b.y);
     h.run(150, () => surv.pushInput(idle()));
-    tap(h, surv, Btn.Vault);
+    tap(h, surv, Btn.Space);
     expect(hunter.self!.stunT).toBeGreaterThan(0);
     expect(surv.latest!.worldState.barricades[0]).toBe(BarricadeState.Down);
     expect(hunter.latest!.worldState.barricades[0]).toBe(BarricadeState.Down);
   });
 
-  it("bottle decoy: Zach hears the smash and Stalker's Pulse reports it", async () => {
-    const { h, hunter, surv } = await duel();
-    const c = h.host.world!.map.clearings[4];
-    place(h, surv, c.x, c.y);
-    place(h, hunter, c.x + 500, c.y + 300);
-    const s = sp(h, surv);
-    s.tool = ToolKind.Bottle;
-    s.toolCount = 1;
-    h.run(100, () => surv.pushInput(idle()));
-    events(hunter);
-    tap(h, surv, Btn.UseItem, { aim: 0, aimDist: 380 });
-    h.run(1000, () => hunter.pushInput(idle()));
-    expect(events(hunter).some((e) => e.k === 'noise' && e.s === 'glass')).toBe(true);
-    tap(h, hunter, Btn.Ability1);
-    const pulse = events(hunter).find((e) => e.k === 'pulse') as Extract<GameEvent, { k: 'pulse' }> | undefined;
-    expect(pulse).toBeTruthy();
-    expect(pulse!.echoes.length).toBeGreaterThanOrEqual(3);
-    expect(hunter.self!.pulseCd).toBeGreaterThan(20);
-  });
-
-  it('Bloodhound sends trails; Lunge and Vault Smash move Zach faster', async () => {
+  it('Soundcloud Burst: right click scares a survivor across the map', async () => {
     const { h, hunter, surv } = await duel();
     const w = h.host.world!;
-    const c = w.map.clearings[5];
-    place(h, surv, c.x, c.y);
-    sp(h, surv).health = Health.Wounded;
-    place(h, hunter, c.x + 300, c.y);
+    place(h, hunter, 600, 600);
+    place(h, surv, w.map.width - 600, w.map.height - 600);
+    h.run(100, () => hunter.pushInput(idle()));
+    events(surv);
+    tap(h, hunter, Btn.Secondary);
+    expect(hunter.self!.burstCd).toBeGreaterThan(10);
+    h.run(3500, () => hunter.pushInput(idle()));
+    const evs = events(surv);
+    expect(evs.some((e) => e.k === 'burst')).toBe(true);
+    expect(evs.some((e) => e.k === 'scare')).toBe(true);
+  });
+
+  it('scent is always on for Zach, and the F lunge dashes him forward', async () => {
+    const { h, hunter, surv } = await duel();
+    const w = h.host.world!;
+    const c = clearLane(w, 450);
+    place(h, surv, c.x - 300, c.y + 200);
+    place(h, hunter, c.x - 300, c.y);
     h.run(2000, () => {
-      surv.pushInput(move(0, 1, Btn.Run));
+      surv.pushInput(move(1, 0, Btn.Run));
       hunter.pushInput(idle());
     });
-    events(hunter);
-    tap(h, hunter, Btn.Ability2);
-    const trail = events(hunter).find((e) => e.k === 'trail') as Extract<GameEvent, { k: 'trail' }> | undefined;
-    expect(trail!.pts.length).toBeGreaterThan(8);
+    const trail = events(hunter).filter((e) => e.k === 'trail') as Extract<GameEvent, { k: 'trail' }>[];
+    expect(trail.reduce((n, t) => n + t.pts.length / 4, 0)).toBeGreaterThan(5);
+    expect(events(surv).some((e) => e.k === 'trail')).toBe(false);
 
+    place(h, surv, 200, w.map.height - 200);
     const x0 = sp(h, hunter).move.x;
-    h.run(34, () => hunter.pushInput({ ...move(-1, 0, Btn.Lunge), aim: Math.PI }));
-    h.run(300, () => hunter.pushInput({ ...move(-1, 0), aim: Math.PI }));
-    expect(x0 - sp(h, hunter).move.x).toBeGreaterThan(70);
-
-    const win = w.map.windows[0];
-    const nx = -Math.sin(win.angle);
-    const ny = Math.cos(win.angle);
-    place(h, hunter, win.x + nx * 35, win.y + ny * 35);
-    h.run(100, () => hunter.pushInput(idle()));
-    tap(h, hunter, Btn.Ability3);
+    tap(h, hunter, Btn.Lunge, { aim: 0 });
     h.run(500, () => hunter.pushInput(idle()));
-    const p = sp(h, hunter);
-    expect((p.move.x - win.x) * nx + (p.move.y - win.y) * ny).toBeLessThan(0);
-    expect(hunter.self!.smashCd).toBeGreaterThan(15);
+    expect(sp(h, hunter).move.x - x0).toBeGreaterThan(120);
+    expect(hunter.self!.lungeCharges).toBe(1);
+  });
+
+  it('testing mode: T-switch over the network swaps roles in place', async () => {
+    const { h, surv } = await duel(true);
+    expect(surv.self!.inv[ItemKind.Shotgun]).toBe(2);
+    let role = '';
+    surv.on('role', (r) => {
+      role = r as string;
+    });
+    surv.send({ t: 'switchRole' });
+    h.run(300, () => surv.pushInput(idle()));
+    expect(sp(h, surv).role).toBe('hunter');
+    expect(role).toBe('hunter');
   });
 });

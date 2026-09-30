@@ -13,6 +13,7 @@ export interface LandingOptions {
 export interface LandingHandlers {
   onCreate(name: string): void;
   onJoin(name: string, roomInput: string): void;
+  onTest(name: string): void;
   onDownloadLog(): void;
 }
 
@@ -20,35 +21,41 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
   root.innerHTML = '';
   const screen = el(
     'div',
-    'screen',
+    'screen landing',
     `
-    <div class="panel" id="landing">
-      <h1 class="title">MANHUNT</h1>
-      <div class="subtitle">Crystal Lake · Night shoot</div>
-      <p class="tagline">Zach Branch plays the masked killer on the new <i>Crystal Lake</i> series.<br>
-      Tonight he stopped acting. Repair the generators, power the gate, get out of the woods.</p>
-      <div class="field">
-        <label for="name">Your name</label>
-        <input type="text" id="name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="2-16 characters" value="${esc(o.name)}">
-      </div>
-      <div class="field">
-        <button class="primary" id="create" style="width:100%">Create lobby</button>
-      </div>
-      <div class="field">
-        <label for="room">Join a friend</label>
-        <div class="row">
-          <input type="text" id="room" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Room code or invite link" value="${esc(o.room)}">
-          <button id="join">Join</button>
+    <div class="landing-grid" id="landing">
+      <section class="hero">
+        <div class="kicker">Crystal Lake · Night shoot</div>
+        <h1 class="title">MANHUNT</h1>
+        <p class="tagline">Zach Branch plays the masked killer on the new <i>Crystal Lake</i> series.
+        Tonight he stopped acting. Start every generator, power the gate and get out of the woods.</p>
+        <div class="chips">
+          <span class="chip-lg">2–10 players</span>
+          <span class="chip-lg">No account</span>
+          <span class="chip-lg">Runs in your browser</span>
         </div>
-      </div>
-      <div class="error" id="err">${esc(o.busy || o.error)}</div>
-      <p class="note">No account needed. The player who creates the lobby hosts the game in their browser;
-      everyone else connects to them directly. Hosts: keep your tab in the foreground.</p>
-      <div class="links">
-        <button class="linklike" id="howto">How to play</button>
-        <a href="sandbox/">Vision sandbox</a>
-        ${o.hasLog ? '<button class="linklike" id="log">Download match log</button>' : ''}
-      </div>
+      </section>
+      <section class="card" aria-label="Play">
+        <div class="field">
+          <label for="name">Your name</label>
+          <input type="text" id="name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="2-16 characters" value="${esc(o.name)}">
+        </div>
+        <button class="primary big" id="create">Create lobby</button>
+        <div class="divider"><span>or join a friend</span></div>
+        <div class="row join-row">
+          <input type="text" id="room" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Room code or invite link" value="${esc(o.room)}">
+          <button class="secondary" id="join">Join</button>
+        </div>
+        <button class="ghost" id="test" title="An offline match on your own: switch between Zach and survivor with T, every item and ability is infinite">Testing mode</button>
+        <div class="error" id="err">${esc(o.busy || o.error)}</div>
+        <p class="note">The player who creates the lobby hosts the game in their browser; friends connect straight to them.
+        Hosts: keep your tab in the foreground.</p>
+        <div class="links">
+          <button class="linklike" id="howto">How to play</button>
+          <a href="sandbox/">Vision sandbox</a>
+          ${o.hasLog ? '<button class="linklike" id="log">Download match log</button>' : ''}
+        </div>
+      </section>
     </div>`,
   );
   root.appendChild(screen);
@@ -56,13 +63,14 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
   const roomInput = $(screen, '#room') as HTMLInputElement;
   const err = $(screen, '#err');
   const busy = !!o.busy;
-  ($(screen, '#create') as HTMLButtonElement).disabled = busy;
-  ($(screen, '#join') as HTMLButtonElement).disabled = busy;
+  for (const id of ['#create', '#join', '#test']) ($(screen, id) as HTMLButtonElement).disabled = busy;
+  if (busy) err.classList.add('busy');
 
   const validName = (): string | null => {
     const n = sanitizeName(nameInput.value);
     if (!NAME_RE.test(n) || n.length < 2) {
       err.textContent = 'Pick a name: 2-16 letters or numbers.';
+      err.classList.remove('busy');
       nameInput.focus();
       return null;
     }
@@ -71,6 +79,10 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
   $(screen, '#create').addEventListener('click', () => {
     const n = validName();
     if (n) h.onCreate(n);
+  });
+  $(screen, '#test').addEventListener('click', () => {
+    const n = validName();
+    if (n) h.onTest(n);
   });
   const join = (): void => {
     const n = validName();
@@ -110,7 +122,7 @@ export function renderMessage(root: HTMLElement, title: string, text: string, bu
     'div',
     'screen',
     `<div class="panel" style="text-align:center">
-      <h2 class="banner" style="font-size:32px">${esc(title)}</h2>
+      <h2 class="banner" style="font-size:36px">${esc(title)}</h2>
       <p class="note">${esc(text)}</p>
       ${button ? `<button class="primary" id="msgbtn">${esc(button.label)}</button>` : ''}
     </div>`,

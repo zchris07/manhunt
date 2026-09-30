@@ -12,7 +12,6 @@ import {
   type ViewCone,
 } from '@manhunt/shared';
 import { AssetManager } from '../src/assets/AssetManager';
-import { CHARACTER_TINTS } from '../src/assets/procedural/textures';
 import { VisionRenderer, type MaskPolygon } from '../src/render/vision/VisionRenderer';
 import { MapRenderer } from '../src/render/MapRenderer';
 import { Input } from '../src/input/Input';
@@ -48,10 +47,11 @@ function arenaScene(assets: AssetManager): Scene {
   for (const t of arena.trees) {
     const id = t.kind === 'pine' ? 'tree.pine' : t.kind === 'dead' ? 'tree.dead' : 'prop.boulder';
     const sp = new Sprite(assets.getTexture(id, t.variant));
-    sp.anchor.set(0.5);
+    const [ax, ay] = assets.anchorOf(id);
+    sp.anchor.set(ax, ay);
     sp.position.set(t.x, t.y);
-    sp.rotation = (t.x * 13.1 + t.y * 7.7) % 6.28;
-    sp.scale.set(t.kind === 'boulder' ? t.r / 40 : t.kind === 'pine' ? 0.5 + t.r / 36 : t.r / 15);
+    if (t.kind === 'boulder') sp.rotation = (t.x * 13.1 + t.y * 7.7) % 6.28;
+    sp.scale.set(t.kind === 'boulder' ? t.r / 40 : 0.6 + t.r / 45);
     terrain.addChild(sp);
   }
   for (const l of arena.lights) {
@@ -137,14 +137,13 @@ async function boot(): Promise<void> {
   debugPolys.visible = false;
   world.addChild(debugPolys);
 
-  const loot = new Sprite(assets.getTexture('loot.fuel'));
+  const loot = new Sprite(assets.getTexture('item.shotgun'));
   loot.anchor.set(0.5);
   loot.position.set(scene.loot.x, scene.loot.y);
   const enemy = new Sprite(assets.getTexture('char.hunter'));
   enemy.anchor.set(0.5);
-  const player = new Sprite(assets.getTexture('char.survivor'));
+  const player = new Sprite(assets.getTexture('char.survivor', 1));
   player.anchor.set(0.5);
-  player.tint = CHARACTER_TINTS[1];
   entities.addChild(loot, enemy, player);
 
   const vision = new VisionRenderer(app.screen.width, app.screen.height);
@@ -295,7 +294,7 @@ async function boot(): Promise<void> {
     const losPoly = vis.compute({ x: pos.x, y: pos.y, dir: 0, halfAngle: Math.PI, range: BALANCE.lights.losRange }, []);
     const own: MaskPolygon[] = [
       { poly: conePoly, ox: pos.x, oy: pos.y, range: cone.range },
-      { poly: proxPoly, ox: pos.x, oy: pos.y, range: sv.vision.proximity, intensity: 0.8 },
+      { poly: proxPoly, ox: pos.x, oy: pos.y, range: sv.vision.proximity, intensity: 0.9 },
     ];
     const viewR = Math.hypot(sw, sh) / 2;
     const lights: MaskPolygon[] = scene.lights
@@ -323,9 +322,9 @@ async function boot(): Promise<void> {
     world.position.set(-camX, -camY);
     entities.position.set(-camX, -camY);
     scene.update?.(camX, camY, sw, sh, time);
-    vision.renderMask(app.renderer, camX, camY, { own, los: losPoly, lights });
-    const flicker = state.freezeEffects ? 1 : 0.96 + 0.04 * Math.sin(time * 2.3) * Math.sin(time * 5.7);
-    vision.setEffects({ time: state.freezeEffects ? 0 : time, terror: 0, flicker, blind: 0, damage: 0 });
+    vision.renderMask(app.renderer, camX, camY, { own, los: losPoly, lights, xray: null });
+    const flicker = state.freezeEffects ? 1 : 0.975 + 0.025 * Math.sin(time * 2.3) * Math.sin(time * 5.7);
+    vision.setEffects({ time: state.freezeEffects ? 0 : time, flicker, damage: 0 });
 
     hud.textContent =
       `MANHUNT vision sandbox · ${scene.label}\n` +

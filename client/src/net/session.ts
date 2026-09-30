@@ -8,6 +8,8 @@ export interface Session {
   client: GameClient;
   room: string;
   isHost: boolean;
+  /** Offline testing mode (no other players can join). */
+  solo?: boolean;
   close(): void;
 }
 
@@ -40,6 +42,30 @@ export async function hostGame(name: string, token?: string): Promise<Session> {
     client,
     room,
     isHost: true,
+    close: () => {
+      client.close();
+      bridge.terminate();
+    },
+  };
+}
+
+/**
+ * Testing mode on your own: the host runs in a worker with no network at all, and the
+ * match starts straight away with testing mode on.
+ */
+export async function hostLocal(name: string): Promise<Session> {
+  const worker = new Worker(new URL('../worker/hostWorker.ts', import.meta.url), { type: 'module', name: 'manhunt-host' });
+  const bridge = new HostBridge(worker, null);
+  bridge.onError((m) => console.error('[host]', m));
+  const room = 'TEST';
+  bridge.init(room, 0, new URLSearchParams(location.search).get('dev') === '1');
+  const client = new GameClient({ transport: bridge.localGuest(), now: () => performance.now(), name });
+  await client.connect(room);
+  return {
+    client,
+    room,
+    isHost: true,
+    solo: true,
     close: () => {
       client.close();
       bridge.terminate();

@@ -49,6 +49,10 @@ export function mapHash(d: MapData): number {
     mix(s.x);
     mix(s.y);
   }
+  for (const door of d.doors) {
+    mix(door.hx);
+    mix(door.hy);
+  }
   mix(d.gate.x);
   mix(d.gate.y);
   return h >>> 0;

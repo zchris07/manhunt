@@ -14,6 +14,8 @@ export interface LobbySettings {
   seed: string;
   difficulty: number;
   escapeFraction: number;
+  /** Testing mode: switch roles in-match (T), infinite items and abilities, no win checks. */
+  testMode: boolean;
 }
 
 export interface LobbyPlayerInfo {
@@ -79,14 +81,30 @@ export type GameEvent =
   | { k: 'genDone'; id: number }
   | { k: 'gatePowered' }
   | { k: 'gateOpen' }
-  | { k: 'chase'; on: boolean }
   | { k: 'skill'; id: number; delayMs: number; zone: number; size: number; great: number; needleMs: number }
   | { k: 'skillResult'; ok: boolean; great: boolean }
-  | { k: 'pulse'; echoes: number[] }
+  /** Scent trail points for Zach: x, y, kind (0 scent, 1 blood), age in tenths of a second. */
   | { k: 'trail'; pts: number[] }
   | { k: 'breath'; x: number; y: number }
   | { k: 'item'; text: string }
-  | { k: 'health'; id: number; h: number };
+  | { k: 'health'; id: number; h: number }
+  /** Zach's melee swing (everyone near sees the swipe). */
+  | { k: 'swing'; id: number; hit: boolean }
+  /** A shotgun blast: origin, angle, length of the tracer, whether it hit Zach. */
+  | { k: 'shot'; x: number; y: number; a: number; len: number; hit: boolean }
+  /** Soundcloud Burst ring starting at (x,y). */
+  | { k: 'burst'; x: number; y: number }
+  /** The ring reached you: jump scare. */
+  | { k: 'scare' }
+  | { k: 'jarvis'; by: number }
+  | { k: 'hemp'; by: number }
+  | { k: 'sexton'; say: string }
+  /** Sexton hands a glowing tablet to a survivor. */
+  | { k: 'tablet'; to: number; x: number; y: number }
+  | { k: 'gas'; x: number; y: number }
+  | { k: 'barricadeHit'; id: number; hits: number }
+  /** Testing mode: roles changed. */
+  | { k: 'roles'; players: MatchPlayerInfo[] };
 
 /** Messages from a client to the host (validated by the host). */
 export type ClientMessage =
@@ -102,6 +120,8 @@ export type ClientMessage =
   | { t: 'skill'; id: number; result: 'miss' | 'good' | 'great' }
   | { t: 'spectate'; dir: 1 | -1 }
   | { t: 'mapReq' }
+  /** Testing mode only: switch between Zach and survivor mid-match. */
+  | { t: 'switchRole' }
   /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
   | { t: 'dev'; cmd: string; args: number[] };
 
@@ -170,7 +190,8 @@ export function validSettings(s: unknown): s is LobbySettings {
     isInt(s.survivors, 1, 9) &&
     isStr(s.seed, 32) &&
     isNum(s.difficulty, 0.5, 1.5) &&
-    isNum(s.escapeFraction, 0.1, 1)
+    isNum(s.escapeFraction, 0.1, 1) &&
+    typeof s.testMode === 'boolean'
   );
 }
 
@@ -196,6 +217,7 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
     case 'start':
     case 'toLobby':
     case 'mapReq':
+    case 'switchRole':
       return { t: v.t };
     case 'chat':
       return isStr(v.text, 280) ? { t: 'chat', text: v.text } : null;

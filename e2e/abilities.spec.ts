@@ -18,14 +18,14 @@ async function mapInfo(page: Page): Promise<MapInfo> {
   });
 }
 
-async function self(page: Page): Promise<{ hideState: number; health: number; blindT: number }> {
+async function self(page: Page): Promise<{ hideState: number; health: number; stunT: number; inv: number[] }> {
   return page.evaluate(() => {
-    const s = (window.__manhunt.client as unknown as { self: { hideState: number; health: number; blindT: number } }).self;
-    return { hideState: s.hideState, health: s.health, blindT: s.blindT };
+    const s = (window.__manhunt.client as unknown as { self: { hideState: number; health: number; stunT: number; inv: number[] } }).self;
+    return { hideState: s.hideState, health: s.health, stunT: s.stunT, inv: [...s.inv] };
   });
 }
 
-test('hiding, searching and a flare work between two browsers', async ({ browser }) => {
+test('hiding, searching and a thrown bottle work between two browsers', async ({ browser }) => {
   const surv = await newPlayer(browser, '/?dev=1');
   const code = await createLobby(surv, 'Mara');
   const zach = await newPlayer(browser);
@@ -57,12 +57,17 @@ test('hiding, searching and a flare work between two browsers', async ({ browser
   await expect.poll(async () => (await self(surv)).health, { timeout: 10000 }).toBe(1);
   expect((await self(surv)).hideState).toBe(0);
 
-  // In the open, a flare blinds him.
+  // In the open, a bottle (slot 1, left click) stuns him.
   await dev(surv, 'tp', [info.clearing.x, info.clearing.y]);
-  await dev(surv, 'give', [1, 1, 0]);
-  await dev(zach, 'tp', [info.clearing.x + 80, info.clearing.y]);
+  await dev(surv, 'give', [1, 2]);
+  await dev(zach, 'tp', [info.clearing.x + 100, info.clearing.y]);
   await surv.waitForTimeout(3500);
-  await surv.mouse.click(700, 300, { button: 'right' });
-  await expect.poll(async () => (await self(zach)).blindT, { timeout: 10000 }).toBeGreaterThan(0);
-  await expect(zach.locator('.hud .center-msg')).toHaveText('BLINDED');
+  await expect.poll(async () => (await self(surv)).inv[1], { timeout: 10000 }).toBe(2);
+  await surv.keyboard.press('Digit1');
+  await surv.mouse.move(480 + 150, 300);
+  await surv.waitForTimeout(300);
+  await surv.mouse.click(480 + 150, 300);
+  await expect.poll(async () => (await self(zach)).stunT, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(zach.locator('.hud .center-msg')).toHaveText('STUNNED');
+  expect((await self(surv)).inv[1]).toBe(1);
 });
