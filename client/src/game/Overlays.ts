@@ -11,6 +11,7 @@ interface Mark {
 interface ScentMark extends Mark {
   kind: number;
   seed: number;
+  who: number;
 }
 
 interface Wave {
@@ -33,6 +34,8 @@ export class Overlays {
   readonly decals = new Container();
   private readonly scentLayer = new Container();
   private readonly g = new Graphics();
+  /** The scent: glowing red ribbons, drawn fresh each frame. */
+  private readonly aurora = new Graphics();
   private readonly rings = new Graphics();
   private scent: ScentMark[] = [];
   private readonly scentSprites: Sprite[] = [];
@@ -45,15 +48,100 @@ export class Overlays {
     private readonly mapH = 6000,
   ) {
     this.rings.blendMode = 'add';
-    this.senses.addChild(this.scentLayer, this.g, this.rings);
+    this.aurora.blendMode = 'add';
+    this.senses.addChild(this.aurora, this.scentLayer, this.g, this.rings);
   }
 
-  /** New scent points: x, y, kind (0 scent, 1 blood), age in tenths of a second. */
+  /** New scent points: x, y, kind (0 scent, 1 blood), age in tenths of a second, owner. */
   addScent(pts: number[], now: number): void {
-    for (let i = 0; i + 3 < pts.length; i += 4) {
-      this.scent.push({ x: pts[i], y: pts[i + 1], kind: pts[i + 2], born: now - pts[i + 3] * 100, seed: (pts[i] * 13 + pts[i + 1] * 7) % 997 });
+    for (let i = 0; i + 4 < pts.length; i += 5) {
+      this.scent.push({ x: pts[i], y: pts[i + 1], kind: pts[i + 2], born: now - pts[i + 3] * 100, who: pts[i + 4], seed: (pts[i] * 13 + pts[i + 1] * 7) % 997 });
     }
-    if (this.scent.length > 600) this.scent.splice(0, this.scent.length - 600);
+    if (this.scent.length > 1600) this.scent.splice(0, this.scent.length - 1600);
+  }
+
+  /**
+   * Scent as a red aurora: each person's points join into one smooth, unbroken ribbon of thin
+   * glowing wind that ripples, swells and thins unevenly, and fades out from its old end.
+   */
+  private drawAurora(now: number, view: { x: number; y: number; w: number; h: number }): void {
+    const g = this.aurora;
+    g.clear();
+    const t = now / 1000;
+    const byWho = new Map<number, ScentMark[]>();
+    for (const s of this.scent) {
+      if (s.kind !== 0) continue;
+      let list = byWho.get(s.who);
+      if (!list) byWho.set(s.who, (list = []));
+      list.push(s);
+    }
+    const m = 200;
+    for (const [who, list] of byWho) {
+      list.sort((a, b) => a.born - b.born);
+      // Split into runs where the trail really breaks (they stopped sprinting for a while).
+      let run: ScentMark[] = [];
+      const runs: ScentMark[][] = [run];
+      for (let i = 0; i < list.length; i++) {
+        const prev = list[i - 1];
+        if (prev && (list[i].born - prev.born > 700 || Math.hypot(list[i].x - prev.x, list[i].y - prev.y) > 160)) runs.push((run = []));
+        run.push(list[i]);
+      }
+      for (const r of runs) {
+        if (r.length < 2) continue;
+        if (!r.some((s) => s.x > view.x - m && s.y > view.y - m && s.x < view.x + view.w + m && s.y < view.y + view.h + m)) continue;
+        // Catmull-Rom through the points, sampled finely.
+        const pts: { x: number; y: number; nx: number; ny: number; a: number; d: number }[] = [];
+        let dist = 0;
+        for (let i = 0; i < r.length - 1; i++) {
+          const p0 = r[Math.max(0, i - 1)];
+          const p1 = r[i];
+          const p2 = r[i + 1];
+          const p3 = r[Math.min(r.length - 1, i + 2)];
+          for (let k = 0; k < 4; k++) {
+            const u = k / 4;
+            const u2 = u * u;
+            const u3 = u2 * u;
+            const cr = (a: number, b: number, c: number, d: number): number => 0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u2 + (-a + 3 * b - 3 * c + d) * u3);
+            const x = cr(p0.x, p1.x, p2.x, p3.x);
+            const y = cr(p0.y, p1.y, p2.y, p3.y);
+            const age = (now - (p1.born + (p2.born - p1.born) * u)) / SCENT_LIFE;
+            const last = pts[pts.length - 1];
+            if (last) dist += Math.hypot(x - last.x, y - last.y);
+            pts.push({ x, y, nx: 0, ny: 0, a: Math.max(0, 1 - age), d: dist });
+          }
+        }
+        const endP = r[r.length - 1];
+        pts.push({ x: endP.x, y: endP.y, nx: 0, ny: 0, a: Math.max(0, 1 - (now - endP.born) / SCENT_LIFE), d: dist + 1 });
+        for (let i = 0; i < pts.length; i++) {
+          const a = pts[Math.max(0, i - 1)];
+          const b = pts[Math.min(pts.length - 1, i + 1)];
+          const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          pts[i].nx = -(b.y - a.y) / l;
+          pts[i].ny = (b.x - a.x) / l;
+        }
+        // Two strands of wind, rippling at different rates, each a soft glow and a bright core.
+        for (const strand of [0, 1]) {
+          const phase = who * 1.7 + strand * 2.3;
+          const at = (p: (typeof pts)[number]): [number, number, number] => {
+            const wave = Math.sin(p.d * 0.018 + t * 1.6 + phase) * 6 + Math.sin(p.d * 0.047 - t * 2.3 + phase) * 3;
+            const width = 1.4 + 1.6 * (0.5 + 0.5 * Math.sin(p.d * 0.011 - t * 1.1 + phase)) + (strand ? -0.5 : 0);
+            return [p.x + p.nx * (wave + (strand ? 5 : 0)), p.y + p.ny * (wave + (strand ? 5 : 0)), width];
+          };
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p = pts[i];
+            const q = pts[i + 1];
+            const alpha = Math.pow(Math.min(p.a, q.a), 1.2) * (strand ? 0.55 : 1);
+            if (alpha < 0.02) continue;
+            const [x1, y1, w1] = at(p);
+            const [x2, y2] = at(q);
+            const shimmer = 0.75 + 0.25 * Math.sin(p.d * 0.05 + t * 4 + phase);
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1 * 5, color: 0xb0101e, alpha: 0.09 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1 * 2.2, color: 0xe0202e, alpha: 0.22 * alpha * shimmer, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1, color: 0xff6a6a, alpha: 0.55 * alpha * shimmer, cap: 'round' });
+          }
+        }
+      }
+    }
   }
 
   addBreath(x: number, y: number, now: number): void {
@@ -87,9 +175,11 @@ export class Overlays {
       g.circle(a.x, a.y, 22 + pulse * 6).stroke({ width: 3, color: 0xff3a5a, alpha: 0.55 + pulse * 0.3 });
     }
 
-    // Scent: red gas puffs that swell, drift and slowly fade away.
+    // Scent: an aurora ribbon. Blood: red puffs that swell, drift and slowly fade away.
     this.scent = this.scent.filter((s) => now - s.born < SCENT_LIFE);
-    while (this.scentSprites.length < this.scent.length) {
+    this.drawAurora(now, view);
+    const blood = this.scent.filter((s) => s.kind === 1);
+    while (this.scentSprites.length < blood.length) {
       const sp = new Sprite(this.assets.getTexture('fx.puff', this.scentSprites.length % 3));
       sp.anchor.set(0.5);
       sp.blendMode = 'add';
@@ -98,7 +188,7 @@ export class Overlays {
     }
     const margin = 120;
     this.scentSprites.forEach((sp, i) => {
-      const s = this.scent[i];
+      const s = blood[i];
       if (!s || s.x < view.x - margin || s.y < view.y - margin || s.x > view.x + view.w + margin || s.y > view.y + view.h + margin) {
         sp.visible = false;
         return;

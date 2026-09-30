@@ -215,6 +215,8 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
       gait = moving ? Gait.Walk : Gait.Idle;
     }
     if (s.hasteT > 0) speed *= sv.hitHasteMul;
+    // Energy drink: walking and running up to 15% faster, fading with the drink.
+    if (boostK > 0 && (gait === Gait.Walk || gait === Gait.Run)) speed *= 1 + E.speedMul * boostK;
     if (s.slowT > 0) speed *= s.slowMul;
   }
 

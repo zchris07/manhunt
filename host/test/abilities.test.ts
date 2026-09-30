@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, Btn, EntityKind, Health, ItemKind, Prompt, dashDistance, maxStamina } from '@manhunt/shared';
+import { Action, BALANCE, Btn, EntityKind, Health, ItemKind, Prompt, dashDistance, maxStamina } from '@manhunt/shared';
 import { Driver, clearLane, makeWorld, openSpot, parkSexton, place } from './worldHelpers';
 import { buildView, canSee, visionFor } from '../src/sim/view';
 import { roomFor } from '../src/sim/interact';
@@ -182,6 +182,10 @@ describe('survivor items (stun, never kill)', () => {
     const { w, d, h, s, c } = duel(1000);
     give(s, ItemKind.Trap);
     use(d, s, ItemKind.Trap);
+    // Planting takes 2 s (standing still).
+    expect(w.traps.length).toBe(0);
+    expect(s.action).toBe(Action.Plant);
+    d.run(secs(I.trap.plantTime) + 1, (p) => (p.id === s.id ? { item: ItemKind.Trap } : undefined));
     expect(w.traps.length).toBe(1);
     // Semi-hidden: Zach only gets it in his view when he can see it.
     place(h, c.x + 1000, c.y);
@@ -342,8 +346,16 @@ describe('Sexton Science and JARVIS', () => {
     d.tap(s.id, Btn.Interact);
     expect(w.sexton.mode).toBe('talk');
     expect(w.events.some((e) => e.e.k === 'sexton' && e.e.say.includes('something big'))).toBe(true);
-    d.run(secs(BALANCE.sexton.talkTime + BALANCE.sexton.handTime) + 2);
+    d.run(secs(BALANCE.sexton.talkTime) + 2);
+    // He waits for another E before the second line and the handoff.
+    expect(s.jarvis).toBe(0);
+    expect(s.prompt).toBe(Prompt.SextonMore);
+    d.tap(s.id, Btn.Interact);
+    expect(w.events.some((e) => e.e.k === 'sexton' && e.e.say === `This is powerful tech, ${s.name}. Be careful with it type shi`)).toBe(true);
+    d.run(secs(BALANCE.sexton.secondTalkTime + BALANCE.sexton.handTime) + 2);
     expect(s.jarvis).toBe(1);
+    // Then he walks away, mysteriously.
+    expect(w.sexton.mode).toBe('leave');
     expect(w.events.some((e) => e.e.k === 'tablet' && e.e.to === s.id)).toBe(true);
     // Only one tablet each.
     d.run(1);

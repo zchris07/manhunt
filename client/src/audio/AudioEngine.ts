@@ -8,6 +8,11 @@ export interface LoopOptions {
   radius: number;
   /** Full volume within this distance. */
   near: number;
+  /**
+   * Loudness falls off as ((radius - d) / (radius - near)) ^ curve instead of linearly: a high
+   * curve is barely audible far out and swells very gradually to full volume close in.
+   */
+  curve?: number;
 }
 
 interface Loop {
@@ -133,7 +138,20 @@ export class AudioEngine {
     return null;
   }
 
+  private listenerX = 0;
+  private listenerY = 0;
+
+  /** Gain for a loop at (x,y) with a custom falloff curve (1 when it has none). */
+  private falloff(o: LoopOptions): number {
+    if (!o.curve) return 1;
+    const d = Math.hypot(o.x - this.listenerX, o.y - this.listenerY);
+    const k = Math.max(0, Math.min(1, (o.radius - d) / Math.max(1, o.radius - o.near)));
+    return Math.pow(k, o.curve);
+  }
+
   setListener(x: number, y: number): void {
+    this.listenerX = x;
+    this.listenerY = y;
     const l = this.ctx?.listener;
     if (!l) return;
     if (l.positionX) {
@@ -149,8 +167,9 @@ export class AudioEngine {
    * `fadeOut` seconds: from its `offset`, or from a random point when the entry sets
    * `"random": true`. Restarts if already playing.
    */
-  playClip(id: string, o: { fadeOut?: number; volume?: number } = {}): boolean {
+  playClip(id: string, o: { fadeOut?: number; fadeIn?: number; volume?: number; duration?: number } = {}): boolean {
     const fadeOut = o.fadeOut ?? 1.4;
+    const fadeIn = o.fadeIn ?? 0.04;
     const vol = o.volume ?? 1;
     const ctx = this.ctx;
     if (!ctx) return false;
@@ -158,7 +177,7 @@ export class AudioEngine {
     if (!b) return false;
     this.clip?.src.stop();
     const entry = this.assets.soundEntry(id);
-    const want = Math.min(entry?.duration ?? b.duration, b.duration);
+    const want = Math.min(o.duration ?? entry?.duration ?? b.duration, b.duration);
     const from = entry?.random ? Math.random() * Math.max(0, b.duration - want) : (entry?.offset ?? 0);
     const offset = Math.min(Math.max(0, from), Math.max(0, b.duration - 0.1));
     const dur = Math.min(want, b.duration - offset);
@@ -167,8 +186,8 @@ export class AudioEngine {
     src.buffer = b;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(vol, t + 0.04);
-    gain.gain.setValueAtTime(vol, t + Math.max(0.05, dur - fadeOut));
+    gain.gain.linearRampToValueAtTime(vol, t + fadeIn);
+    gain.gain.setValueAtTime(vol, t + Math.max(fadeIn + 0.01, dur - fadeOut));
     gain.gain.linearRampToValueAtTime(0.0001, t + dur);
     src.connect(gain).connect(this.clipBus);
     src.start(t, offset, dur + 0.05);
@@ -195,7 +214,7 @@ export class AudioEngine {
       return;
     }
     if (cur && cur.id === id) {
-      cur.gain.gain.setTargetAtTime(o.volume ?? 1, t, 0.1);
+      cur.gain.gain.setTargetAtTime((o.volume ?? 1) * this.falloff(o), t, 0.1);
       if (cur.panner.positionX) {
         cur.panner.positionX.setTargetAtTime(o.x, t, 0.05);
         cur.panner.positionZ.setTargetAtTime(o.y, t, 0.05);
@@ -210,12 +229,14 @@ export class AudioEngine {
     src.loop = true;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    gain.gain.setTargetAtTime(o.volume ?? 1, t, 0.3);
+    gain.gain.setTargetAtTime((o.volume ?? 1) * this.falloff(o), t, 0.3);
     const p = ctx.createPanner();
     p.panningModel = 'equalpower';
     p.distanceModel = 'linear';
     p.refDistance = o.near;
     p.maxDistance = Math.max(o.near + 20, o.radius);
+    // With a custom curve the panner only pans; the gain does the distance falloff.
+    if (o.curve) p.rolloffFactor = 0;
     if (p.positionX) {
       p.positionX.value = o.x;
       p.positionZ.value = o.y;

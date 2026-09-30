@@ -68,7 +68,7 @@ export interface InterpEntity {
   action: number;
   extra: number;
   aux: number;
-  stamina: number;
+  hp: number;
 }
 
 export interface GameClientOptions {
@@ -475,7 +475,7 @@ export class GameClient {
         action: eb.action,
         extra: eb.extra,
         aux: eb.aux,
-        stamina: eb.stamina,
+        hp: eb.hp,
       });
     }
     return out;

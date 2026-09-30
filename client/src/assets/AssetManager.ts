@@ -1,8 +1,11 @@
 import { Assets, Texture } from 'pixi.js';
 import { TEXTURE_ANCHORS, TEXTURE_GENERATORS, gradeCanvas } from './procedural/textures';
 
-/** Texture ids whose colours stay as drawn (effects, and ground tiles painted pre-graded). */
-const UNGRADED = /^(fx\.|ground\.|tree\.|prop\.|grass\.)/;
+/**
+ * Texture ids whose colours stay as drawn (effects, ground tiles painted pre-graded, and the
+ * two loud items: the galaxy gas canister and the golden pump).
+ */
+const UNGRADED = /^(fx\.|ground\.|tree\.|prop\.|grass\.|item\.trap$|item\.goldenPump$)/;
 
 export interface AssetEntry {
   procedural?: string;

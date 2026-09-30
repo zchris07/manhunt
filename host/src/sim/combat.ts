@@ -6,7 +6,7 @@ const H = BALANCE.hunter;
 
 /** Lunging doesn't stop a swipe: slash and lunge combo freely. */
 function canSwing(h: SimPlayer): boolean {
-  return !h.carrying && h.attackCd <= 0 && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0;
+  return !h.carrying && h.attackCd <= 0 && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0 && h.knockT <= 0 && h.pump <= 0;
 }
 
 /** A charge in progress survives a lunge hit that lands mid-combo. */
@@ -22,10 +22,20 @@ export function startCharge(h: SimPlayer): void {
   }
 }
 
+/** Health a swipe charged for `chargeT` s takes: a third, up to two thirds fully charged. */
+export function swipeDamage(chargeT: number): number {
+  const D = H.attack.damage;
+  const C = H.attack.charge;
+  // A plain click (held under `tapGrace`) is exactly a third.
+  const k = Math.max(0, Math.min(1, (chargeT - D.tapGrace) / (C.heavyAt - D.tapGrace)));
+  return D.base + (D.full - D.base) * k;
+}
+
 /** Starts a swing (resolved after the wind-up). A heavy swing is a fully charged one. */
-export function attemptAttack(w: World, h: SimPlayer, heavy = false): void {
+export function attemptAttack(w: World, h: SimPlayer, heavy = false, chargeT = 0): void {
   if (!canSwing(h)) return;
   h.heavy = heavy;
+  h.swingDamage = swipeDamage(heavy ? H.attack.charge.max : chargeT);
   h.attackWindup = H.attack.windup;
   h.swingT = H.attack.swingTime;
   h.move.slowT = Math.max(h.move.slowT, H.attack.windup);
@@ -74,14 +84,19 @@ function resolveAttack(w: World, h: SimPlayer): void {
   let hit = false;
   const power = h.heavy ? 2 : 1;
   if (best) {
-    damageSurvivor(w, best, h);
-    if (h.heavy) damageSurvivor(w, best, h);
+    damageSurvivor(w, best, h, h.swingDamage);
     hit = true;
   } else if (w.sexton.alive && inSwipe(h, w.sexton.x, w.sexton.y, BALANCE.sexton.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.sexton.x, w.sexton.y)) {
     w.sexton.hit(h);
     hit = true;
   } else if (w.chris.hittable && inSwipe(h, w.chris.x, w.chris.y, BALANCE.chris.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.chris.x, w.chris.y)) {
     w.chris.hit(h);
+    hit = true;
+  } else if (inSwipe(h, w.marc.x, w.marc.y, BALANCE.marc.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.marc.x, w.marc.y)) {
+    w.marc.hit(h);
+    hit = true;
+  } else if (inSwipe(h, w.plasma.x, w.plasma.y, w.plasma.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.plasma.x, w.plasma.y)) {
+    w.plasma.slashHit(h);
     hit = true;
   } else {
     // Two swings break a dropped barricade.
@@ -152,7 +167,7 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
       const r = reach + q.radius + BALANCE.net.hunterHitTolerance * 0.5;
       if (pointSegDist2(pos.x, pos.y, fromX, fromY, h.move.x, h.move.y) > r * r) continue;
       if (!w.geo.hasLineOfSight(h.move.x, h.move.y, pos.x, pos.y)) continue;
-      damageSurvivor(w, q, h);
+      damageSurvivor(w, q, h, H.lunge.damage);
       lungeLanded(h);
       w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'swing', id: h.id, hit: true });
       return;
@@ -173,7 +188,19 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
     if (pointSegDist2(cz.x, cz.y, fromX, fromY, h.move.x, h.move.y) <= r * r) {
       cz.hit(h);
       lungeLanded(h);
+      return;
     }
+  }
+  const mc = w.marc;
+  if (pointSegDist2(mc.x, mc.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.marc.radius) ** 2) {
+    mc.hit(h);
+    lungeLanded(h);
+    return;
+  }
+  const pl = w.plasma;
+  if (pointSegDist2(pl.x, pl.y, fromX, fromY, h.move.x, h.move.y) <= (reach + pl.radius) ** 2) {
+    pl.slashHit(h);
+    lungeLanded(h);
   }
 }
 
@@ -187,23 +214,42 @@ function lungeLanded(h: SimPlayer): void {
   h.move.slowMul = H.attack.hitSlowMul;
 }
 
-/** One hit: Healthy -> Wounded -> Downed. */
-export function damageSurvivor(w: World, q: SimPlayer, h: SimPlayer): void {
-  if (q.health !== Health.Healthy && q.health !== Health.Wounded) return;
+export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch';
+
+/**
+ * Takes `amount` (a fraction of full health) off a survivor: they flinch, and at zero they're
+ * down. Zach's hits also give them a burst of speed.
+ */
+export function hurtSurvivor(w: World, q: SimPlayer, amount: number, by: SimPlayer | null, kind: HitKind): void {
+  if (q.role !== 'survivor' || (q.health !== Health.Healthy && q.health !== Health.Wounded) || q.hideState === 2) return;
+  const zach = by?.role === 'hunter';
   w.cancelAction(q);
-  h.stats.hits++;
-  w.emit('all', { k: 'hit', victim: q.id, by: h.id, x: Math.round(q.move.x), y: Math.round(q.move.y) });
-  if (q.health === Health.Healthy) {
+  if (zach) by.stats.hits++;
+  q.hp = Math.max(0, q.hp - amount);
+  w.emit('all', { k: 'hit', victim: q.id, by: by?.id ?? 0, x: Math.round(q.move.x), y: Math.round(q.move.y), w: kind });
+  if (q.hp > 0.001) {
     q.health = Health.Wounded;
-    q.move.hasteT = BALANCE.survivor.hitHasteTime;
-  } else {
-    q.health = Health.Downed;
-    q.move.hasteT = 0;
-    q.gogglesOn = false;
-    h.stats.downs++;
-    w.emit('all', { k: 'down', victim: q.id });
-    w.feed(`${q.name} is down`);
+    if (zach) q.move.hasteT = BALANCE.survivor.hitHasteTime;
+    return;
   }
+  q.hp = 0;
+  q.health = Health.Downed;
+  q.move.hasteT = 0;
+  q.gogglesOn = false;
+  if (zach) by.stats.downs++;
+  w.emit('all', { k: 'down', victim: q.id });
+  w.feed(`${q.name} is down`);
+}
+
+/** Zach's machete (a third of their health unless charged) or lunge. */
+export function damageSurvivor(w: World, q: SimPlayer, h: SimPlayer, amount: number = H.attack.damage.base): void {
+  hurtSurvivor(w, q, amount, h, 'slash');
+}
+
+/** Sets a survivor's health (back on their feet): full is Healthy, anything less Wounded. */
+export function restoreSurvivor(q: SimPlayer, hp: number): void {
+  q.hp = Math.max(0.001, Math.min(1, hp));
+  q.health = q.hp >= 0.999 ? Health.Healthy : Health.Wounded;
 }
 
 export function carrySurvivor(w: World, h: SimPlayer, q: SimPlayer): void {
@@ -220,7 +266,7 @@ export function dropCarried(w: World, h: SimPlayer): void {
   h.carrying = 0;
   if (!q) return;
   q.carriedBy = 0;
-  q.health = Health.Wounded;
+  restoreSurvivor(q, BALANCE.survivor.reviveHp);
   q.wiggle = 0;
   q.move.x = h.move.x - Math.cos(h.facing) * 30;
   q.move.y = h.move.y - Math.sin(h.facing) * 30;
@@ -263,6 +309,15 @@ export function updateCombat(w: World, dt: number): void {
     if (p.swingT > 0) p.swingT = Math.max(0, p.swingT - dt);
 
     if (p.role === 'hunter') {
+      p.reloadT = Math.max(0, p.reloadT - dt);
+      // Knocked out by Plasma: back up after a few seconds, at full health.
+      if (p.knockT > 0) {
+        p.knockT = Math.max(0, p.knockT - dt);
+        if (p.knockT === 0) {
+          p.hp = 1;
+          w.feed(`${p.name} got back up`);
+        }
+      }
       if (p.chargeT >= 0) {
         const C = H.attack.charge;
         if (!canKeepCharging(p)) p.chargeT = -1;
@@ -274,8 +329,9 @@ export function updateCombat(w: World, dt: number): void {
         } else {
           // Released (or held too long): strike.
           const heavy = p.chargeT >= C.heavyAt;
+          const charged = p.chargeT;
           p.chargeT = -1;
-          attemptAttack(w, p, heavy);
+          attemptAttack(w, p, heavy, charged);
         }
       }
       if (p.attackWindup > 0) {
@@ -302,7 +358,7 @@ export function updateCombat(w: World, dt: number): void {
     } else if (p.health === Health.Carried) {
       const h = w.players.get(p.carriedBy);
       if (!h || h.role !== 'hunter') {
-        p.health = Health.Wounded;
+        restoreSurvivor(p, BALANCE.survivor.reviveHp);
         p.carriedBy = 0;
         continue;
       }

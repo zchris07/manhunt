@@ -1,7 +1,9 @@
 import { BALANCE, ChrisFlag, EntityKind, Health, NavGrid, moveCircle, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
+import type { NpcTarget } from './npc';
 import type { World } from './World';
 import { nearbyDoor, releaseFromStake } from './interact';
+import { restoreSurvivor } from './combat';
 
 const C = BALANCE.chris;
 
@@ -13,7 +15,7 @@ type Mode = 'pace' | 'idle' | 'wander' | 'rescue' | 'work' | 'flee' | 'ascend' |
  * downed or staked too long he sprints to them, revives or cuts them down, then sprouts wings
  * and flies to the heavens. Zach can kill him in two hits at any point.
  */
-export class Chris {
+export class Chris implements NpcTarget {
   readonly id: number;
   x = 0;
   y = 0;
@@ -63,6 +65,17 @@ export class Chris {
     this.dir = w.rng.chance(0.5) ? 1 : -1;
     this.wp = (this.wp + this.dir + 4) % 4;
     resolveOverlaps(w.geo, this, C.radius);
+  }
+
+  readonly hitRadius = C.radius;
+
+  get solid(): boolean {
+    return this.hittable;
+  }
+
+  /** A survivor's bottle or pellet: he flinches, and that's all (he never runs or fights back). */
+  itemHit(): void {
+    if (this.hittable) this.hurtT = 0.35;
   }
 
   /** Still on the map (not flown away) and alive: Zach's machete and bottles can hit him. */
@@ -354,7 +367,7 @@ export class Chris {
     this.workT += dt;
     if (this.workT < this.workDur) return;
     if (p.health === Health.Downed) {
-      p.health = Health.Wounded;
+      restoreSurvivor(p, BALANCE.survivor.reviveHp);
       w.feed(`Chris Zelley got ${p.name} back on their feet`);
     } else {
       releaseFromStake(w, p);

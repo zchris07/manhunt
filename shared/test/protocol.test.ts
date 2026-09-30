@@ -71,7 +71,7 @@ describe('input codec', () => {
 
 describe('snapshot codec', () => {
   it('round-trips a full snapshot and applies deltas', () => {
-    const self = { ...emptySelf(3), x: 1234.5, y: 99.25, stamina: 6.25, lungeCharges: 1, lungeRecharge: 4.5, inv: [0, 2, 1, 0, 0, 1], jarvis: 1, confit: 1 };
+    const self = { ...emptySelf(3), x: 1234.5, y: 99.25, stamina: 6.25, hp: 0.6, lungeCharges: 1, lungeRecharge: 4.5, inv: [0, 2, 1, 0, 0, 1], jarvis: 1, confit: 1 };
     const e1 = quantizeEntity(1, EntityKind.Player, 100, 200, 1, 0x1234, 3, 4, ItemKind.Bottle, 200);
     const e2 = quantizeEntity(2, EntityKind.Player, 300, 400, 2, 5, 0, 1);
     const wb = encodeWorld(world());
@@ -81,6 +81,7 @@ describe('snapshot codec', () => {
     history.set(d1.tick, d1);
     expect(d1.self.x).toBeCloseTo(1234.5);
     expect(d1.self.stamina).toBeCloseTo(6.25, 5);
+    expect(d1.self.hp).toBeCloseTo(0.6, 2);
     expect(d1.self.lungeCharges).toBe(1);
     expect(d1.self.lungeRecharge).toBeCloseTo(4.5, 2);
     expect(d1.self.inv).toEqual([0, 2, 1, 0, 0, 1]);
@@ -88,7 +89,7 @@ describe('snapshot codec', () => {
     expect(d1.self.confit).toBe(1);
     expect(d1.entities.size).toBe(2);
     expect(d1.entities.get(1)!.aux).toBe(ItemKind.Bottle);
-    expect(d1.entities.get(1)!.stamina).toBe(200);
+    expect(d1.entities.get(1)!.hp).toBe(200);
     expect(d1.worldState.lootTaken).toEqual(world().lootTaken);
     expect(d1.worldState.doors).toEqual(world().doors);
     expect(d1.worldState.radar).toEqual([{ x: 1200, y: 3400 }]);
@@ -103,7 +104,7 @@ describe('snapshot codec', () => {
     const d2 = decodeSnapshot(delta, (t) => history.get(t))!;
     expect(d2.baseTick).toBe(10);
     expect(d2.entities.get(1)!.qx).toBe(e1b.qx);
-    expect(d2.entities.get(1)!.stamina).toBe(150);
+    expect(d2.entities.get(1)!.hp).toBe(150);
     expect(d2.entities.has(2)).toBe(false);
     expect(d2.entities.get(40)!.kind).toBe(EntityKind.Gas);
     expect(d2.worldState.barricades).toEqual([0, 1, 2]);

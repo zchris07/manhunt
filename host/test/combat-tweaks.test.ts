@@ -36,19 +36,19 @@ describe('machete timing', () => {
     place(s, h.move.x + 60, h.move.y);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(5, (p) => (p === h ? { aim: 0 } : undefined));
-    expect(s.health).toBe(Health.Wounded);
+    expect(s.hp).toBeCloseTo(2 / 3, 3);
     expect(A.hitCooldown).toBe(0.8);
     expect(h.attackCd).toBeGreaterThan(0.5);
     // Too soon: nothing happens.
     place(s, h.move.x + 60, h.move.y);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(5, (p) => (p === h ? { aim: 0 } : undefined));
-    expect(s.health).toBe(Health.Wounded);
+    expect(s.hp).toBeCloseTo(2 / 3, 3);
     d.run(secs(0.8));
     place(s, h.move.x + 60, h.move.y);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(6, (p) => (p === h ? { aim: 0 } : undefined));
-    expect(s.health).toBe(Health.Downed);
+    expect(s.hp).toBeCloseTo(1 / 3, 3);
   });
 });
 
@@ -62,14 +62,15 @@ describe('slash + lunge combo', () => {
     expect(h.chargeT).toBeGreaterThanOrEqual(0);
   });
 
-  it('charge, lunge in, release: the lunge and the swipe both land (healthy to downed)', () => {
+  it('charge fully, lunge in, release: the lunge (a third) and the heavy swipe (two thirds) both land', () => {
     const { d, h, s } = lane();
     place(s, h.move.x + 200, h.move.y);
-    // Start charging, lunge while holding, keep holding a moment, release.
-    d.hold(h.id, Btn.Primary, 0.2, { aim: 0 });
+    // Charge fully, lunge while holding, keep holding a moment, release.
+    d.hold(h.id, Btn.Primary, A.charge.max, { aim: 0 });
     d.run(1, (p) => (p === h ? { buttons: Btn.Primary | Btn.Lunge, aim: 0 } : undefined));
     d.hold(h.id, Btn.Primary, 0.25, { aim: 0 });
     expect(s.health).toBe(Health.Wounded);
+    expect(s.hp).toBeCloseTo(2 / 3, 3);
     expect(h.chargeT).toBeGreaterThanOrEqual(0);
     d.run(secs(0.4), (p) => (p === h ? { aim: 0 } : undefined));
     expect(s.health).toBe(Health.Downed);

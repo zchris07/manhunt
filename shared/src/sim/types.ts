@@ -46,6 +46,7 @@ export const Action = {
   DamageGen: 15,
   Attack: 17,
   Talk: 18,
+  Plant: 19,
 } as const;
 export type Action = (typeof Action)[keyof typeof Action];
 
@@ -64,6 +65,7 @@ export const ACTION_LABELS: Record<number, string> = {
   15: 'Damaging',
   17: 'Swinging',
   18: 'Listening to Sexton',
+  19: 'Planting a galaxy gas trap',
 };
 
 /** Context-sensitive interaction offered to a player right now (drives the HUD prompt). */
@@ -91,6 +93,10 @@ export const Prompt = {
   ConfitRevive: 25,
   ConfitUnstake: 26,
   TalkChris: 27,
+  TalkMarc: 28,
+  TalkPlasma: 29,
+  SextonMore: 30,
+  PickDrop: 31,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -117,6 +123,10 @@ export const PROMPT_LABELS: Record<number, string> = {
   25: 'Press E to feed duck confit (instant revive)',
   26: 'Press E to feed duck confit (instant rescue)',
   27: 'Press E to talk to Chris Zelley',
+  28: 'Press E to talk to Marc Cortez',
+  29: 'Press E to talk to Plasma.TTV',
+  30: 'Press E to keep listening to Sexton',
+  31: 'Press E to pick up',
 };
 
 /** Items that take an inventory slot. Duck confit is carried separately (HUD icon). */
@@ -149,6 +159,12 @@ export const EntityKind = {
   Hemp: 5,
   Shane: 6,
   Chris: 7,
+  Marc: 8,
+  Plasma: 9,
+  /** An item a survivor dropped (G) for a teammate: extra = ItemKind (+8 = golden pump). */
+  Drop: 10,
+  /** Sexton's Hemp Beam: x,y origin, facing, extra = length / 8. */
+  Beam: 11,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

@@ -50,6 +50,8 @@ export class MiniMap {
   private readonly seenGens = new Set<number>();
   private readonly seenStakes = new Set<number>();
   private open = false;
+  /** World units the minimap shows around you (JARVIS widens it for good). */
+  private radius = MINI_RADIUS;
   /** Testing mode: clicking the full map teleports you there (world coordinates). */
   onTeleport: ((x: number, y: number) => void) | null = null;
 
@@ -102,6 +104,11 @@ export class MiniMap {
   toggle(): void {
     this.open = !this.open;
     this.fullWrap.style.display = this.open ? 'flex' : 'none';
+  }
+
+  /** JARVIS: the minimap's view widens (it stays wider for the rest of the match). */
+  widenView(mul: number): void {
+    this.radius = MINI_RADIUS * mul;
   }
 
   /** Shows the "click to teleport" hint (testing mode). */
@@ -204,18 +211,13 @@ export class MiniMap {
     const H = cv.height;
     c.clearRect(0, 0, W, H);
     // World -> canvas transform.
-    const span = whole ? this.map.width : MINI_RADIUS * 2;
+    const span = whole ? this.map.width : this.radius * 2;
     const scale = W / span;
-    const ox = whole ? 0 : s.x - MINI_RADIUS;
-    const oy = whole ? 0 : s.y - MINI_RADIUS;
+    const ox = whole ? 0 : s.x - this.radius;
+    const oy = whole ? 0 : s.y - this.radius;
     const tx = (x: number): number => (x - ox) * scale;
     const ty = (y: number): number => (y - oy) * scale;
     c.save();
-    if (!whole) {
-      c.beginPath();
-      c.arc(W / 2, H / 2, W / 2 - 2, 0, Math.PI * 2);
-      c.clip();
-    }
     c.fillStyle = '#07060c';
     c.fillRect(0, 0, W, H);
     const a = ART_SCALE;
@@ -287,7 +289,7 @@ export class MiniMap {
     }
     // JARVIS radar: Zach as a red dot.
     for (const r of s.world.radar) {
-      if (!whole && Math.hypot(r.x - s.x, r.y - s.y) > MINI_RADIUS) continue;
+      if (!whole && (Math.abs(r.x - s.x) > this.radius || Math.abs(r.y - s.y) > this.radius)) continue;
       dot(r.x, r.y, 4.5 * k, '#ff2a3a', (4 + pulse * 5) * k);
     }
     // You: on the full map a big pulsing marker with a label, so you're easy to find.
@@ -332,14 +334,13 @@ export class MiniMap {
     c.restore();
     c.restore();
     if (!whole) {
+      // A square frame.
       c.lineWidth = 4;
-      c.strokeStyle = '#140c22';
-      c.beginPath();
-      c.arc(W / 2, H / 2, W / 2 - 2, 0, Math.PI * 2);
-      c.stroke();
-      c.lineWidth = 2;
-      c.strokeStyle = 'rgba(255,255,255,0.75)';
-      c.stroke();
+      c.strokeStyle = '#0a0a08';
+      c.strokeRect(2, 2, W - 4, H - 4);
+      c.lineWidth = 1.5;
+      c.strokeStyle = 'rgba(217,211,193,0.6)';
+      c.strokeRect(2, 2, W - 4, H - 4);
     }
   }
 

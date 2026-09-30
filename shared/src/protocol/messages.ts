@@ -71,7 +71,8 @@ export interface MatchResult {
 export type GameEvent =
   | { k: 'noise'; x: number; y: number; r: number; s: string }
   | { k: 'feed'; text: string }
-  | { k: 'hit'; victim: number; by: number; x: number; y: number }
+  /** Someone took damage (they flinch). `w` is what hit them. */
+  | { k: 'hit'; victim: number; by: number; x: number; y: number; w?: 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' }
   | { k: 'down'; victim: number }
   | { k: 'stun'; target: number; kind: string }
   | { k: 'staked'; victim: number; stage: number }
@@ -84,14 +85,18 @@ export type GameEvent =
   | { k: 'skill'; id: number; delayMs: number; zone: number; size: number; great: number; needleMs: number }
   | { k: 'skillResult'; ok: boolean; great: boolean }
   /** Scent trail points for Zach: x, y, kind (0 scent, 1 blood), age in tenths of a second. */
+  /** Scent and blood: x, y, kind (0 scent, 1 blood), age in tenths of a second, owner id; repeated. */
   | { k: 'trail'; pts: number[] }
   | { k: 'breath'; x: number; y: number }
   | { k: 'item'; text: string }
   | { k: 'health'; id: number; h: number }
   /** Zach's melee swing (everyone near sees the swipe). */
   | { k: 'swing'; id: number; hit: boolean }
-  /** A shotgun blast: origin, angle, length of the tracer, whether it hit Zach. */
-  | { k: 'shot'; x: number; y: number; a: number; len: number; hit: boolean }
+  /**
+   * A shotgun blast from (x,y): `p` holds each pellet's angle (milliradians) and tracer length;
+   * `hit` if any pellet hit a person; `gold` for a golden pump.
+   */
+  | { k: 'shot'; x: number; y: number; p: number[]; hit: boolean; gold: boolean }
   /** Soundcloud Burst wave launched from (x,y) at angle a. */
   | { k: 'burst'; x: number; y: number; a: number }
   /** The wave reached you: jump scare. */
@@ -103,6 +108,8 @@ export type GameEvent =
   | { k: 'sexton'; say: string }
   /** Chris Zelley speaks (a speech bubble over him). */
   | { k: 'chris'; say: string }
+  /** Marc Cortez or Plasma.TTV speaks. */
+  | { k: 'npc'; who: 'marc' | 'plasma'; say: string }
   /** Sexton hands a glowing tablet to a survivor. */
   | { k: 'tablet'; to: number; x: number; y: number }
   | { k: 'gas'; x: number; y: number }

@@ -635,6 +635,10 @@ const HUNTER_LOOK: Look = { skin: '#d9c9a8', hair: '#2a2420', style: 'short', sh
 const SHANE_LOOK: Look = { skin: '#e0b890', hair: '#3a2a1c', style: 'long', shirt: '#d8d0c0', pants: '#3a5a8a', shoes: '#2a2622', jacket: '#4a6a9a' };
 /** Chris Zelley: paramedic greens with hi-vis stripes. */
 const CHRIS_LOOK: Look = { skin: '#d7a67c', hair: '#2a1e16', style: 'buzz', shirt: '#e8ecee', pants: '#1f3a2a', shoes: '#1a1a1a', jacket: '#2f7a4a' };
+/** Marc Cortez: a red flannel over a white tee, jeans. */
+const MARC_LOOK: Look = { skin: '#c68a5e', hair: '#1e1612', style: 'short', shirt: '#e8e4dc', pants: '#3c4a6a', shoes: '#4a3424', jacket: '#9a2a24' };
+/** Plasma.TTV: black gaming hoodie, headset. */
+const PLASMA_LOOK: Look = { skin: '#e8c0a0', hair: '#2a1e1a', style: 'curly', shirt: '#2a2a30', pants: '#26262c', shoes: '#e8e8ec', jacket: '#1c1c22' };
 const SEXTON_LOOK: Look = { skin: '#f4cfae', hair: '#f5d86a', style: 'short', shirt: '#2f86f0', pants: '#cdb57c', shoes: '#5a3a22' };
 
 /** A leg + shoe, pointing +x from the hip (used in pairs for the walk cycle). */
@@ -814,7 +818,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -1004,6 +1008,111 @@ export const chris: CanvasGen = () => {
 };
 
 export const chrisDead: CanvasGen = () => corpse(CHRIS_LOOK);
+
+/** Marc Cortez: red flannel with a check pattern on the shoulders. */
+export const marc: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, MARC_LOOK, 30, 32, 1);
+  ctx.strokeStyle = 'rgba(20,10,10,0.45)';
+  ctx.lineWidth = 1;
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(22 + i * 4, 32 + side * 9);
+      ctx.lineTo(24 + i * 4, 32 + side * 15);
+      ctx.stroke();
+    }
+  }
+  return c;
+};
+
+/** Plasma.TTV in human form: a guy in a black hoodie with a gaming headset. */
+export const plasma: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, PLASMA_LOOK, 30, 32, 1);
+  // Headset band over the head and cups at the ears.
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(31, 23);
+  ctx.lineTo(31, 41);
+  ctx.stroke();
+  for (const y of [22.5, 41.5]) {
+    roundRect(ctx, 28, y - 3, 7, 6, 2);
+    fillInk(ctx, '#1a1a1a', 1);
+    ctx.fillStyle = y < 32 ? '#ff2a8a' : '#2af0ff';
+    ctx.fillRect(29.5, y - 1, 4, 2);
+  }
+  return c;
+};
+
+/** Plasma.TTV in GAMER RAGE: a hulking brute, huge fists forward, torn hoodie, glowing eyes. */
+export const plasmaBeast: CanvasGen = () => {
+  const [c, ctx] = canvas(110, 96);
+  const cx = 46;
+  const cy = 48;
+  shadow(ctx, cx + 4, cy + 5, 34, 40, 0.35);
+  // Arms: thick, reaching forward to big fists.
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, cy + side * 26);
+    ctx.quadraticCurveTo(cx + 20, cy + side * 34, cx + 40, cy + side * 18);
+    ctx.lineWidth = 19;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = '#6a4a8a';
+    ctx.stroke();
+    circle(ctx, cx + 42, cy + side * 17, 11);
+    fillInk(ctx, '#8a5aa8', 2);
+    ctx.strokeStyle = 'rgba(20,0,30,0.5)';
+    ctx.lineWidth = 1.5;
+    for (let k = -1; k <= 1; k++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + 47, cy + side * 17 + k * 4);
+      ctx.lineTo(cx + 52, cy + side * 17 + k * 4);
+      ctx.stroke();
+    }
+  }
+  // Hunched torso in a torn black hoodie; bulging shoulders.
+  ellipse(ctx, cx, cy, 24, 33);
+  fillInk(ctx, '#1c1c22', 2.2);
+  for (const side of [-1, 1]) {
+    ellipse(ctx, cx + 2, cy + side * 22, 13, 12);
+    fillInk(ctx, '#7a52a0', 2);
+  }
+  ctx.strokeStyle = '#8a5aa8';
+  ctx.lineWidth = 2;
+  for (const [x, y] of [
+    [cx - 10, cy - 8],
+    [cx - 4, cy + 10],
+    [cx - 14, cy + 4],
+  ]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 7, y + 3);
+    ctx.lineTo(x + 3, y + 7);
+    ctx.stroke();
+  }
+  // Small head sunk between the shoulders, glowing eyes, a snapped headset.
+  circle(ctx, cx + 14, cy, 11);
+  fillInk(ctx, '#8a5aa8', 2);
+  ctx.fillStyle = '#2a1e1a';
+  ellipse(ctx, cx + 10, cy, 8, 10);
+  ctx.fill();
+  ctx.fillStyle = '#ff2a2a';
+  for (const y of [-4, 4]) {
+    circle(ctx, cx + 21, cy + y, 2.2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx + 10, cy - 12);
+  ctx.lineTo(cx + 6, cy - 20);
+  ctx.stroke();
+  return c;
+};
 
 // ---------------------------------------------------------------------------------------
 // Objects and structures
@@ -1369,29 +1478,88 @@ export const itemEnergy = itemCanvas((ctx) => {
   ctx.fillRect(14, 10, 3, 18);
 });
 
+/**
+ * Galaxy gas trap: a Galaxy Gas-style nitrous canister (a big whippit tank): a stout
+ * cylinder wrapped in a colourful galaxy label, a silver shoulder and a valve on top.
+ */
 export const itemTrap = itemCanvas((ctx) => {
-  circle(ctx, 20, 21, 14);
-  fillInk(ctx, '#3a2a6a');
-  const g = ctx.createRadialGradient(17, 18, 1, 20, 21, 13);
-  g.addColorStop(0, '#ff8af0');
-  g.addColorStop(0.5, '#8a4aff');
-  g.addColorStop(1, '#2a1a5a');
+  // Body with the galaxy wrap.
+  roundRect(ctx, 11, 12, 18, 25, 5);
+  fillInk(ctx, '#1a1030', 1.6);
+  ctx.save();
+  roundRect(ctx, 11, 12, 18, 25, 5);
+  ctx.clip();
+  const g = ctx.createLinearGradient(11, 12, 29, 37);
+  g.addColorStop(0, '#2a1a6a');
+  g.addColorStop(0.35, '#b03ad8');
+  g.addColorStop(0.6, '#ff5ab0');
+  g.addColorStop(0.85, '#3a6aff');
+  g.addColorStop(1, '#1a1030');
   ctx.fillStyle = g;
-  circle(ctx, 20, 21, 11);
-  ctx.fill();
+  ctx.fillRect(11, 16, 18, 17);
+  // Stars.
   ctx.fillStyle = '#ffffff';
-  for (const [x, y] of [
-    [15, 17],
-    [24, 24],
-    [22, 15],
-    [16, 26],
+  for (const [x, y, r] of [
+    [14, 19, 0.9],
+    [25, 22, 1.1],
+    [18, 29, 0.8],
+    [23, 31, 0.7],
+    [16, 24, 0.6],
   ]) {
-    circle(ctx, x, y, 1);
+    circle(ctx, x, y, r);
     ctx.fill();
   }
-  roundRect(ctx, 16, 3, 8, 6, 2);
-  fillInk(ctx, '#c9d2dc', 1.2);
+  // Label band and a highlight down the side.
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(11, 25, 18, 1.2);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(13, 12, 3, 25);
+  ctx.restore();
+  // Silver shoulder, neck and valve.
+  ctx.beginPath();
+  ctx.moveTo(11.5, 14);
+  ctx.quadraticCurveTo(20, 4, 28.5, 14);
+  ctx.closePath();
+  fillInk(ctx, '#c9d2dc', 1.4);
+  roundRect(ctx, 17, 4, 6, 5, 1.5);
+  fillInk(ctx, '#9aa4b0', 1.2);
+  roundRect(ctx, 15, 2, 10, 3, 1.5);
+  fillInk(ctx, '#1a1a1a', 1);
+  roundRect(ctx, 22, 5, 6, 2.4, 1);
+  fillInk(ctx, '#7a8490', 1);
 });
+
+/** Plasma's golden pump: a gold tactical shotgun (the legendary drop). */
+export const itemGoldenPump = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(24, 22);
+  ctx.rotate(-0.3);
+  // Stock.
+  ctx.beginPath();
+  ctx.moveTo(-22, -3);
+  ctx.lineTo(-9, -4);
+  ctx.lineTo(-7, 3);
+  ctx.lineTo(-20, 6);
+  ctx.closePath();
+  fillInk(ctx, '#b8862a');
+  // Receiver.
+  roundRect(ctx, -10, -5, 16, 8, 2);
+  fillInk(ctx, '#f0c040', 1.4);
+  ctx.fillStyle = '#fff0a0';
+  ctx.fillRect(-8, -4, 12, 1.5);
+  // Barrel and magazine tube.
+  roundRect(ctx, 4, -4.5, 20, 3.4, 1);
+  fillInk(ctx, '#d8a830', 1.2);
+  roundRect(ctx, 4, -0.8, 17, 2.6, 1);
+  fillInk(ctx, '#a07820', 1.1);
+  // Pump grip.
+  roundRect(ctx, 8, -1.6, 9, 4.6, 1.5);
+  fillInk(ctx, '#2a2218', 1.1);
+  // Grip.
+  roundRect(ctx, -9, 2, 4, 6, 1.5);
+  fillInk(ctx, '#b8862a', 1.1);
+  ctx.restore();
+}, 48);
 
 export const itemConfit = itemCanvas((ctx) => {
   ellipse(ctx, 20, 24, 17, 10);
@@ -1539,6 +1707,9 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   shane,
   chris,
   chrisDead,
+  marc,
+  plasma,
+  plasmaBeast,
   generator,
   locker,
   wardrobe,
@@ -1555,6 +1726,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemShotgun,
   itemEnergy,
   itemTrap,
+  itemGoldenPump,
   itemConfit,
   itemTablet,
   itemHemp,

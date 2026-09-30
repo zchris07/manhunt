@@ -7,11 +7,11 @@ import {
   EntityKind,
   Gait,
   Health,
+  ItemKind,
   SextonFlag,
   ShaneFlag,
   TICK_DT,
   VisibilityComputer,
-  maxStamina,
   type GameEvent,
   type InputCmd,
   type SelfState,
@@ -195,7 +195,8 @@ export class GameView {
       const s = this.self;
       const now = performance.now();
       const C = BALANCE.hunter.attack.charge;
-      const ready = !!s && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
+      // With the golden pump there's no machete to charge.
+      const ready = !!s && s.pump <= 0 && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
       if (!inp.buttons[0]) this.chargeLock = false;
       if (this.chargeStart && now - this.chargeStart >= C.autoRelease * 1000) {
         // Held too long: the swing goes off by itself; let go to charge again.
@@ -217,6 +218,7 @@ export class GameView {
       if (!s || s.stunT > 0 || s.carrying) this.chargeStart = 0;
     } else {
       if (inp.isDown('KeyC') || inp.isDown('ControlLeft')) b |= Btn.Crouch;
+      if (inp.isDown('KeyG') || L('KeyG')) b |= Btn.Drop;
       const spaceHeld = inp.isDown('Space') && !this.skill.isActive;
       if (spaceHeld || L('Space')) b |= Btn.Space;
     }
@@ -263,9 +265,14 @@ export class GameView {
         this.hud.setRosterHealth(e.id, e.h);
         break;
       case 'hit':
-        this.overlays.addBlood(e.x, e.y);
-        this.overlays.addBlood(e.x, e.y);
-        this.particles.burst(e.x, e.y, 16, { speed: 200, life: 0.5, tint: 0x7a0c14, size: 1.4 });
+        this.entities.flinch(e.victim, e.by);
+        if (e.w === 'beam') {
+          this.particles.burst(e.x, e.y, 14, { speed: 220, life: 0.45, tint: 0xf0fff0, size: 1.2 });
+        } else {
+          this.overlays.addBlood(e.x, e.y);
+          if (e.w !== 'pellet') this.overlays.addBlood(e.x, e.y);
+          this.particles.burst(e.x, e.y, e.w === 'pellet' ? 6 : 16, { speed: 200, life: 0.5, tint: 0x7a0c14, size: 1.4 });
+        }
         if (e.victim === me) {
           this.damage = 1;
           this.shake = Math.max(this.shake, 14);
@@ -312,23 +319,32 @@ export class GameView {
         if (e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash' || e.s === 'door_smash') this.shake = Math.max(this.shake, 7 * near(e.x, e.y, 450));
         break;
       case 'shot': {
-        this.entities.shot(e.x, e.y, e.a, e.len);
+        this.entities.shot(e.x, e.y, e.p, e.gold);
         this.shake = Math.max(this.shake, 9 * near(e.x, e.y, 500));
-        if (e.hit) this.particles.burst(e.x + Math.cos(e.a) * e.len, e.y + Math.sin(e.a) * e.len, 20, { speed: 220, life: 0.4, tint: 0xffd23a });
+        // Sparks where each pellet stops.
+        for (let i = 0; i + 1 < e.p.length; i += 2) {
+          const ang = e.p[i] / 1000;
+          this.particles.burst(e.x + Math.cos(ang) * e.p[i + 1], e.y + Math.sin(ang) * e.p[i + 1], 3, { speed: 140, life: 0.3, tint: e.gold ? 0xffd86a : 0xffc23a, size: 0.7 });
+        }
         break;
       }
       case 'burst':
         // Everyone sees the wave; only Zach hears it go out (half volume, a random snippet).
         this.overlays.addBurst(e.x, e.y, e.a, now);
-        if (this.roleIsHunter) a.playClip('burst', { volume: 0.5 });
+        if (this.roleIsHunter) a.playClip('burst', { volume: BALANCE.hunter.burst.zachVolume });
         break;
-      case 'scare':
-        this.hud.jumpScare(BALANCE.hunter.burst.scareTime * 1000);
+      case 'scare': {
+        // 2.5 s: the image and a snippet of the song both fade in and out.
+        const S = BALANCE.hunter.burst;
+        this.hud.jumpScare(S.scareTime * 1000);
+        a.playClip('burst', { volume: S.scareVolume, fadeIn: S.scareFade, fadeOut: S.scareFade, duration: S.scareTime });
         break;
+      }
       case 'jarvis':
         if (e.by === me) {
           this.hud.big('JARVIS ONLINE', 'jarvis');
           this.minimap.revealAll();
+          this.minimap.widenView(BALANCE.sexton.jarvisMinimapMul);
         } else this.hud.big('JARVIS ONLINE', 'jarvis');
         this.hud.feed(`${name(e.by)} brought JARVIS online. Everything is visible for 10 s.`);
         a.announce('Jarvis online');
@@ -346,6 +362,9 @@ export class GameView {
         break;
       case 'chris':
         this.entities.say(e.say, this.time, 'chris');
+        break;
+      case 'npc':
+        this.entities.say(e.say, this.time, e.who);
         break;
       case 'tablet':
         this.entities.handTablet(e.x, e.y, e.to);
@@ -409,15 +428,19 @@ export class GameView {
     if (s.gassed) state |= EF.Gassed;
     if (performance.now() < this.swingUntil) state |= EF.Attacking;
     const charging = this.chargeStart ? Math.min(1, (performance.now() - this.chargeStart) / 1000 / BALANCE.hunter.attack.charge.max) : 0;
-    const stamina = p?.stamina ?? s.stamina;
     const locked = (p?.staminaLock ?? s.staminaLock) > 0;
     if (locked) state |= EF.StaminaLock;
     if (p?.sprinting) state |= EF.Sprinting;
     state |= (Gait.Walk & 3) << EF.GaitShift;
-    const cap = maxStamina(s.role === 1 ? 'hunter' : 'survivor', p?.boostT ?? s.boostT);
     // Zach's aux is his swing charge (0-255); a survivor's is the item in hand.
-    const aux = s.role === 1 ? Math.round((charging || (performance.now() < this.swingUntil ? this.charge : 0)) * 255) : this.o.inventory.held(s.inv);
-    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, stamina: cap > 0 ? (stamina / cap) * 255 : 0 };
+    const held = this.o.inventory.held(s.inv);
+    const aux =
+      s.role === 1
+        ? s.pump > 0
+          ? 255
+          : Math.round((charging || (performance.now() < this.swingUntil ? this.charge : 0)) * 254)
+        : held | (held === ItemKind.Shotgun && s.golden ? 8 : 0);
+    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, hp: s.hp * 255 };
   }
 
   /** Positional sounds: Sexton's reel and Shane's pitter-patter while he's alerted. */
@@ -427,7 +450,7 @@ export class GameView {
     const ly = this.renderPos.y;
     const sx = ents.find((e) => e.kind === EntityKind.Sexton && (e.state & SextonFlag.Dead) === 0);
     const X = BALANCE.sexton.audio;
-    if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near });
+    if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near, curve: X.curve });
     else a.loop('sexton', null);
     const sh = ents.find((e) => e.kind === EntityKind.Shane && (e.state & ShaneFlag.Chasing) !== 0);
     const P = BALANCE.shane.steps;
@@ -562,6 +585,17 @@ export class GameView {
     // Shane Jeans carries a faint light wherever he goes.
     const jeans = ents.find((e) => e.kind === EntityKind.Shane);
     if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
+    // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
+    const marc = ents.find((e) => e.kind === EntityKind.Marc);
+    if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });
+    const beam = ents.find((e) => e.kind === EntityKind.Beam);
+    if (beam) {
+      const BL = BALANCE.sexton.defense.light;
+      const len = beam.extra * 8;
+      for (const f of [0.15, 0.55, 0.97]) {
+        lights.push({ key: `beam${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
+      }
+    }
     // Chris Zelley's ambulance glows faintly on both sides (he himself carries no light).
     const amb = map.ambulance;
     const AL = BALANCE.chris.ambulance;

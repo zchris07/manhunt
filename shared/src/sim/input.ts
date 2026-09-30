@@ -19,6 +19,8 @@ export const Btn = {
   Ability: 1 << 6,
   /** F: Zach's lunge. */
   Lunge: 1 << 7,
+  /** G: drop one of the selected item for a teammate (survivors). */
+  Drop: 1 << 8,
 } as const;
 
 export interface InputCmd {

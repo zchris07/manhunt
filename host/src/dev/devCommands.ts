@@ -21,7 +21,10 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       break;
     }
     case 'health':
-      if (p.role === 'survivor') p.health = args[0] as typeof p.health;
+      if (p.role === 'survivor') {
+        p.health = args[0] as typeof p.health;
+        p.hp = p.health === Health.Healthy ? 1 : p.health === Health.Wounded ? 0.5 : 0;
+      }
       break;
     case 'give': {
       // args: [ItemKind, count]
@@ -58,6 +61,15 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       sh.unstick();
       break;
     }
+    case 'marc':
+    case 'plasma': {
+      // Bring Marc Cortez or Plasma.TTV next to this player.
+      const n = cmd === 'marc' ? w.marc : w.plasma;
+      n.x = p.move.x + (args[0] ?? 60);
+      n.y = p.move.y + (args[1] ?? 0);
+      n.unstick();
+      break;
+    }
     case 'chris': {
       // Bring Chris Zelley next to this player.
       const c = w.chris;
@@ -89,7 +101,10 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       w.balance.timeLimit = w.time + Math.max(1, args[0]);
       break;
     case 'heal':
-      if (p.role === 'survivor' && p.health !== Health.Eliminated && p.health !== Health.Escaped) p.health = Health.Healthy;
+      if (p.role === 'survivor' && p.health !== Health.Eliminated && p.health !== Health.Escaped) {
+        p.health = Health.Healthy;
+        p.hp = 1;
+      }
       break;
   }
 }

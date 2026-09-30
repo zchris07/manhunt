@@ -1,8 +1,8 @@
 import { Action, BALANCE, BarricadeState, Btn, Health, ItemKind, Prompt, pointSegDist2, resolveOverlaps, type InputCmd, type LootKind } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
-import { carrySurvivor, startCharge, damageSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, useItem } from './items';
+import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvivor } from './combat';
+import { dropBarricade, dropItem, fireZachPump, giveShotgun, pickUpDrop, plantTrap, useItem } from './items';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
 
 const R = BALANCE.reach;
@@ -57,6 +57,7 @@ export function nearbyDoor(w: World, x: number, y: number, reach: number = R.doo
 export function roomFor(p: SimPlayer, item: LootKind): boolean {
   if (item === 'confit') return p.confit < 1;
   const kind = LOOT_TO_ITEM[item];
+  if (kind === ItemKind.Shotgun && p.golden) return true;
   return p.inv[kind] < BALANCE.items.maxStack;
 }
 
@@ -93,6 +94,11 @@ function survivorPrompts(w: World, p: SimPlayer): void {
     p.promptTarget = target;
     return true;
   };
+  // Sexton waiting for you to keep listening comes before anything else.
+  if (w.sexton.awaiting(p)) {
+    set(Prompt.SextonMore, 0);
+    return;
+  }
   // Teammates first.
   let mate: SimPlayer | undefined;
   let mateD: number = R.teammate;
@@ -115,6 +121,13 @@ function survivorPrompts(w: World, p: SimPlayer): void {
 
   if (p.prompt === Prompt.None && w.sexton.canTalk(p)) set(Prompt.TalkSexton, 0);
   if (p.prompt === Prompt.None && w.chris.canTalk(p)) set(Prompt.TalkChris, 0);
+  if (p.prompt === Prompt.None && w.marc.canTalk(p)) set(Prompt.TalkMarc, 0);
+  if (p.prompt === Prompt.None && w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
+  if (p.prompt === Prompt.None) {
+    // Something a teammate dropped.
+    const di = nearestIndex(w.drops, x, y, R.pickup, (d) => d.kind === ItemKind.Shotgun || p.inv[d.kind] < BALANCE.items.maxStack);
+    if (di >= 0) set(Prompt.PickDrop, w.drops[di].id);
+  }
   if (p.prompt === Prompt.None) {
     const li = nearestIndex(w.map.loot, x, y, R.loot, (_l, i) => !w.lootTaken[i]);
     if (li >= 0) set(roomFor(p, w.map.loot[li].item) ? Prompt.Loot : Prompt.InventoryFull, li);
@@ -163,6 +176,7 @@ function hunterPrompts(w: World, p: SimPlayer): void {
       }
     }
     if (target) set(Prompt.PickUp, target.id);
+    else if (w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
     else if (w.hempDrop && Math.hypot(w.hempDrop.x - x, w.hempDrop.y - y) < R.pickup) set(Prompt.TakeHemp, 0);
     else {
       const hi = nearestIndex(w.map.hidingSpots, x, y, R.hide + 8, () => true);
@@ -189,11 +203,15 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
     if (pressed & Btn.Interact || heldStart) survivorInteract(w, p);
     if (pressed & Btn.Space && canAct(p) && p.action === Action.None && p.prompt2 === Prompt.DropBarricade) dropBarricade(w, p, p.prompt2Target);
     if (pressed & Btn.Primary && canAct(p)) useItem(w, p, cmd);
+    if (pressed & Btn.Drop) dropItem(w, p);
     if (pressed & Btn.Ability) tryJarvis(w, p);
     return;
   }
   if (p.role !== 'hunter' || !canAct(p)) return;
-  if (pressed & Btn.Primary) startCharge(p);
+  // Plasma's golden pump replaces the machete while it has shots.
+  if (p.pump > 0) {
+    if (cmd.buttons & Btn.Primary) fireZachPump(w, p, cmd.aim);
+  } else if (pressed & Btn.Primary) startCharge(p);
   if (pressed & Btn.Secondary) tryBurst(w, p, cmd.aim);
   if (pressed & Btn.Ability) tryHemp(w, p);
   if (p.action !== Action.None || p.attackWindup > 0) return;
@@ -218,6 +236,9 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
       }
       case Prompt.DamageGen:
         w.startAction(p, Action.DamageGen, H.damageGenTime, p.promptTarget);
+        break;
+      case Prompt.TalkPlasma:
+        w.plasma.talk(p);
         break;
       case Prompt.TakeHemp:
         if (w.hempDrop) {
@@ -284,7 +305,7 @@ function survivorInteract(w: World, p: SimPlayer): void {
       if (!q) break;
       if (!w.testMode) p.confit = 0;
       if (q.health === Health.Downed) {
-        q.health = Health.Wounded;
+        restoreSurvivor(q, BALANCE.survivor.reviveHp);
         p.stats.revives++;
         w.feed(`${p.name} fed ${q.name} duck confit. Back on their feet!`);
       } else if (q.health === Health.Staked) {
@@ -302,6 +323,18 @@ function survivorInteract(w: World, p: SimPlayer): void {
       break;
     case Prompt.TalkChris:
       w.chris.activate(p);
+      break;
+    case Prompt.SextonMore:
+      w.sexton.continueTalk(p);
+      break;
+    case Prompt.TalkMarc:
+      w.marc.talk(p);
+      break;
+    case Prompt.TalkPlasma:
+      w.plasma.talk(p);
+      break;
+    case Prompt.PickDrop:
+      pickUpDrop(w, p, p.promptTarget);
       break;
     case Prompt.OpenDoor:
     case Prompt.CloseDoor:
@@ -340,11 +373,11 @@ export function updateInteractions(w: World, dt: number): void {
         p.actionT += dt;
         if (p.actionT >= p.actionDur) {
           if (p.action === Action.Heal) {
-            q.health = Health.Healthy;
+            restoreSurvivor(q, 1);
             p.stats.heals++;
             w.emit([q.id, p.id], { k: 'item', text: `${p.name} patched ${q.name} up` });
           } else if (p.action === Action.Revive) {
-            q.health = Health.Wounded;
+            restoreSurvivor(q, BALANCE.survivor.reviveHp);
             p.stats.revives++;
             w.feed(`${p.name} got ${q.name} back on their feet`);
           } else {
@@ -381,10 +414,21 @@ export function updateInteractions(w: World, dt: number): void {
           continue;
         }
         const kind = LOOT_TO_ITEM[item.item];
-        p.inv[kind]++;
-        if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
-        if (kind === ItemKind.Shotgun) p.shells.push(BALANCE.items.shotgun.shells);
+        if (kind === ItemKind.Shotgun) {
+          // Swaps out a golden pump.
+          giveShotgun(w, p, false, BALANCE.items.shotgun.shells);
+        } else {
+          p.inv[kind]++;
+          if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
+        }
         w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_TEXT[item.item]}` });
+        continue;
+      }
+      case Action.Plant: {
+        p.actionT += dt;
+        if (p.actionT < p.actionDur) continue;
+        p.action = Action.None;
+        plantTrap(w, p);
         continue;
       }
       case Action.HideEnter: {
@@ -466,7 +510,7 @@ export function releaseFromStake(w: World, q: SimPlayer): void {
   const stake = w.map.stakes[q.stakeId];
   if (q.stakeId >= 0) w.stakes[q.stakeId] = 0;
   q.stakeId = -1;
-  q.health = Health.Wounded;
+  restoreSurvivor(q, BALANCE.survivor.reviveHp);
   q.move.hasteT = 0;
   if (stake) {
     q.move.x = stake.x + 30;

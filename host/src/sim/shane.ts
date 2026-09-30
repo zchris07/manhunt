@@ -1,5 +1,6 @@
 import { BALANCE, EntityKind, Health, NavGrid, ShaneFlag, inCone, moveCircle, overlapsCollider, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
+import type { ItemHit, NpcTarget } from './npc';
 import type { World } from './World';
 import { visionFor } from './view';
 
@@ -13,7 +14,7 @@ type Mode = 'idle' | 'walk' | 'chase' | 'flee';
  * a beacon for Zach, who sees an arrow toward him while he's chasing. He ignores Zach
  * entirely, can't open doors or break barricades, and gives up after a while.
  */
-export class Shane {
+export class Shane implements NpcTarget {
   readonly id: number;
   x = 0;
   y = 0;
@@ -55,6 +56,19 @@ export class Shane {
     }
     this.heading = w.rng.range(-Math.PI, Math.PI);
     this.facing = this.heading;
+  }
+
+  readonly hitRadius = S.radius;
+  readonly solid = true;
+
+  itemHit(_by: SimPlayer, kind: ItemHit): void {
+    if (kind === 'bottle') this.bottleHit();
+    else this.shotHit();
+  }
+
+  /** Caught in galaxy gas: he loses the survivor and runs off. */
+  gassed(): void {
+    if (this.mode === 'chase') this.shakeOff();
   }
 
   get chasing(): boolean {

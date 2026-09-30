@@ -71,6 +71,8 @@ export const BALANCE = {
     /** How far away others notice you moving (bots and hiding only; there is no audio for it). */
     noise: { idle: 0, crouch: 45, walk: 170, run: 430 },
     wiggleTime: 16,
+    /** Health left after being revived, cut down or dropped by Zach. */
+    reviveHp: 1 / 3,
     healTime: 12,
     reviveTime: 8,
     unstakeTime: 1.6,
@@ -106,18 +108,31 @@ export const BALANCE = {
        * survivor, breaks a door or barricade outright). Holding past `autoRelease` s strikes.
        */
       charge: { max: 0.9, heavyAt: 0.85, rangeMul: 1.3, arcMul: 1.25, slowMul: 0.65, autoRelease: 3 },
+      /** Health a swipe takes: `base` uncharged, `full` fully charged, proportional in between. */
+      damage: { base: 1 / 3, full: 2 / 3, tapGrace: 0.1 },
     },
     /**
      * Lunge (right click): a League-of-Legends-style dash. Speed starts at `peak` and eases out to zero
      * over `duration` ((1 - t/T)^2 curve). Two charges; each recharges in `recharge` seconds,
      * one at a time, starting as soon as one is spent.
      */
-    lunge: { charges: 2, recharge: 7, duration: 0.5, peak: 1150, hitboxMul: 1.5 },
+    lunge: { charges: 2, recharge: 7, duration: 0.5, peak: 1150, hitboxMul: 1.5, damage: 1 / 3 },
     /**
      * Soundcloud Burst (F): an aimed wave of sound, a slightly concave purple lens of fixed
      * `width` that flies across the whole map through everything. `thickness` is its depth.
      */
-    burst: { cooldown: 12, speed: 1700, width: HUNTER_WIDTH * 6, thickness: 36, scareTime: 4 },
+    burst: {
+      cooldown: 12,
+      speed: 1700,
+      width: HUNTER_WIDTH * 6,
+      thickness: 36,
+      /** The jump scare: image and sound fade in and out over `scareFade` s, `scareTime` s in all. */
+      scareTime: 2.5,
+      scareFade: 0.6,
+      scareVolume: 0.7,
+      /** How loud the release snippet is for Zach. */
+      zachVolume: 0.25,
+    },
     /** Scent trail (always on): survivors running or bleeding leave red scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /** Hemp Battery (Q, dropped by Sexton Science). */
@@ -157,14 +172,29 @@ export const BALANCE = {
     /** Items spread over the whole map. */
     counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 },
     /** Bottles fly on until they hit a wall, Zach or an NPC. */
-    bottle: { speed: 760, stun: 1.4, hitRadius: 10 },
+    bottle: { speed: 760, stun: 1.4, hitRadius: 10, damage: 0.2 },
     /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
     goggles: { meter: 15, coneMul: 1.2 },
-    shotgun: { shells: 3, reload: 2, range: 420, spreadDeg: 9, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
-    /** Energy drink: stamina refills 1.5x faster and the meter holds 2 s more, fading over 20 s. */
-    energy: { duration: 20, refillMul: 1.5, bonusSec: 2 },
+    /**
+     * Shotgun: 8 pellets with random bloom inside the cone, each flying on until it hits
+     * something solid or someone (windows shatter and let it through). Each pellet takes
+     * `pelletDamage` of a survivor's health; any pellet on Zach stuns him and blasts him back.
+     */
+    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
+    /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
+    golden: { shells: 5, reload: 1 },
+    /**
+     * Zach's golden pump replaces his machete until its 10 shots are spent. Each pellet takes
+     * `pelletDamage`; a survivor it hits is stunned briefly and pushed away from the blast.
+     */
+    zachPump: { shots: 10, reload: 1, pelletDamage: 0.09, stun: 0.1, kbPeak: 380, kbDuration: 0.2 },
+    /**
+     * Energy drink: fills the (extended) sprint meter at once; for 20 s it refills 1.5x faster,
+     * holds 2 s more, and walking and running are up to 15% faster, all fading over the 20 s.
+     */
+    energy: { duration: 20, refillMul: 1.5, bonusSec: 2, speedMul: 0.15 },
     /** Galaxy gas trap: triggers within 5 Zach-widths, gas covers 10 Zach-widths. */
-    trap: { triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5 },
+    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5 },
     /** After a stun ends Zach can't be stunned again for this long (no chain-stuns). */
     stunImmunity: 2.5,
     barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
@@ -185,8 +215,38 @@ export const BALANCE = {
     handTime: 0.45,
     reach: 72,
     /** Reel audio: full volume within `near`, silent past `far`. */
-    audio: { near: 60, far: 950 },
+    audio: { near: 60, far: 950, curve: 3 },
     jarvisRadarSec: 10,
+    /** Second line, after the survivor presses E again ("NAME" is their name). */
+    secondLine: "This is powerful tech, NAME. Be careful with it type shi",
+    secondTalkTime: 2.4,
+    /** After the handoff he walks away, mysteriously, for this long. */
+    leaveTime: 7,
+    /** JARVIS permanently widens its user's minimap view by this factor. */
+    jarvisMinimapMul: 1.2,
+    /**
+     * Self-defense when a survivor hits him with a bottle or shotgun (he can't die to their
+     * items): against every survivor he walks away, turning back to fire a Hemp Beam
+     * (`beamTime` s, then `cooldown` s), `attacks` times, then just flees. `resetAfter` s with
+     * no survivor within `vicinity` and he's back to normal. Items stun him while defending.
+     */
+    defense: {
+      beamTime: 3,
+      cooldown: 3,
+      attacks: 3,
+      approachTime: 0.9,
+      beamRange: 950,
+      beamWidth: 10,
+      beamDamage: 1 / 3,
+      turnRate: 1.3,
+      walk: 85,
+      vicinity: 750,
+      resetAfter: 10,
+      bottleStun: 0.1,
+      shotStun: 0.3,
+      gasSlowMul: 0.5,
+      light: { radius: 170, intensity: 0.85 },
+    },
   },
 
   /**
@@ -215,6 +275,46 @@ export const BALANCE = {
     light: { radius: 150, intensity: 0.4 },
     /** Soft pitter-patter footsteps while he's alerted (client only): full within `near`, silent past `far`. */
     steps: { volume: 0.55, near: 70, far: 750 },
+  },
+
+  /**
+   * Marc Cortez wanders the warehouse (and beyond: he opens doors). Talk to him and he heals you
+   * to full; the first time he also hands you duck confit. Nothing kills him: slashed he
+   * protests, hit by a survivor he flinches. A very faint light.
+   */
+  marc: {
+    radius: 15,
+    walk: 62,
+    reach: 72,
+    talkCooldown: 3,
+    light: { radius: 110, intensity: 0.28 },
+  },
+
+  /**
+   * Plasma.TTV: an ordinary guy. Hit him (survivor item or Zach's machete) and GAMER RAGE:
+   * he transforms over `transformTime` s, then chases his attacker and punches them until
+   * they're down (Zach is knocked out for `zachKnockTime` s), then turns back. Losing him for
+   * `escapeTime` s also calms him. Stuns: bottle, shotgun, machete; gas blinds and slows him.
+   * He never dies. Talk to him for a golden pump (once each).
+   */
+  plasma: {
+    radius: 15,
+    beastRadius: 24,
+    walk: 64,
+    chase: 212,
+    transformTime: 2,
+    punchRange: 34,
+    punchCooldown: 0.85,
+    punchDamage: 0.25,
+    zachPunchDamage: 0.2,
+    zachKnockTime: 6,
+    escapeTime: 10,
+    loseRadius: 900,
+    bottleStun: 0.1,
+    shotStun: 0.3,
+    slashStun: 0.1,
+    gasSlowMul: 0.45,
+    reach: 72,
   },
 
   /**
@@ -282,7 +382,7 @@ export const BALANCE = {
   },
 
   trails: {
-    scentEvery: 0.28,
+    scentEvery: 0.12,
     bloodEvery: 0.4,
     maxAgeSec: 10,
   },
