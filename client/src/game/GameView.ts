@@ -329,7 +329,7 @@ export class GameView {
         break;
       }
       case 'burst':
-        // Everyone sees the wave; only Zach hears it go out (half volume, a random snippet).
+        // Everyone sees the wave; only Zach hears it go out. A survivor hears it only if it hits them (the scare).
         this.overlays.addBurst(e.x, e.y, e.a, now);
         if (this.roleIsHunter) a.playClip('burst', { volume: BALANCE.hunter.burst.zachVolume });
         break;
