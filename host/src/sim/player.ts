@@ -37,6 +37,10 @@ export interface SimPlayer {
 
   health: Health;
   lastHealth: Health;
+  /** Health, 0 to 1 (full). Survivors are down at 0; Zach (punched by Plasma) is knocked out. */
+  hp: number;
+  /** Zach: seconds left knocked down by Plasma. */
+  knockT: number;
   action: Action;
   actionT: number;
   actionDur: number;
@@ -69,6 +73,10 @@ export interface SimPlayer {
   gogglesOn: boolean;
   /** Shells left in each shotgun carried, the one in use first. */
   shells: number[];
+  /** The shotgun in the shotgun slot is Plasma's golden pump. */
+  golden: boolean;
+  /** Zach: golden pump shots left (it replaces the machete while he has any). */
+  pump: number;
   reloadT: number;
   confit: number;
   /** JARVIS: 0 none, 1 tablet in hand, 2 used, 3 infinite (testing mode). */
@@ -86,6 +94,8 @@ export interface SimPlayer {
   chargeHeld: number;
   /** The swing being wound up is a fully charged heavy swipe. */
   heavy: boolean;
+  /** Health the swipe being wound up will take. */
+  swingDamage: number;
   lungeHit: boolean;
   wasLunging: boolean;
   burstCd: number;
@@ -131,6 +141,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     inputBudget: 40,
     health: role === 'spectator' ? Health.Eliminated : Health.Healthy,
     lastHealth: role === 'spectator' ? Health.Eliminated : Health.Healthy,
+    hp: 1,
+    knockT: 0,
     action: Action.None,
     actionT: 0,
     actionDur: 0,
@@ -155,6 +167,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     goggles: [],
     gogglesOn: false,
     shells: [],
+    golden: false,
+    pump: 0,
     reloadT: 0,
     confit: 0,
     jarvis: 0,
@@ -167,6 +181,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     chargeT: -1,
     chargeHeld: 0,
     heavy: false,
+    swingDamage: 1 / 3,
     lungeHit: false,
     wasLunging: false,
     burstCd: 0,
@@ -223,6 +238,6 @@ export function inPlay(p: SimPlayer): boolean {
 /** Can walk around and interact (not downed, carried, staked, hidden). */
 export function canAct(p: SimPlayer): boolean {
   if (p.role === 'spectator') return false;
-  if (p.role === 'hunter') return p.stunT <= 0 && p.health !== Health.Eliminated;
+  if (p.role === 'hunter') return p.stunT <= 0 && p.knockT <= 0 && p.health !== Health.Eliminated;
   return (p.health === Health.Healthy || p.health === Health.Wounded) && p.hideState === 0;
 }

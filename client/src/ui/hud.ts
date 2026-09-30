@@ -90,6 +90,9 @@ export class Inventory {
 
 interface SlotEls {
   root: HTMLElement;
+  inner: HTMLElement;
+  /** Width the slot is animating to (item slots grow and shrink with their contents). */
+  width: number;
   name: HTMLElement;
   icon: HTMLImageElement;
   count: HTMLElement;
@@ -121,6 +124,7 @@ export class Hud {
       `<div class="objective" id="obj"></div>
        <div class="top-right" id="topright"><div class="roster" id="roster"></div></div>
        <div class="status" id="status"></div>
+       <div class="stambar" id="stambar"><div class="fill"></div><span></span></div>
        <div class="hotbar" id="hotbar"></div>
        <div class="prompt" id="prompt"></div>
        <div class="feed" id="feed"></div>
@@ -160,15 +164,20 @@ export class Hud {
     this.bigTimer = window.setTimeout(() => (b.className = 'big-msg'), ms);
   }
 
-  /** The Soundcloud Burst hit you: the image covers the screen, then fades out. */
-  jumpScare(ms: number): void {
-    this.scare.classList.remove('fade');
-    this.scare.classList.add('on');
+  /** The Soundcloud Burst hit you: the image fades in over the screen, then fades out. */
+  jumpScare(ms: number, fadeMs = BALANCE.hunter.burst.scareFade * 1000): void {
+    const s = this.scare;
     clearTimeout(this.scareTimer);
+    s.style.transition = 'none';
+    s.style.opacity = '0';
+    s.classList.add('on');
+    void s.offsetWidth;
+    s.style.transition = `opacity ${fadeMs}ms ease-in-out`;
+    s.style.opacity = '1';
     this.scareTimer = window.setTimeout(() => {
-      this.scare.classList.add('fade');
-      this.scareTimer = window.setTimeout(() => this.scare.classList.remove('on', 'fade'), 1200);
-    }, Math.max(0, ms - 1200));
+      s.style.opacity = '0';
+      this.scareTimer = window.setTimeout(() => s.classList.remove('on'), fadeMs);
+    }, Math.max(0, ms - fadeMs));
   }
 
   get scareShowing(): boolean {
@@ -254,12 +263,21 @@ export class Hud {
       const root = el(
         'div',
         `slot ${extraClass}`,
-        `<b class="slot-key">${esc(label)}</b><img alt="" draggable="false"><i class="count"></i><span class="slot-name">${esc(name)}</span><div class="meter"><div></div></div><div class="cd"></div>`,
+        `<b class="slot-key">${esc(label)}</b><div class="slot-inner"><img alt="" draggable="false"><span class="slot-name">${esc(name)}</span></div><i class="count"></i><div class="meter"><div></div></div><div class="cd"></div>`,
       );
       const icon = root.querySelector('img')!;
       if (iconId) icon.src = this.assets.iconUrl(iconId);
       hb.appendChild(root);
-      const s: SlotEls = { root, name: root.querySelector('.slot-name')!, icon, count: root.querySelector('.count')!, meter: root.querySelector('.meter')!, cd: root.querySelector('.cd')! };
+      const s: SlotEls = {
+        root,
+        inner: root.querySelector('.slot-inner')!,
+        width: 0,
+        name: root.querySelector('.slot-name')!,
+        icon,
+        count: root.querySelector('.count')!,
+        meter: root.querySelector('.meter')!,
+        cd: root.querySelector('.cd')!,
+      };
       this.slots.push(s);
       return s;
     };
@@ -274,8 +292,13 @@ export class Hud {
         });
       });
       hb.appendChild(el('div', 'sep'));
-      slot('Q', 'JARVIS', 'item.tablet', 'ability');
-      slot('E', 'Duck Confit', 'item.confit', 'confit');
+      // JARVIS and duck confit show here but can't be taken in hand (or dropped).
+      for (const s of [slot('Q', 'JARVIS', 'item.tablet', 'ability'), slot('E', 'Duck Confit', 'item.confit', 'confit')]) {
+        s.root.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      }
     } else if (role === 'hunter') {
       const machete = slot('LMB', 'Machete Swipe', 'char.machete', 'ability');
       machete.icon.classList.add('rot');
@@ -316,6 +339,7 @@ export class Hud {
 
     // Status (bottom left).
     let status = '';
+    $(this.root, '#stambar').style.display = spectating ? 'none' : '';
     if (spectating) {
       const target = m.players.get(self.spectating);
       status = `<div>Spectating <b>${esc(target?.name ?? '...')}</b></div><div class="dim">Click or ← → to switch</div>`;
@@ -324,19 +348,28 @@ export class Hud {
       const cap = maxStamina(role, self.boostT);
       const frac = cap > 0 ? self.stamina / cap : 0;
       const locked = self.staminaLock > 0;
-      const staminaBar = `<div class="stam ${locked ? 'locked' : ''} ${self.boostT > 0 ? 'boost' : ''}"><div style="width:${Math.round(frac * 100)}%"></div><span>${locked ? `SPRINT LOCKED ${self.staminaLock.toFixed(1)}s` : `SPRINT ${self.stamina.toFixed(1)}s`}</span></div>`;
+      // The sprint meter: a wide bar just above the inventory.
+      const bar = $(this.root, '#stambar');
+      bar.classList.toggle('locked', locked);
+      bar.classList.toggle('boost', self.boostT > 0);
+      (bar.firstElementChild as HTMLElement).style.width = `${(frac * 100).toFixed(1)}%`;
+      const label = locked ? `SPRINT LOCKED ${self.staminaLock.toFixed(1)}s` : `SPRINT ${self.stamina.toFixed(1)}s`;
+      const span = bar.querySelector('span')!;
+      if (span.textContent !== label) span.textContent = label;
       if (hunter) {
         status =
           `<div class="who hunter">ZACH BRANCH${self.carrying ? ` <span>carrying ${esc(m.players.get(self.carrying)?.name ?? '')}</span>` : ''}</div>` +
-          staminaBar +
+          (self.health === Health.Downed ? `<div class="warn">KNOCKED OUT by Plasma.TTV</div>` : '') +
+          (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempT.toFixed(1)}s`}</div>` : '') +
           (self.gassed ? '<div class="purple">IN GALAXY GAS: slowed</div>' : '') +
           (self.immuneT > 0 && self.stunT <= 0 ? `<div class="dim">Stun immune ${self.immuneT.toFixed(1)}s</div>` : '');
       } else {
         status =
-          `<div class="who ${HEALTH_CLASS[self.health]}">${HEALTH_LABEL[self.health].toUpperCase()}${self.hideState === 2 ? ' <span>hidden</span>' : ''}</div>` +
-          staminaBar +
+          `<div class="who ${HEALTH_CLASS[self.health]}">${HEALTH_LABEL[self.health].toUpperCase()}${self.hideState === 2 ? ' <span>hidden</span>' : ''}${
+            self.health === Health.Healthy || self.health === Health.Wounded ? ` <span>${Math.round(self.hp * 100)}%</span>` : ''
+          }</div>` +
           (self.boostT > 0 ? `<div class="cyan">ENERGY DRINK ${Math.ceil(self.boostT)}s</div>` : '') +
           (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${self.goggleMeter.toFixed(1)}s`}</div>` : '') +
           (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s. Wait for a teammate.</div>` : '') +
@@ -389,14 +422,25 @@ export class Hud {
       const inv = self.inv;
       this.inventory.order.forEach((kind, i) => {
         const n = inv[kind] ?? 0;
+        const s = this.slots[i];
         let meter: number | null = null;
         let cd = 0;
         if (kind === ItemKind.Goggles && n > 0) meter = test ? 1 : self.goggleMeter / BALANCE.items.goggles.meter;
+        const golden = kind === ItemKind.Shotgun && self.golden === 1;
         if (kind === ItemKind.Shotgun && n > 0) {
-          meter = test ? 1 : self.shells / BALANCE.items.shotgun.shells;
-          cd = self.reloadT / BALANCE.items.shotgun.reload;
+          meter = test ? 1 : self.shells / (golden ? BALANCE.items.golden.shells : BALANCE.items.shotgun.shells);
+          cd = self.reloadT / (golden ? BALANCE.items.golden.reload : BALANCE.items.shotgun.reload);
         }
-        set(this.slots[i], { on: n > 0, sel: i === this.inventory.selected, count: n > 0 ? (test ? '∞' : `×${n}`) : '', meter, cd, active: kind === ItemKind.Goggles && self.gogglesOn === 1 });
+        if (kind === ItemKind.Shotgun && s) {
+          const name = golden ? 'Golden Pump' : ITEM_NAMES[kind];
+          if (s.name.textContent !== name) {
+            s.name.textContent = name;
+            s.icon.src = this.assets.iconUrl(golden ? 'item.goldenPump' : ITEM_ICON[kind]);
+          }
+          s.root.classList.toggle('gold', golden);
+        }
+        set(s, { on: n > 0, sel: i === this.inventory.selected, count: n > 0 ? (test ? '∞' : `×${n}`) : '', meter, cd, active: kind === ItemKind.Goggles && self.gogglesOn === 1 });
+        this.sizeSlot(s, n > 0);
       });
       const j = self.jarvis;
       set(this.slots[5], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : '', active: self.jarvisT > 0, hidden: j === 0 });
@@ -404,11 +448,39 @@ export class Hud {
     } else if (role === 'hunter') {
       const H = BALANCE.hunter;
       const charge = self.chargeT >= 0 ? self.chargeT / H.attack.charge.max : null;
-      set(this.slots[0], { cd: self.attackCd / H.attack.hitCooldown, count: charge !== null && charge >= H.attack.charge.heavyAt / H.attack.charge.max ? 'HEAVY' : 'hold', meter: charge, active: charge !== null });
+      const pump = self.pump > 0;
+      const m0 = this.slots[0];
+      if (m0) {
+        // Plasma's golden pump takes the machete's place until it's spent.
+        const name = pump ? 'Golden Pump' : 'Machete Swipe';
+        if (m0.name.textContent !== name) {
+          m0.name.textContent = name;
+          m0.icon.src = this.assets.iconUrl(pump ? 'item.goldenPump' : 'char.machete');
+          m0.icon.classList.toggle('rot', !pump);
+          m0.root.classList.toggle('gold', pump);
+        }
+      }
+      if (pump) set(m0, { cd: self.reloadT / BALANCE.items.zachPump.reload, count: test ? '∞' : `${self.pump}`, meter: self.pump / BALANCE.items.zachPump.shots });
+      else set(m0, { cd: self.attackCd / H.attack.hitCooldown, count: charge !== null && charge >= H.attack.charge.heavyAt / H.attack.charge.max ? 'HEAVY' : 'hold', meter: charge, active: charge !== null });
       const charges = self.lungeCharges;
       set(this.slots[1], { on: charges > 0, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
       set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
       set(this.slots[3], { on: self.hemp > 0 || self.hempT > 0, count: self.hemp === 2 ? '∞' : self.hempT > 0 ? `${Math.ceil(self.hempT)}s` : '', active: self.hempT > 0, hidden: self.hemp === 0 && self.hempT <= 0 });
+    }
+  }
+
+  /**
+   * Item slots are small empty squares; an item grows its slot smoothly into a box that fits
+   * its icon and name, and it shrinks back when the last one is used up or dropped.
+   */
+  private sizeSlot(s: SlotEls | undefined, filled: boolean): void {
+    if (!s) return;
+    s.root.classList.toggle('empty', !filled);
+    const square = 60;
+    const want = filled ? Math.max(square, Math.ceil(s.inner.scrollWidth) + 22) : square;
+    if (want !== s.width) {
+      s.width = want;
+      s.root.style.width = `${want}px`;
     }
   }
 

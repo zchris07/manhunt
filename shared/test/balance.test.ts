@@ -32,7 +32,7 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(BALANCE.hunter.attack.range).toBe(124);
     expect(BALANCE.hunter.burst.cooldown).toBe(12);
     expect(BALANCE.hunter.burst.width).toBe(BALANCE.hunter.radius * 2 * 6);
-    expect(BALANCE.hunter.burst.scareTime).toBe(4);
+    expect(BALANCE.hunter.burst.scareTime).toBe(2.5);
     expect(BALANCE.hunter.hemp).toMatchObject({ duration: 8, zoomOut: 1.2, speedMul: 1.1 });
     expect(BALANCE.items.counts).toEqual({ bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 });
     expect(BALANCE.items.maxStack).toBe(2);

@@ -61,8 +61,8 @@ function sendScent(w: World, h: SimPlayer): void {
     if (sent.has(t.id)) continue;
     if (Math.abs(t.x - h.move.x) > r || Math.abs(t.y - h.move.y) > r) continue;
     sent.add(t.id);
-    pts.push(Math.round(t.x), Math.round(t.y), t.kind, Math.round((w.time - t.t) * 10));
-    if (pts.length >= 400) break;
+    pts.push(Math.round(t.x), Math.round(t.y), t.kind, Math.round((w.time - t.t) * 10), t.who);
+    if (pts.length >= 500) break;
   }
   if (pts.length) w.emit(hunterAudience(w, h), { k: 'trail', pts });
 }

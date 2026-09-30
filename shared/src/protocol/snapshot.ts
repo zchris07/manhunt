@@ -72,6 +72,12 @@ export interface SelfState {
   testMode: number;
   noise: number;
   spectating: number;
+  /** Health, 0 (down) to 1 (full). */
+  hp: number;
+  /** Survivor: the shotgun in the shotgun slot is Plasma's golden pump. */
+  golden: number;
+  /** Zach: golden pump shots left (it replaces the machete while he has any). */
+  pump: number;
 }
 
 export function emptySelf(id = 0): SelfState {
@@ -133,6 +139,9 @@ export function emptySelf(id = 0): SelfState {
     testMode: 0,
     noise: 0,
     spectating: 0,
+    hp: 1,
+    golden: 0,
+    pump: 0,
   };
 }
 
@@ -164,18 +173,51 @@ export const ShaneFlag = {
   Fleeing: 2,
 } as const;
 
+/** Chris Zelley's state bits (EntityRecord.state for EntityKind.Chris). */
+export const ChrisFlag = {
+  Dead: 1,
+  Fleeing: 2,
+  /** Activated: he's left the ambulance and waits to be needed. */
+  Active: 4,
+  /** Running to a downed or staked survivor. */
+  Rescuing: 8,
+  /** Reviving or cutting someone down. */
+  Working: 16,
+  /** Done: wings out, flying to the heavens. */
+  Ascending: 32,
+  Hurt: 64,
+} as const;
+
 /** Sexton Science's state bits (EntityRecord.state for EntityKind.Sexton). */
 export const SextonFlag = {
   Dead: 1,
   Fleeing: 2,
   Talking: 4,
   Hurt: 8,
+  /** Self-defense mode (after a survivor hit him). */
+  Defending: 16,
+  Stunned: 32,
+  Beaming: 64,
+} as const;
+
+/** Marc Cortez's state bits. */
+export const MarcFlag = { Hurt: 1 } as const;
+
+/** Plasma.TTV's state bits (action byte: transform progress 0-255). */
+export const PlasmaFlag = {
+  Raging: 1,
+  Transforming: 2,
+  Reverting: 4,
+  Stunned: 8,
+  Hurt: 16,
+  Blind: 32,
+  Punching: 64,
 } as const;
 
 /**
  * A quantised entity as sent on the wire. x/y are in 1/8 units, facing in 1/256 turns.
  * `aux` holds a survivor's held item (low 3 bits) or Zach's swing charge (0-255), and
- * `stamina` the sprint meter (0-255).
+ * `hp` the health bar over their head (0-255 of full health).
  */
 export interface EntityRecord {
   id: number;
@@ -187,7 +229,7 @@ export interface EntityRecord {
   action: number;
   extra: number;
   aux: number;
-  stamina: number;
+  hp: number;
 }
 
 export function quantizeEntity(
@@ -200,7 +242,7 @@ export function quantizeEntity(
   action: number,
   extra: number,
   aux = 0,
-  stamina = 0,
+  hp = 0,
 ): EntityRecord {
   return {
     id,
@@ -212,7 +254,7 @@ export function quantizeEntity(
     action: action & 0xff,
     extra: extra & 0xff,
     aux: aux & 0xff,
-    stamina: Math.max(0, Math.min(255, Math.round(stamina))),
+    hp: Math.max(0, Math.min(255, Math.round(hp))),
   };
 }
 
@@ -375,6 +417,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u16(tenths(s.goggleMeter)).u8(s.gogglesOn).u16(ms(s.chargeT + 1)).u8(s.shells).u16(ms(s.reloadT));
   w.u8(s.confit).u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
+  w.u8(unit(s.hp)).u8(s.golden).u8(s.pump);
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -437,6 +480,9 @@ function readSelf(r: ByteReader): SelfState {
   s.testMode = r.u8();
   s.noise = r.u8() / 255;
   s.spectating = r.u8();
+  s.hp = r.u8() / 255;
+  s.golden = r.u8();
+  s.pump = r.u8();
   return s;
 }
 
@@ -446,7 +492,7 @@ const M_STATE = 4;
 const M_ACTION = 8;
 const M_EXTRA = 16;
 const M_AUX = 32;
-const M_STAMINA = 64;
+const M_HP = 64;
 const M_FULL = 0x80;
 
 /** What the host remembers about a snapshot it sent (for delta baselines). */
@@ -492,7 +538,7 @@ export function encodeSnapshot(
     current.add(e.id);
     const prev = base?.entities.get(e.id);
     if (!prev || prev.kind !== e.kind) {
-      body.u8(e.id).u8(M_FULL).u8(e.kind).u16(e.qx).u16(e.qy).u8(e.qfacing).u16(e.state).u8(e.action).u8(e.extra).u8(e.aux).u8(e.stamina);
+      body.u8(e.id).u8(M_FULL).u8(e.kind).u16(e.qx).u16(e.qy).u8(e.qfacing).u16(e.state).u8(e.action).u8(e.extra).u8(e.aux).u8(e.hp);
       count++;
       continue;
     }
@@ -503,7 +549,7 @@ export function encodeSnapshot(
     if (prev.action !== e.action) mask |= M_ACTION;
     if (prev.extra !== e.extra) mask |= M_EXTRA;
     if (prev.aux !== e.aux) mask |= M_AUX;
-    if (prev.stamina !== e.stamina) mask |= M_STAMINA;
+    if (prev.hp !== e.hp) mask |= M_HP;
     if (!mask) continue;
     body.u8(e.id).u8(mask);
     if (mask & M_POS) body.u16(e.qx).u16(e.qy);
@@ -512,7 +558,7 @@ export function encodeSnapshot(
     if (mask & M_ACTION) body.u8(e.action);
     if (mask & M_EXTRA) body.u8(e.extra);
     if (mask & M_AUX) body.u8(e.aux);
-    if (mask & M_STAMINA) body.u8(e.stamina);
+    if (mask & M_HP) body.u8(e.hp);
     count++;
   }
   w.u8(count).bytes(body.finish());
@@ -551,7 +597,7 @@ export function decodeSnapshot(data: Uint8Array, baseline: (tick: number) => Sen
     const mask = r.u8();
     if (mask & M_FULL) {
       const kind = r.u8() as EntityKind;
-      entities.set(id, { id, kind, qx: r.u16(), qy: r.u16(), qfacing: r.u8(), state: r.u16(), action: r.u8(), extra: r.u8(), aux: r.u8(), stamina: r.u8() });
+      entities.set(id, { id, kind, qx: r.u16(), qy: r.u16(), qfacing: r.u8(), state: r.u16(), action: r.u8(), extra: r.u8(), aux: r.u8(), hp: r.u8() });
       continue;
     }
     const e = entities.get(id);
@@ -565,7 +611,7 @@ export function decodeSnapshot(data: Uint8Array, baseline: (tick: number) => Sen
     if (mask & M_ACTION) e.action = r.u8();
     if (mask & M_EXTRA) e.extra = r.u8();
     if (mask & M_AUX) e.aux = r.u8();
-    if (mask & M_STAMINA) e.stamina = r.u8();
+    if (mask & M_HP) e.hp = r.u8();
   }
   const removed = r.u8();
   for (let i = 0; i < removed; i++) entities.delete(r.u8());

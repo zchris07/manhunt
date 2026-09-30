@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, DEG, EF, EntityKind, GenFlag, Health, ItemKind, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, ChrisFlag, DEG, EF, EntityKind, GenFlag, Health, ItemKind, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -12,8 +12,8 @@ export interface RenderPlayer {
   action: number;
   extra: number;
   aux: number;
-  /** Sprint meter 0-255. */
-  stamina: number;
+  /** Health 0-255. */
+  hp: number;
 }
 
 const INK = 0x0a0a0a;
@@ -67,17 +67,24 @@ class Walker {
   }
 }
 
-class StaminaBar {
+/** Health over a player's head, with a pale trail showing damage just taken as it drains. */
+class HealthBar {
   readonly g = new Graphics();
-  draw(frac: number, locked: boolean, time: number, w = 38): void {
+  private trail = -1;
+  draw(frac: number, dt: number, w = 38): void {
     const g = this.g;
     g.clear();
-    const h = 4;
-    g.rect(-w / 2 - 1, -h / 2 - 1, w + 2, h + 2).fill({ color: INK, alpha: 0.75 });
-    g.rect(-w / 2, -h / 2, w, h).fill({ color: 0x2a2a26 });
+    const h = 5;
     const f = Math.max(0, Math.min(1, frac));
-    const color = locked ? (Math.sin(time * 18) > 0 ? 0xa02020 : 0x501010) : f > 0.5 ? 0xb8b49a : f > 0.25 ? 0xa08a50 : 0x9a4030;
-    if (f > 0.01) g.rect(-w / 2, -h / 2, w * f, h).fill({ color });
+    if (this.trail < f) this.trail = f;
+    else this.trail = Math.max(f, this.trail - dt * 0.6);
+    g.rect(-w / 2 - 1, -h / 2 - 1, w + 2, h + 2).fill({ color: INK, alpha: 0.8 });
+    g.rect(-w / 2, -h / 2, w, h).fill({ color: 0x241a18 });
+    if (this.trail > f + 0.005) g.rect(-w / 2 + w * f, -h / 2, w * (this.trail - f), h).fill({ color: 0xe8d8b0, alpha: 0.85 });
+    const color = f > 0.6 ? 0x8a9a5a : f > 0.3 ? 0xc0903a : 0xb3261e;
+    if (f > 0.005) g.rect(-w / 2, -h / 2, w * f, h).fill({ color });
+    // Thirds: one machete swipe each.
+    for (const t of [1 / 3, 2 / 3]) g.rect(-w / 2 + w * t - 0.5, -h / 2, 1, h).fill({ color: INK, alpha: 0.55 });
   }
 }
 
@@ -96,7 +103,10 @@ class PlayerSprite {
   readonly carried: Sprite;
   readonly fx = new Graphics();
   readonly aura = new Graphics();
-  readonly bar = new StaminaBar();
+  readonly bar = new HealthBar();
+  /** Seconds left of the flinch after being hit. */
+  private flinchT = 0;
+  private flinchAng = 0;
   readonly label: Text;
   readonly walker = new Walker();
   private shake = 0;
@@ -158,6 +168,8 @@ class PlayerSprite {
     this.walker.update(p.x, p.y, dt, hunter ? 46 : 38);
     const staked = !hunter && health === Health.Staked && stakePos;
     const down = !hunter && health === Health.Downed;
+    // Zach knocked out cold by Plasma.
+    const knocked = hunter && health === Health.Downed;
     if (staked) {
       this.shake += dt * 30;
       this.root.position.set(stakePos.x + Math.sin(this.shake) * 1.5, stakePos.y);
@@ -171,7 +183,7 @@ class PlayerSprite {
 
     // Legs: two feet swinging along the direction of travel.
     const moving = this.walker.speed > 12 && !staked;
-    this.legs.visible = !down && !staked;
+    this.legs.visible = !down && !staked && !knocked;
     if (this.legs.visible) {
       this.legs.rotation = moving ? this.walker.moveDir : p.facing;
       const stride = moving ? Math.min(1, this.walker.speed / (hunter ? 220 : 170)) * (hunter ? 10 : 8) : 0;
@@ -186,17 +198,22 @@ class PlayerSprite {
     if (down) {
       this.downed.rotation = p.facing;
     } else {
-      this.body.rotation = staked ? -Math.PI / 2 : p.facing;
+      this.body.rotation = staked ? -Math.PI / 2 : knocked ? p.facing + Math.PI / 2 : p.facing;
       const bob = moving ? Math.abs(Math.sin(this.walker.phase)) * 0.04 : 0;
       this.body.scale.set(1 + bob, 1 - bob * 0.5);
-      this.torso.tint = staked ? 0xd09090 : 0xffffff;
+      this.torso.tint = staked ? 0xd09090 : knocked ? 0x9a9a9a : 0xffffff;
+      // Flinch: knocked back a step, flashing red, easing back.
+      this.flinchT = Math.max(0, this.flinchT - dt);
+      const f = this.flinchT / 0.3;
+      this.body.position.set(Math.cos(this.flinchAng) * 5 * f + Math.sin(time * 60) * 1.5 * f, Math.sin(this.flinchAng) * 5 * f);
+      if (f > 0 && Math.sin(time * 45) > 0) this.torso.tint = 0xff7a6a;
     }
 
     // Held item (survivors).
     const item = hunter ? 0 : p.aux & 7;
     this.held.visible = !down && !staked && item > 0 && item !== ItemKind.Goggles;
     if (this.held.visible) {
-      this.held.texture = this.assets.getTexture(ITEM_TEX[item]);
+      this.held.texture = this.assets.getTexture(item === ItemKind.Shotgun && p.aux & 8 ? 'item.goldenPump' : ITEM_TEX[item]);
       const big = item === ItemKind.Shotgun;
       this.held.position.set(big ? 24 : 21, big ? 3 : 7);
       this.held.scale.set(big ? 0.62 : 0.48);
@@ -209,22 +226,37 @@ class PlayerSprite {
         this.carried.position.set(Math.cos(p.facing + Math.PI * 0.6) * 12, Math.sin(p.facing + Math.PI * 0.6) * 12);
         this.carried.rotation = p.facing + Math.PI / 2;
       }
+      // With Plasma's golden pump in hand the machete is put away.
+      const pump = p.aux === 255;
+      if (this.weapon) {
+        this.weapon.texture = this.assets.getTexture(pump ? 'item.goldenPump' : 'char.machete');
+        if (pump) {
+          this.weapon.anchor.set(0.3, 0.5);
+          this.weapon.rotation = 0.1;
+          this.weapon.scale.set(0.7);
+        } else {
+          const [ax, ay] = this.assets.anchorOf('char.machete');
+          this.weapon.anchor.set(ax, ay);
+          this.weapon.scale.set(1);
+        }
+      }
       // Machete: hold to charge (the blade draws back and shakes), release to swing.
-      const attacking = (p.state & EF.Attacking) !== 0;
-      const charging = attacking ? 0 : p.aux / 255;
+      const attacking = (p.state & EF.Attacking) !== 0 && !pump;
+      const charging = attacking || pump ? 0 : p.aux / 254;
       if (!attacking) this.charge = charging;
       if (attacking && !this.wasAttacking) {
         this.swingAge = 0;
         const C = BALANCE.hunter.attack.charge;
-        this.heavy = Math.max(this.charge, p.aux / 255) >= C.heavyAt / C.max - 0.02;
+        this.heavy = Math.max(this.charge, p.aux / 254) >= C.heavyAt / C.max - 0.02;
       }
       this.wasAttacking = attacking;
-      this.drawSwing(dt, charging, time, p.facing);
+      if (!pump) this.drawSwing(dt, charging, time, p.facing);
+      else this.swipe.clear();
       this.body.scale.x *= (p.state & EF.Lunging) !== 0 ? 1.12 : 1;
     }
 
     this.fx.clear();
-    if (p.state & EF.Stunned) {
+    if (p.state & EF.Stunned || knocked) {
       for (let i = 0; i < 4; i++) {
         const a = time * 5 + (i * Math.PI * 2) / 4;
         this.star(Math.cos(a) * 16, -r - 8 + Math.sin(a) * 5, 4);
@@ -262,14 +294,20 @@ class PlayerSprite {
       this.fx.circle(ex + Math.sin(p.facing) * 3, ey - Math.cos(p.facing) * 3, 2).fill({ color: 0x9dff9a });
     }
 
-    // Everyone has a clearly visible sprint meter over their head.
+    // Everyone's health shows over their head.
     const showBar = !staked && health !== Health.Carried;
     this.bar.g.visible = showBar;
     if (showBar) {
       this.bar.g.position.set(0, -r - 16);
-      this.bar.draw(p.stamina / 255, (p.state & EF.StaminaLock) !== 0, time, hunter ? 44 : 38);
+      this.bar.draw(p.hp / 255, dt, hunter ? 44 : 38);
     }
     this.label.position.set(0, -r - 22);
+  }
+
+  /** Hit: a quick flinch away from `from` (radians, direction the hit came from). */
+  flinch(from: number): void {
+    this.flinchT = 0.3;
+    this.flinchAng = from + Math.PI;
   }
 
   private star(x: number, y: number, s: number): void {
@@ -370,9 +408,105 @@ class PlayerSprite {
   }
 }
 
+type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma';
+
 interface Bubble {
   root: Container;
   until: number;
+  who: Speaker;
+  dur: number;
+}
+
+/** A walking NPC: legs that step along with his movement and a body turned to face. */
+class NpcSprite {
+  readonly root = new Container();
+  readonly legs = new Container();
+  readonly legA: Sprite;
+  readonly legB: Sprite;
+  readonly body: Sprite;
+  readonly fx = new Graphics();
+  readonly walker = new Walker();
+
+  constructor(assets: AssetManager, bodyId: string, legVariant: number, parent: Container) {
+    this.legA = new Sprite(assets.getTexture('char.legs', legVariant));
+    this.legB = new Sprite(assets.getTexture('char.legs', legVariant));
+    const [ax, ay] = assets.anchorOf('char.legs');
+    for (const l of [this.legA, this.legB]) l.anchor.set(ax, ay);
+    this.legs.addChild(this.legA, this.legB);
+    this.body = new Sprite(assets.getTexture(bodyId));
+    this.body.anchor.set(30 / 64, 0.5);
+    const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
+    this.root.addChild(shadow, this.legs, this.body, this.fx);
+    parent.addChild(this.root);
+  }
+
+  step(e: InterpEntity, dt: number, stride = 34, maxSpeed = 150): void {
+    this.root.position.set(e.x, e.y);
+    this.walker.update(e.x, e.y, dt, stride);
+    const moving = this.walker.speed > 10;
+    this.legs.rotation = moving ? this.walker.moveDir : e.facing;
+    const st = moving ? Math.min(1, this.walker.speed / maxSpeed) * 8 : 0;
+    const k = Math.sin(this.walker.phase);
+    this.legA.position.set(-4 + k * st, -5.5);
+    this.legB.position.set(-4 - k * st, 5.5);
+    this.body.rotation = e.facing;
+  }
+
+  stars(time: number, r: number): void {
+    for (let i = 0; i < 4; i++) {
+      const a = time * 5 + (i * Math.PI * 2) / 4;
+      const x = Math.cos(a) * 16;
+      const y = -r - 8 + Math.sin(a) * 5;
+      const pts: number[] = [];
+      for (let j = 0; j < 10; j++) {
+        const b = (j / 10) * Math.PI * 2 - Math.PI / 2;
+        const rr = j % 2 === 0 ? 4 : 1.8;
+        pts.push(x + Math.cos(b) * rr, y + Math.sin(b) * rr);
+      }
+      this.fx.poly(pts).fill({ color: 0xc8b890 }).stroke({ width: 1, color: INK });
+    }
+  }
+}
+
+interface ChrisSprite {
+  root: Container;
+  body: Sprite;
+  dead: Sprite;
+  walker: Walker;
+  legs: Container;
+  legA: Sprite;
+  legB: Sprite;
+  wings: Graphics;
+  halo: Sprite;
+  mark: Graphics;
+}
+
+/** One feathered angel wing out of the shoulder on side `k` (-1 or +1), swept back; `spread` unfolds it. */
+function drawWing(g: Graphics, k: number, spread: number): void {
+  const pts: [number, number][] = [
+    [2, 6],
+    [5, 18],
+    [2, 32],
+    [-8, 46],
+    [-17, 41],
+    [-14, 35],
+    [-23, 31],
+    [-19, 24],
+    [-27, 19],
+    [-21, 13],
+    [-13, 8],
+  ];
+  const flat = pts.flatMap(([x, y]) => [x * (0.6 + 0.4 * spread), k * (6 + (y - 6) * spread)]);
+  g.poly(flat).fill({ color: 0xf6f4ea }).stroke({ width: 1.6, color: INK });
+  for (const [x, y] of [
+    [-14, 35],
+    [-19, 24],
+    [-21, 13],
+  ]) {
+    g.moveTo(0, k * 8)
+      .lineTo(x * (0.6 + 0.4 * spread) + 3, k * (6 + (y - 6) * spread))
+      .stroke({ width: 1, color: 0xb8b2a0 });
+  }
 }
 
 interface TabletFlight {
@@ -405,11 +539,16 @@ export class EntityLayer {
   private readonly objectives = new Container();
   private readonly genSprites: Sprite[] = [];
   private readonly genGlows: Sprite[] = [];
-  private sexton: { root: Container; body: Sprite; dead: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite } | null = null;
+  private sexton: { root: Container; body: Sprite; dead: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite; fx: Graphics } | null = null;
   private shane: { root: Container; body: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite; mark: Text } | null = null;
+  private chris: ChrisSprite | null = null;
   private bubble: Bubble | null = null;
   private tablets: TabletFlight[] = [];
-  private shots: { x: number; y: number; a: number; len: number; t: number }[] = [];
+  private shots: { x: number; y: number; p: number[]; gold: boolean; t: number }[] = [];
+  private marc: NpcSprite | null = null;
+  private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
+  /** Sexton's Hemp Beam (redrawn every frame while it fires). */
+  private readonly beam = new Graphics();
   private lastTime = 0;
   private readonly positions = new Map<number, { x: number; y: number }>();
 
@@ -458,7 +597,8 @@ export class EntityLayer {
     lever.rect(gt.leverX - 9, gt.leverY - 13, 18, 4).fill({ color: 0x6a654e });
     lever.rect(gt.leverX - 3, gt.leverY - 18, 6, 12).fill({ color: 0x6a1a14 });
     this.objectives.addChild(lever);
-    this.root.addChild(this.objectives, this.ground, this.gens, this.markers, this.effects);
+    this.beam.blendMode = 'add';
+    this.root.addChild(this.objectives, this.ground, this.gens, this.markers, this.effects, this.beam);
   }
 
   /** A generator started (or not): swap its art and light its lamp. */
@@ -477,8 +617,8 @@ export class EntityLayer {
     this.players.clear();
   }
 
-  /** Sexton's dialogue box. */
-  say(text: string, time: number): void {
+  /** Sexton's or Chris Zelley's dialogue box. */
+  say(text: string, time: number, who: Speaker): void {
     this.bubble?.root.destroy({ children: true });
     const root = new Container();
     const t = new Text({ text, style: { fontFamily: '"Special Elite", "Courier New", monospace', fontSize: 14, fill: 0x141210, wordWrap: true, wordWrapWidth: 200, align: 'center' } });
@@ -493,7 +633,7 @@ export class EntityLayer {
     root.addChild(box, t);
     root.scale.set(0.2);
     this.overlay.addChild(root);
-    this.bubble = { root, until: time + 2.6 };
+    this.bubble = { root, until: time + Math.max(2.6, text.length * 0.075), who, dur: Math.max(2.6, text.length * 0.075) };
   }
 
   /** Sexton hands a glowing tablet to a survivor. */
@@ -511,8 +651,16 @@ export class EntityLayer {
     this.tablets.push({ sprite: s, fx: x, fy: y, to, t: 0 });
   }
 
-  shot(x: number, y: number, a: number, len: number): void {
-    this.shots.push({ x, y, a, len, t: 0 });
+  /** Someone was hit: they flinch away from whoever hit them. */
+  flinch(victim: number, by: number): void {
+    const s = this.players.get(victim);
+    const v = this.positions.get(victim);
+    const a = this.positions.get(by);
+    if (s) s.flinch(v && a ? Math.atan2(a.y - v.y, a.x - v.x) : Math.random() * Math.PI * 2);
+  }
+
+  shot(x: number, y: number, pellets: number[], gold: boolean): void {
+    this.shots.push({ x, y, p: pellets, gold, t: 0 });
   }
 
   update(ents: InterpEntity[], self: RenderPlayer | null, world: WorldState | null, time: number): void {
@@ -540,6 +688,10 @@ export class EntityLayer {
 
     let sextonSeen = false;
     let shaneSeen = false;
+    let chrisSeen = false;
+    let marcSeen = false;
+    let plasmaSeen = false;
+    this.beam.clear();
     for (const e of ents) {
       if (e.kind === EntityKind.Player) {
         if (self && e.id === self.id) continue;
@@ -550,6 +702,17 @@ export class EntityLayer {
       } else if (e.kind === EntityKind.Sexton) {
         sextonSeen = true;
         this.drawSexton(e, dt, time);
+      } else if (e.kind === EntityKind.Chris) {
+        chrisSeen = true;
+        this.drawChris(e, dt, time);
+      } else if (e.kind === EntityKind.Marc) {
+        marcSeen = true;
+        this.drawMarc(e, dt, time);
+      } else if (e.kind === EntityKind.Plasma) {
+        plasmaSeen = true;
+        this.drawPlasma(e, dt, time);
+      } else if (e.kind === EntityKind.Beam) {
+        this.drawBeam(e, time);
       } else {
         this.drawThing(e, time);
         seen.add(e.id);
@@ -558,6 +721,9 @@ export class EntityLayer {
     if (self) draw(self);
     if (this.sexton) this.sexton.root.visible = sextonSeen;
     if (this.shane) this.shane.root.visible = shaneSeen;
+    if (this.chris) this.chris.root.visible = chrisSeen;
+    if (this.marc) this.marc.root.visible = marcSeen;
+    if (this.plasma) this.plasma.man.root.visible = plasmaSeen;
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
     for (const [id, c] of this.things) {
@@ -567,17 +733,18 @@ export class EntityLayer {
       }
     }
 
-    // Dialogue bubble pops in above Sexton.
+    // Dialogue bubble pops in above whoever is speaking.
     if (this.bubble) {
       const b = this.bubble;
-      if (time > b.until || !this.sexton) {
+      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : this.sexton;
+      if (time > b.until || !speaker) {
         b.root.destroy({ children: true });
         this.bubble = null;
       } else {
-        const s = this.sexton.root;
+        const s = speaker.root;
         b.root.position.set(s.x, s.y - 30);
         b.root.visible = s.visible && this.bubbleCheck(s.x, s.y);
-        const age = 2.6 - (b.until - time);
+        const age = b.dur - (b.until - time);
         const pop = Math.min(1, age / 0.18);
         b.root.scale.set(0.2 + 0.8 * (1 - Math.pow(1 - pop, 3)) + Math.sin(Math.min(1, age / 0.4) * Math.PI) * 0.06);
         b.root.alpha = Math.min(1, (b.until - time) / 0.3);
@@ -602,15 +769,22 @@ export class EntityLayer {
     this.effects.clear();
     this.shots = this.shots.filter((s) => {
       s.t += dt;
-      const a = 1 - s.t / 0.25;
+      const a = 1 - s.t / 0.22;
       if (a <= 0) return false;
-      for (const off of [-0.06, 0, 0.06]) {
+      // Eight thin pellet trails, each running to where that pellet stopped.
+      let mid = 0;
+      for (let i = 0; i + 1 < s.p.length; i += 2) {
+        const ang = s.p[i] / 1000;
+        mid += ang;
+        const len = s.p[i + 1];
+        const from = 18 + (1 - a) * len * 0.5;
         this.effects
-          .moveTo(s.x + Math.cos(s.a) * 20, s.y + Math.sin(s.a) * 20)
-          .lineTo(s.x + Math.cos(s.a + off) * s.len, s.y + Math.sin(s.a + off) * s.len)
-          .stroke({ width: 2.5, color: 0xfff2a0, alpha: a });
+          .moveTo(s.x + Math.cos(ang) * from, s.y + Math.sin(ang) * from)
+          .lineTo(s.x + Math.cos(ang) * len, s.y + Math.sin(ang) * len)
+          .stroke({ width: 1, color: s.gold ? 0xffe27a : 0xfff2c0, alpha: a * 0.85 });
       }
-      this.effects.circle(s.x + Math.cos(s.a) * 26, s.y + Math.sin(s.a) * 26, 10 * a + 4).fill({ color: 0xffd23a, alpha: a });
+      mid /= Math.max(1, s.p.length / 2);
+      this.effects.circle(s.x + Math.cos(mid) * 24, s.y + Math.sin(mid) * 24, 9 * a + 3).fill({ color: s.gold ? 0xffc23a : 0xffd23a, alpha: a });
       return true;
     });
 
@@ -653,9 +827,10 @@ export class EntityLayer {
       body.anchor.set(30 / 64, 0.5);
       const dead = new Sprite(this.assets.getTexture('char.sextonDead'));
       dead.anchor.set(0.5);
-      root.addChild(legs, body, dead);
+      const fx = new Graphics();
+      root.addChild(legs, body, dead, fx);
       this.root.addChild(root);
-      this.sexton = { root, body, dead, walker: new Walker(), legs, legA, legB };
+      this.sexton = { root, body, dead, walker: new Walker(), legs, legA, legB, fx };
     }
     const s = this.sexton;
     s.root.position.set(e.x, e.y);
@@ -677,6 +852,203 @@ export class EntityLayer {
     s.body.rotation = e.facing;
     const hurt = (e.state & SextonFlag.Hurt) !== 0;
     s.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff6a6a : 0xffffff;
+    s.body.position.set(hurt ? Math.sin(time * 60) * 2 : 0, 0);
+    // Self-defense: a hemp-green glow about him; stunned, stars.
+    s.fx.clear();
+    if (e.state & SextonFlag.Defending) s.fx.circle(0, 0, 24 + Math.sin(time * 5) * 3).stroke({ width: 2, color: 0x9dff8a, alpha: 0.45 });
+    if (e.state & SextonFlag.Stunned) {
+      for (let i = 0; i < 4; i++) {
+        const a = time * 5 + (i * Math.PI) / 2;
+        s.fx.circle(Math.cos(a) * 16, -22 + Math.sin(a) * 5, 3).fill({ color: 0xc8b890 }).stroke({ width: 1, color: INK });
+      }
+    }
+  }
+
+  /**
+   * Chris Zelley: paramedic greens. A pulsing red cross while he runs to a patient, a progress
+   * ring while he works, and wings (rising into a white glow) once he's done.
+   */
+  private drawChris(e: InterpEntity, dt: number, time: number): void {
+    if (!this.chris) {
+      const root = new Container();
+      const legs = new Container();
+      const legA = new Sprite(this.assets.getTexture('char.legs', 31));
+      const legB = new Sprite(this.assets.getTexture('char.legs', 31));
+      const [ax, ay] = this.assets.anchorOf('char.legs');
+      for (const l of [legA, legB]) l.anchor.set(ax, ay);
+      legs.addChild(legA, legB);
+      const body = new Sprite(this.assets.getTexture('char.chris'));
+      body.anchor.set(30 / 64, 0.5);
+      const dead = new Sprite(this.assets.getTexture('char.chrisDead'));
+      dead.anchor.set(0.5);
+      const halo = new Sprite(this.assets.getTexture('fx.glow'));
+      halo.anchor.set(0.5);
+      halo.tint = 0xfff6d8;
+      halo.blendMode = 'add';
+      halo.visible = false;
+      const wings = new Graphics();
+      const mark = new Graphics();
+      const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
+      root.addChild(halo, shadow, wings, legs, body, dead, mark);
+      this.root.addChild(root);
+      this.chris = { root, body, dead, walker: new Walker(), legs, legA, legB, wings, halo, mark };
+    }
+    const c = this.chris;
+    const st = e.state;
+    const dead = (st & ChrisFlag.Dead) !== 0;
+    const ascending = (st & ChrisFlag.Ascending) !== 0;
+    c.dead.visible = dead;
+    c.body.visible = !dead;
+    c.legs.visible = !dead && !ascending;
+    c.root.position.set(e.x, e.y);
+    c.root.scale.set(1);
+    c.root.alpha = 1;
+    c.mark.clear();
+    c.wings.clear();
+    c.halo.visible = false;
+    if (dead) {
+      c.dead.rotation = e.facing;
+      return;
+    }
+    c.body.rotation = e.facing;
+    if (ascending) {
+      // Wings unfold and flap; he rises toward the camera into a white glow and is gone.
+      const k = e.action / 255;
+      const spread = Math.min(1, k * 3);
+      const flap = 0.85 + 0.15 * Math.sin(time * 14);
+      c.wings.rotation = e.facing;
+      drawWing(c.wings, -1, spread * flap);
+      drawWing(c.wings, 1, spread * flap);
+      c.root.position.set(e.x, e.y - k * 50);
+      c.root.scale.set(1 + k * 1.3);
+      c.root.alpha = k < 0.6 ? 1 : Math.max(0, 1 - (k - 0.6) / 0.4);
+      c.halo.visible = true;
+      c.halo.scale.set(0.8 + k * 2.5);
+      c.halo.alpha = 0.3 + 0.5 * k;
+      return;
+    }
+    c.walker.update(e.x, e.y, dt, 34);
+    const moving = c.walker.speed > 10;
+    c.legs.rotation = moving ? c.walker.moveDir : e.facing;
+    const stride = moving ? Math.min(1, c.walker.speed / 150) * 8 : 0;
+    const k = Math.sin(c.walker.phase);
+    c.legA.position.set(-4 + k * stride, -5.5);
+    c.legB.position.set(-4 - k * stride, 5.5);
+    const hurt = (st & ChrisFlag.Hurt) !== 0;
+    c.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff6a6a : 0xffffff;
+    if (st & ChrisFlag.Working) {
+      const p = e.action / 255;
+      c.mark.circle(0, -30, 11).fill({ color: INK, alpha: 0.7 });
+      c.mark.arc(0, -30, 9, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2).stroke({ width: 4, color: 0x5ad07a });
+    } else if (st & ChrisFlag.Rescuing) {
+      const pulse = 1 + 0.2 * Math.sin(time * 10);
+      const a = 3 * pulse;
+      const b = 9 * pulse;
+      const y = -30;
+      c.mark
+        .poly([-a, y - b, a, y - b, a, y - a, b, y - a, b, y + a, a, y + a, a, y + b, -a, y + b, -a, y + a, -b, y + a, -b, y - a, -a, y - a])
+        .fill({ color: 0xd8262e })
+        .stroke({ width: 1.5, color: INK });
+    }
+  }
+
+  /** Marc Cortez: a plain guy in a flannel who flinches when hit. */
+  private drawMarc(e: InterpEntity, dt: number, time: number): void {
+    this.marc ??= new NpcSprite(this.assets, 'char.marc', 21, this.root);
+    const m = this.marc;
+    m.step(e, dt);
+    m.fx.clear();
+    const hurt = (e.state & MarcFlag.Hurt) !== 0;
+    m.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff7a6a : 0xffffff;
+    m.body.position.set(hurt ? Math.sin(time * 60) * 2 : 0, 0);
+  }
+
+  /**
+   * Plasma.TTV: a regular guy, or (GAMER RAGE) a hulking beast wreathed in RGB glow. The
+   * transformation swells and shakes over two seconds; punches lunge the body forward.
+   */
+  private drawPlasma(e: InterpEntity, dt: number, time: number): void {
+    if (!this.plasma) {
+      const man = new NpcSprite(this.assets, 'char.plasma', 22, this.root);
+      const beast = new Sprite(this.assets.getTexture('char.plasmaBeast'));
+      beast.anchor.set(0.45, 0.5);
+      const aura = new Graphics();
+      aura.blendMode = 'add';
+      man.root.addChildAt(aura, 0);
+      man.root.addChild(beast);
+      this.plasma = { man, beast, aura };
+    }
+    const { man, beast, aura } = this.plasma;
+    const st = e.state;
+    const raging = (st & PlasmaFlag.Raging) !== 0;
+    const transforming = (st & PlasmaFlag.Transforming) !== 0;
+    const reverting = (st & PlasmaFlag.Reverting) !== 0;
+    const k = e.action / 255;
+    // How far into beast form (0 man, 1 beast).
+    const b = raging ? 1 : transforming ? k : reverting ? 1 - k : 0;
+    man.step(e, dt, raging ? 48 : 34, raging ? 240 : 150);
+    man.fx.clear();
+    aura.clear();
+    const shake = transforming || reverting ? Math.sin(time * 70) * 3 * (transforming ? k : 1 - k) : 0;
+    man.body.visible = b < 0.5;
+    beast.visible = b >= 0.5;
+    man.legs.visible = b < 0.5;
+    const punch = (st & PlasmaFlag.Punching) !== 0 ? 10 : 0;
+    const scale = b < 0.5 ? 1 + b * 0.8 : 0.75 + (b - 0.5) * 0.5;
+    man.body.scale.set(scale);
+    beast.scale.set(scale);
+    beast.rotation = e.facing;
+    const ox = Math.cos(e.facing) * punch + shake;
+    const oy = Math.sin(e.facing) * punch;
+    man.body.position.set(ox, oy);
+    beast.position.set(ox, oy);
+    const hurt = (st & PlasmaFlag.Hurt) !== 0 && Math.sin(time * 40) > 0;
+    man.body.tint = hurt ? 0xff7a6a : 0xffffff;
+    beast.tint = hurt ? 0xff9a8a : 0xffffff;
+    if (b > 0) {
+      // Gamer RGB: a rotating rainbow glow.
+      const hue = (time * 0.6) % 1;
+      const col = (h: number): number => {
+        const f = (n: number): number => Math.round(255 * Math.max(0, Math.min(1, Math.abs(((h * 6 + n) % 6) - 3) - 1)));
+        return (f(0) << 16) | (f(4) << 8) | f(2);
+      };
+      for (let i = 0; i < 3; i++) aura.circle(ox, oy, (20 + i * 9) * (0.6 + b * 0.6)).fill({ color: col(hue + i * 0.33), alpha: 0.12 * b });
+      if (transforming) for (let i = 0; i < 6; i++) {
+        const a = time * 8 + i;
+        aura.circle(Math.cos(a) * 30 * k, Math.sin(a) * 30 * k, 3).fill({ color: col(hue + i / 6), alpha: 0.7 });
+      }
+    }
+    if (st & PlasmaFlag.Stunned) man.stars(time, 26);
+    if (st & PlasmaFlag.Blind) {
+      for (let i = 0; i < 5; i++) {
+        const a = time * 2 + i * 1.3;
+        man.fx.circle(Math.cos(a) * 26, Math.sin(a * 1.3) * 22 - 4, 3 + (i % 2)).fill({ color: i % 2 ? 0xd06aff : 0x6a8aff, alpha: 0.8 });
+      }
+    }
+  }
+
+  /** Sexton's Hemp Beam: a white-hot line with a soft glow that sparks where it hits. */
+  private drawBeam(e: InterpEntity, time: number): void {
+    const g = this.beam;
+    const len = e.extra * 8;
+    const fade = Math.min(1, (e.action / 255) * 12) * Math.min(1, (1 - e.action / 255) * 10 + 0.15);
+    const dx = Math.cos(e.facing);
+    const dy = Math.sin(e.facing);
+    const sx = e.x + dx * 14;
+    const sy = e.y + dy * 14;
+    const ex = e.x + dx * len;
+    const ey = e.y + dy * len;
+    const flick = 0.85 + 0.15 * Math.sin(time * 40);
+    g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 22, color: 0xd8ffd0, alpha: 0.1 * fade, cap: 'round' });
+    g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 10, color: 0xeaffe4, alpha: 0.28 * fade * flick, cap: 'round' });
+    g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 3.5, color: 0xffffff, alpha: 0.95 * fade, cap: 'round' });
+    // Where it strikes: a flare and scattering sparks.
+    g.circle(ex, ey, 14 + Math.sin(time * 30) * 3).fill({ color: 0xf0fff0, alpha: 0.35 * fade });
+    for (let i = 0; i < 7; i++) {
+      const a = e.facing + Math.PI + Math.sin(time * 23 + i * 2.1) * 1.3;
+      const r = 8 + ((time * 90 + i * 17) % 22);
+      g.circle(ex + Math.cos(a) * r, ey + Math.sin(a) * r, 1.6).fill({ color: 0xffffff, alpha: 0.8 * fade });
+    }
   }
 
   /** Shane Jeans: double denim; a "!" over his head while he's chasing someone. */
@@ -740,6 +1112,17 @@ export class EntityLayer {
         }
         const stars = new Graphics();
         c.addChild(stars);
+      } else if (e.kind === EntityKind.Drop) {
+        const glow = new Sprite(this.assets.getTexture('fx.glow'));
+        glow.anchor.set(0.5);
+        glow.scale.set(0.55);
+        glow.tint = e.extra & 8 ? 0xffd86a : 0xb09a60;
+        glow.blendMode = 'add';
+        const kind = e.extra & 7;
+        const s = new Sprite(this.assets.getTexture(kind === ItemKind.Shotgun && e.extra & 8 ? 'item.goldenPump' : ITEM_TEX[kind]));
+        s.anchor.set(0.5);
+        s.scale.set(0.8);
+        c.addChild(glow, s);
       } else if (e.kind === EntityKind.Hemp) {
         const glow = new Sprite(this.assets.getTexture('fx.glow'));
         glow.anchor.set(0.5);
@@ -755,8 +1138,8 @@ export class EntityLayer {
     }
     c.position.set(e.x, e.y);
     if (e.kind === EntityKind.Bottle) {
-      const k = e.extra / 255;
-      const lift = Math.sin(k * Math.PI) * 26;
+      // extra = distance flown / 4: it rises off the hand, then flies level until it hits.
+      const lift = 18 * Math.min(1, (e.extra * 4) / 80);
       c.children[0].position.set(0, -lift);
       c.children[0].rotation = time * 14;
       c.children[0].scale.set(0.6 + lift / 90);
@@ -793,6 +1176,9 @@ export class EntityLayer {
         const d = R * ((i * 0.37) % 1);
         stars.circle(Math.cos(a) * d, Math.sin(a) * d, 1.5 + (i % 3) * 0.5).fill({ color: 0xffffff, alpha: fade * (0.5 + 0.5 * Math.sin(time * 6 + i)) });
       }
+    } else if (e.kind === EntityKind.Drop) {
+      c.children[0].alpha = 0.35 + 0.25 * Math.sin(time * 3 + e.id);
+      c.children[1].rotation = Math.sin(time * 1.5 + e.id) * 0.15;
     } else if (e.kind === EntityKind.Hemp) {
       c.children[0].alpha = 0.5 + 0.3 * Math.sin(time * 4);
       c.children[1].rotation = Math.sin(time * 2) * 0.2;

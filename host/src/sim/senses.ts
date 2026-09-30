@@ -23,11 +23,11 @@ export function updateSenses(w: World, dt: number): void {
     if (onGround) {
       if (p.move.sprinting && w.time - p.lastScent >= BALANCE.trails.scentEvery) {
         p.lastScent = w.time;
-        w.trails.push({ id: w.trailSeq++, x: p.move.x, y: p.move.y, t: w.time, kind: 0 });
+        w.trails.push({ id: w.trailSeq++, x: p.move.x, y: p.move.y, t: w.time, kind: 0, who: p.id });
       }
       if ((p.health === Health.Wounded || p.health === Health.Downed) && w.time - p.lastBlood >= BALANCE.trails.bloodEvery) {
         p.lastBlood = w.time;
-        w.trails.push({ id: w.trailSeq++, x: p.move.x + w.rng.range(-6, 6), y: p.move.y + w.rng.range(-6, 6), t: w.time, kind: 1 });
+        w.trails.push({ id: w.trailSeq++, x: p.move.x + w.rng.range(-6, 6), y: p.move.y + w.rng.range(-6, 6), t: w.time, kind: 1, who: p.id });
       }
     }
 

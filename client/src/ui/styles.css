@@ -1068,12 +1068,6 @@ input::placeholder {
 
 .scare.on {
   display: flex;
-  animation: scare-in 0.12s ease-out;
-}
-
-.scare.on.fade {
-  opacity: 0;
-  transition: opacity 1.2s ease-in;
 }
 
 .scare img {
@@ -1800,7 +1794,7 @@ kbd,
 .hp-carried { color: var(--muted) !important; }
 
 .minimap canvas {
-  border-radius: 50%;
+  border-radius: 0;
   filter: sepia(0.25) contrast(1.05);
   box-shadow: 0 0 0 1px #000, 0 0 0 2px rgba(217, 211, 193, 0.25);
 }
@@ -1908,4 +1902,97 @@ input[type='range'] {
 
 .hud .status {
   bottom: 112px !important;
+}
+
+/* Sprint meter: a wide bar sitting just above the inventory. */
+.hud .stambar {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  width: min(460px, 70vw);
+  height: 14px;
+  background: #0a0a08;
+  border: 1px solid var(--line);
+}
+
+.hud .stambar .fill {
+  height: 100%;
+  width: 100%;
+  background: var(--text);
+  transition: width 0.08s linear;
+}
+
+.hud .stambar.boost .fill {
+  background: var(--cyan);
+}
+
+.hud .stambar.locked .fill {
+  background: var(--red);
+}
+
+.hud .stambar span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
+/* Inventory: empty slots are small squares; an item grows its slot to fit, then shrinks it. */
+.slot.item {
+  height: 60px;
+  width: 60px;
+  min-width: 0;
+  padding: 0;
+  justify-content: center;
+  transition:
+    width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.1s,
+    opacity 0.3s;
+}
+
+.slot .slot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  transition:
+    opacity 0.25s,
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.slot.item .slot-inner img {
+  width: 28px;
+  height: 28px;
+}
+
+.slot.item.empty .slot-inner {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.slot.item.empty .count,
+.slot.item.empty .meter {
+  display: none;
+}
+
+.slot.gold {
+  border-color: #c9a23a !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 90, 0.4), 0 0 12px rgba(255, 200, 80, 0.2);
+}
+
+.gold {
+  color: #e8c25a !important;
+}
+
+/* Prompts sit above the sprint meter. */
+.hud .prompt {
+  bottom: 132px;
 }

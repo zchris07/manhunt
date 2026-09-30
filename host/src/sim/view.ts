@@ -9,7 +9,7 @@ import {
   SextonFlag,
   emptySelf,
   inCone,
-  maxStamina,
+  ItemKind,
   quantizeEntity,
   type EntityRecord,
   type SelfState,
@@ -67,7 +67,8 @@ export function canSee(w: World, v: SimPlayer, x: number, y: number): boolean {
 }
 
 function entityState(p: SimPlayer): number {
-  let s = p.health & EF.HealthMask;
+  // Zach knocked out by Plasma shows as down.
+  let s = (p.role === 'hunter' && p.knockT > 0 ? Health.Downed : p.health) & EF.HealthMask;
   if (p.role === 'hunter') s |= EF.Hunter;
   s |= (p.gait & 3) << EF.GaitShift;
   if (p.carrying) s |= EF.Carrying;
@@ -83,18 +84,23 @@ function entityState(p: SimPlayer): number {
   return s;
 }
 
-/** Fraction of the sprint meter, 0-255. */
-function staminaByte(p: SimPlayer): number {
-  const role = p.role === 'hunter' ? 'hunter' : 'survivor';
-  return (p.move.stamina / maxStamina(role, p.move.boostT)) * 255;
-}
 
 function playerRecord(p: SimPlayer): EntityRecord {
   const extra = p.role === 'hunter' ? p.carrying : p.health === Health.Staked ? Math.round((p.stakeT / BALANCE.objectives.stakeStageTime) * 255) : 0;
   // aux: a survivor's item in hand, or how far Zach has charged his swing (0-255).
+  // A survivor's item in hand (bit 3: it's the golden pump), or Zach's swing charge (0-254;
+  // 255 = he's holding the golden pump).
   const aux =
-    p.role === 'survivor' ? (p.selItem && p.inv[p.selItem] > 0 ? p.selItem : 0) : p.chargeT >= 0 ? Math.round((p.chargeT / BALANCE.hunter.attack.charge.max) * 255) : 0;
-  return quantizeEntity(p.id, EntityKind.Player, p.move.x, p.move.y, p.facing, entityState(p), p.action, extra, aux, staminaByte(p));
+    p.role === 'survivor'
+      ? p.selItem && p.inv[p.selItem] > 0
+        ? p.selItem | (p.selItem === ItemKind.Shotgun && p.golden ? 8 : 0)
+        : 0
+      : p.pump > 0
+        ? 255
+        : p.chargeT >= 0
+          ? Math.round((p.chargeT / BALANCE.hunter.attack.charge.max) * 254)
+          : 0;
+  return quantizeEntity(p.id, EntityKind.Player, p.move.x, p.move.y, p.facing, entityState(p), p.action, extra, aux, p.hp * 255);
 }
 
 function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState {
@@ -105,7 +111,7 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.x = watching && v ? v.move.x : m.x;
   s.y = watching && v ? v.move.y : m.y;
   s.mode = m.mode;
-  s.health = p.health;
+  s.health = p.role === 'hunter' && p.knockT > 0 ? Health.Downed : p.health;
   s.lungeT = m.lungeT;
   s.lungeAng = m.lungeAng;
   s.lungeCharges = m.lungeCharges;
@@ -157,6 +163,9 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.testMode = w.testMode ? 1 : 0;
   s.noise = Math.min(1, p.noise / BALANCE.survivor.noise.run);
   s.spectating = watching && v ? v.id : 0;
+  s.hp = p.hp;
+  s.golden = p.golden ? 1 : 0;
+  s.pump = p.pump;
   return s;
 }
 
@@ -186,7 +195,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     for (const b of w.bottles) {
       if (Math.hypot(b.x - v.move.x, b.y - v.move.y) > 900) continue;
-      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), 0, 0, Math.round(Math.min(1, b.travelled / b.max) * 255)));
+      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), 0, 0, Math.min(255, Math.round(b.travelled / 4))));
     }
     for (const t of w.traps) {
       if (Math.hypot(t.x - v.move.x, t.y - v.move.y) > R) continue;
@@ -207,12 +216,25 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
       if (sx.mode === 'flee') st |= SextonFlag.Fleeing;
       if (sx.mode === 'talk') st |= SextonFlag.Talking;
       if (sx.hurtT > 0) st |= SextonFlag.Hurt;
+      if (sx.defending) st |= SextonFlag.Defending;
+      if (sx.stunT > 0) st |= SextonFlag.Stunned;
+      if (sx.beaming) st |= SextonFlag.Beaming;
       entities.push(quantizeEntity(sx.id, EntityKind.Sexton, sx.x, sx.y, sx.facing, st, 0, sx.hp, sx.moving ? 1 : 0, 0));
     }
     // Shane Jeans is sent to everyone nearby (his faint light shows even in the dark; he is
     // still only drawn inside your own light).
     const sh = w.shane;
     if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= R) entities.push(sh.record());
+    // His Hemp Beam glows: everyone nearby gets it.
+    if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
+      entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));
+    }
+    for (const n of [w.marc, w.plasma]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= R) entities.push(n.record());
+    for (const d of w.drops) {
+      if (Math.hypot(d.x - v.move.x, d.y - v.move.y) <= R) entities.push(quantizeEntity(d.id, EntityKind.Drop, d.x, d.y, 0, 0, 0, d.kind | (d.golden ? 8 : 0)));
+    }
+    const cz = w.chris;
+    if (!cz.gone && Math.hypot(cz.x - v.move.x, cz.y - v.move.y) <= R) entities.push(cz.record());
     const hd = w.hempDrop;
     if (hd && Math.hypot(hd.x - v.move.x, hd.y - v.move.y) <= R) entities.push(quantizeEntity(hd.id, EntityKind.Hemp, hd.x, hd.y, 0, 0, 0, 0));
   }

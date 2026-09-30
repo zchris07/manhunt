@@ -1,7 +1,7 @@
 export type Surface = 'forest' | 'dirt' | 'grass' | 'concrete' | 'wood' | 'water';
 export const SURFACES: readonly Surface[] = ['forest', 'dirt', 'grass', 'concrete', 'wood', 'water'];
 
-export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'dock' | 'yard' | 'log' | 'window';
+export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'dock' | 'yard' | 'log' | 'window' | 'ambulance';
 
 export interface WallSeg {
   ax: number;
@@ -129,6 +129,15 @@ export interface LightDef {
   kind: LightKind;
 }
 
+/** Chris Zelley's parked ambulance: centre, heading (along its length) and size. */
+export interface AmbulanceDef {
+  x: number;
+  y: number;
+  angle: number;
+  length: number;
+  width: number;
+}
+
 export interface PathDef {
   points: number[];
   width: number;
@@ -160,6 +169,7 @@ export interface MapData {
   cabins: Rect[];
   racks: Rect[];
   wrecks: Rect[];
+  ambulance: AmbulanceDef;
   exitZone: Rect;
   generators: GeneratorDef[];
   hidingSpots: HidingSpotDef[];

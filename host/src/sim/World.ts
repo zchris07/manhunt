@@ -22,13 +22,17 @@ import {
 } from '@manhunt/shared';
 import { HISTORY_TICKS, createPlayer, type SimPlayer } from './player';
 import { updateInteractions, handlePresses, computePrompts, exitHiding } from './interact';
-import { lungeContact, updateCombat } from './combat';
+import { lungeContact, restoreSurvivor, updateCombat } from './combat';
 import { updateItems } from './items';
 import { updateAbilities } from './abilities';
 import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
 import { Shane } from './shane';
+import { Chris } from './chris';
+import { Marc } from './marc';
+import { Plasma } from './plasma';
+import type { NpcTarget } from './npc';
 
 export interface GenState {
   progress: number;
@@ -44,8 +48,17 @@ export interface ThrownBottle {
   dx: number;
   dy: number;
   travelled: number;
-  max: number;
   owner: number;
+}
+
+/** An item a survivor dropped (G) for a teammate. `amount`: goggle meter or shells left. */
+export interface Drop {
+  id: number;
+  x: number;
+  y: number;
+  kind: ItemKind;
+  golden: boolean;
+  amount: number;
 }
 
 export interface Trap {
@@ -81,6 +94,8 @@ export interface TrailRecord {
   t: number;
   /** 0 scent (sprinting), 1 blood. */
   kind: number;
+  /** Whose trail it is (points of one person join into one unbroken ribbon). */
+  who: number;
 }
 
 export interface OutEvent {
@@ -128,6 +143,7 @@ export class World {
   readonly hiding: number[];
   bottles: ThrownBottle[] = [];
   traps: Trap[] = [];
+  drops: Drop[] = [];
   gases: Gas[] = [];
   bursts: Burst[] = [];
   trails: TrailRecord[] = [];
@@ -137,6 +153,9 @@ export class World {
   hempDrop: { id: number; x: number; y: number } | null = null;
   readonly sexton: Sexton;
   readonly shane: Shane;
+  readonly chris: Chris;
+  readonly marc: Marc;
+  readonly plasma: Plasma;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -179,6 +198,9 @@ export class World {
     this.survivorsTotal = this.order.filter((p) => p.role === 'survivor').length;
     this.sexton = new Sexton(this);
     this.shane = new Shane(this);
+    this.chris = new Chris(this);
+    this.marc = new Marc(this);
+    this.plasma = new Plasma(this);
   }
 
   get geo() {
@@ -224,7 +246,7 @@ export class World {
     if (p.carrying) {
       const q = this.players.get(p.carrying);
       if (q) {
-        q.health = Health.Wounded;
+        restoreSurvivor(q, BALANCE.survivor.reviveHp);
         q.carriedBy = 0;
       }
     }
@@ -307,7 +329,7 @@ export class World {
   moveModeFor(p: SimPlayer): MoveMode {
     if (p.role === 'spectator') return MoveMode.Locked;
     if (p.role === 'hunter') {
-      if (p.stunT > 0 || p.health === Health.Eliminated) return MoveMode.Locked;
+      if (p.stunT > 0 || p.knockT > 0 || p.health === Health.Eliminated) return MoveMode.Locked;
       if (p.action === Action.PickUp || p.action === Action.Stake || p.action === Action.Search || p.action === Action.DamageGen) {
         return MoveMode.Locked;
       }
@@ -315,7 +337,7 @@ export class World {
     }
     if (p.health === Health.Downed) return MoveMode.Crawl;
     if (p.health !== Health.Healthy && p.health !== Health.Wounded) return MoveMode.Locked;
-    if (p.hideState !== 0 || p.action === Action.Talk) return MoveMode.Locked;
+    if (p.hideState !== 0 || p.action === Action.Talk || p.stunT > 0) return MoveMode.Locked;
     return MoveMode.Normal;
   }
 
@@ -345,6 +367,9 @@ export class World {
     updateAbilities(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
+    this.chris.update(dt);
+    this.marc.update(dt);
+    this.plasma.update(dt);
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -446,6 +471,14 @@ export class World {
     }
     this.sexton.unstick();
     this.shane.unstick();
+    this.chris.unstick();
+    this.marc.unstick();
+    this.plasma.unstick();
+  }
+
+  /** NPCs that bottles and pellets can hit right now. */
+  npcTargets(): NpcTarget[] {
+    return [this.sexton, this.shane, this.chris, this.marc, this.plasma].filter((n) => n.solid);
   }
 
   allocEntityId(): number {
@@ -480,7 +513,7 @@ export class World {
       if (p.carrying) {
         const s = this.players.get(p.carrying);
         if (s) {
-          s.health = Health.Wounded;
+          restoreSurvivor(s, BALANCE.survivor.reviveHp);
           s.carriedBy = 0;
         }
         p.carrying = 0;

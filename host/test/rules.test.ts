@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, BarricadeState, Btn, Health, MoveMode, Prompt } from '@manhunt/shared';
 import { Driver, clearLane, makeWorld, openSpot, parkSexton, place } from './worldHelpers';
+import { swipeDamage } from '../src/sim/combat';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -19,18 +20,23 @@ function setupDuel(w: World, dist = 60): { h: SimPlayer; s: SimPlayer; d: Driver
 }
 
 describe('health states and the machete swipe', () => {
-  it('Healthy -> Wounded -> Downed, with a speed burst after the first hit', () => {
+  it('each swipe takes a third of their health (Wounded), three down them, with a speed burst', () => {
     const w = makeWorld();
     const { h, s, d } = setupDuel(w);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(10, (p) => (p.id === h.id ? { aim: 0 } : undefined));
     expect(s.health).toBe(Health.Wounded);
+    expect(s.hp).toBeCloseTo(2 / 3, 3);
     expect(s.move.hasteT).toBeGreaterThan(0);
     expect(h.attackCd).toBeGreaterThan(0);
-    place(s, h.move.x + 60, h.move.y);
-    d.run(secs(BALANCE.hunter.attack.hitCooldown) + 2, (p) => (p.id === h.id ? { aim: 0 } : undefined));
-    d.tap(h.id, Btn.Primary, { aim: 0 });
-    d.run(10);
+    for (const left of [1 / 3, 0]) {
+      place(s, h.move.x + 60, h.move.y);
+      d.run(secs(BALANCE.hunter.attack.hitCooldown) + 2, (p) => (p.id === h.id ? { aim: 0 } : undefined));
+      place(s, h.move.x + 60, h.move.y);
+      d.tap(h.id, Btn.Primary, { aim: 0 });
+      d.run(10);
+      expect(s.hp).toBeCloseTo(left, 3);
+    }
     expect(s.health).toBe(Health.Downed);
     expect(s.move.mode).toBe(MoveMode.Crawl);
     expect(h.stats.downs).toBe(1);
@@ -49,7 +55,7 @@ describe('health states and the machete swipe', () => {
     duel.d.tap(duel.h.id, Btn.Primary, { aim: 0 });
     duel.d.run(10, (p) => (p.id === duel.h.id ? { aim: 0 } : undefined));
     expect(duel.s.health).toBe(Health.Healthy);
-    expect(duel.h.attackCd).toBeGreaterThan(0.3);
+    expect(duel.h.stats.hits).toBe(0);
     // Out of reach in front: also a miss.
     const w3 = makeWorld();
     const far = setupDuel(w3, 170);
@@ -58,7 +64,7 @@ describe('health states and the machete swipe', () => {
     expect(far.s.health).toBe(Health.Healthy);
   });
 
-  it('holding left click charges a heavy swipe: longer reach, and it downs a healthy survivor', () => {
+  it('holding left click charges a heavy swipe: longer reach, and it takes two thirds of their health', () => {
     const w = makeWorld();
     const { h, s, d } = setupDuel(w, 150);
     const c = clearLane(w, 300);
@@ -70,7 +76,16 @@ describe('health states and the machete swipe', () => {
     expect(s.health).toBe(Health.Healthy);
     d.run(10, (p) => (p.id === h.id ? { aim: 0 } : undefined));
     expect(h.chargeT).toBe(-1);
-    expect(s.health).toBe(Health.Downed);
+    expect(s.health).toBe(Health.Wounded);
+    expect(s.hp).toBeCloseTo(1 / 3, 3);
+  });
+
+  it('a half-charged swipe does proportionally more than a tap', () => {
+    expect(swipeDamage(0)).toBeCloseTo(1 / 3, 5);
+    const C = BALANCE.hunter.attack;
+    expect(swipeDamage(C.damage.tapGrace)).toBeCloseTo(1 / 3, 5);
+    expect(swipeDamage((C.charge.heavyAt + C.damage.tapGrace) / 2)).toBeCloseTo(0.5, 5);
+    expect(swipeDamage(BALANCE.hunter.attack.charge.max)).toBeCloseTo(2 / 3, 5);
   });
 
   it('the swing is announced so everyone nearby sees the swipe animation', () => {
