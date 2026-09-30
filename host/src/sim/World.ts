@@ -62,9 +62,12 @@ export interface Gas {
   age: number;
 }
 
+/** A Soundcloud Burst wave: origin, unit direction, launch time. */
 export interface Burst {
   x: number;
   y: number;
+  dx: number;
+  dy: number;
   t0: number;
   by: number;
   hit: Set<number>;
@@ -113,6 +116,9 @@ export class World {
   readonly barricades: number[];
   readonly barricadeHits: number[];
   readonly doors: boolean[];
+  /** Swipes each closed door has taken, and doors Zach smashed (open for good). */
+  readonly doorHits: number[];
+  readonly doorBroken: boolean[];
   readonly doorCd: number[];
   readonly lootTaken: boolean[];
   readonly stakes: number[];
@@ -147,6 +153,8 @@ export class World {
     this.barricadeHits = opts.map.barricades.map(() => 0);
     this.doors = opts.map.doors.map((d) => !opts.map.dynamicSegments[d.dyn].active);
     this.doorCd = opts.map.doors.map(() => 0);
+    this.doorHits = opts.map.doors.map(() => 0);
+    this.doorBroken = opts.map.doors.map(() => false);
     this.lootTaken = opts.map.loot.map(() => false);
     this.stakes = opts.map.stakes.map(() => 0);
     this.hiding = opts.map.hidingSpots.map(() => 0);
@@ -191,6 +199,17 @@ export class World {
   }
 
   /** Testing mode: flips a player between Zach and survivor where they stand. */
+  /** Testing mode: jump to a point on the map. */
+  teleport(id: number, x: number, y: number): void {
+    const p = this.players.get(id);
+    if (!this.testMode || !p || p.role === 'spectator' || p.health === Health.Carried || p.health === Health.Staked) return;
+    if (p.hideState) exitHiding(this, p, true);
+    this.cancelAction(p);
+    p.move.x = Math.min(this.map.width - 40, Math.max(40, x));
+    p.move.y = Math.min(this.map.height - 40, Math.max(40, y));
+    resolveOverlaps(this.geo, p.move, p.radius);
+  }
+
   switchRole(id: number): boolean {
     const p = this.players.get(id);
     if (!this.testMode || !p || p.role === 'spectator') return false;
@@ -398,6 +417,7 @@ export class World {
 
   /** Opens or closes a door. Anyone standing in a closing doorway is pushed out. */
   setDoor(id: number, open: boolean): void {
+    if (this.doorBroken[id] && !open) return;
     this.doors[id] = open;
     this.doorCd[id] = 0.35;
     this.geo.setDynamicActive(this.map.doors[id].dyn, !open);

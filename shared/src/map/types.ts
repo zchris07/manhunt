@@ -1,7 +1,7 @@
 export type Surface = 'forest' | 'dirt' | 'grass' | 'concrete' | 'wood' | 'water';
 export const SURFACES: readonly Surface[] = ['forest', 'dirt', 'grass', 'concrete', 'wood', 'water'];
 
-export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'dock' | 'yard' | 'log';
+export type WallKind = 'boundary' | 'warehouse' | 'cabin' | 'shack' | 'fence' | 'shore' | 'rack' | 'wreck' | 'dock' | 'yard' | 'log' | 'window';
 
 export interface WallSeg {
   ax: number;

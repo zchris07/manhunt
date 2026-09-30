@@ -51,31 +51,16 @@ export function visionFor(w: World, v: SimPlayer): Vision {
   return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG * wide, range: sv.range * k }, prox: sv.proximity, xray: v.gogglesOn };
 }
 
-/** True if (x,y) is lit by a lamp, campfire or restored generator. */
-export function isLit(w: World, x: number, y: number): boolean {
-  for (const l of w.map.lights) {
-    if (Math.abs(l.x - x) > l.radius || Math.abs(l.y - y) > l.radius) continue;
-    if (Math.hypot(l.x - x, l.y - y) <= l.radius && w.geo.hasLineOfSight(l.x, l.y, x, y)) return true;
-  }
-  const gr = BALANCE.lights.generatorRadius;
-  for (let i = 0; i < w.gens.length; i++) {
-    if (!w.gens[i].repaired) continue;
-    const g = w.map.generators[i];
-    if (Math.hypot(g.x - x, g.y - y) <= gr && w.geo.hasLineOfSight(g.x, g.y, x, y)) return true;
-  }
-  return false;
-}
-
 /**
- * Whether viewer `v` can see point (x,y): own cone or proximity with line of sight, a lit
- * area in line of sight, or anywhere in a see-through (x-ray) cone.
+ * Whether viewer `v` can see point (x,y): own cone or proximity with line of sight, or
+ * anywhere in the near part of a see-through (x-ray) cone.
  */
 export function canSee(w: World, v: SimPlayer, x: number, y: number): boolean {
   const { cone, prox, xray } = visionFor(w, v);
-  if (xray && inCone(cone, x, y)) return true;
+  if (xray && inCone({ ...cone, range: Math.min(cone.range, BALANCE.xray.range) }, x, y)) return true;
   const d = Math.hypot(x - v.move.x, y - v.move.y);
-  const own = d <= prox || inCone(cone, x, y);
-  if (!own && !(d <= BALANCE.lights.losRange && isLit(w, x, y))) return false;
+  // Only your own light lifts the fog of war: lamps light the scene, not who is in it.
+  if (d > prox && !inCone(cone, x, y)) return false;
   return w.geo.hasLineOfSight(v.move.x, v.move.y, x, y);
 }
 
@@ -104,8 +89,10 @@ function staminaByte(p: SimPlayer): number {
 
 function playerRecord(p: SimPlayer): EntityRecord {
   const extra = p.role === 'hunter' ? p.carrying : p.health === Health.Staked ? Math.round((p.stakeT / BALANCE.objectives.stakeStageTime) * 255) : 0;
-  const held = p.role === 'survivor' && p.selItem && p.inv[p.selItem] > 0 ? p.selItem : 0;
-  return quantizeEntity(p.id, EntityKind.Player, p.move.x, p.move.y, p.facing, entityState(p), p.action, extra, held, staminaByte(p));
+  // aux: a survivor's item in hand, or how far Zach has charged his swing (0-255).
+  const aux =
+    p.role === 'survivor' ? (p.selItem && p.inv[p.selItem] > 0 ? p.selItem : 0) : p.chargeT >= 0 ? Math.round((p.chargeT / BALANCE.hunter.attack.charge.max) * 255) : 0;
+  return quantizeEntity(p.id, EntityKind.Player, p.move.x, p.move.y, p.facing, entityState(p), p.action, extra, aux, staminaByte(p));
 }
 
 function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState {
@@ -157,7 +144,7 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.inv = p.inv.slice();
   s.goggleMeter = p.goggles[0] ?? 0;
   s.gogglesOn = p.gogglesOn ? 1 : 0;
-  s.gogglesCd = p.gogglesCd;
+  s.chargeT = p.chargeT;
   s.shells = p.shells[0] ?? 0;
   s.reloadT = p.reloadT;
   s.confit = p.confit;
@@ -262,6 +249,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     stakes: w.stakes.slice(),
     hidingOccupied,
     doors: w.doors.slice(),
+    doorsBroken: w.doorBroken.slice(),
     radar,
   };
   return { self: selfState(w, peerPlayer, v), entities, world };

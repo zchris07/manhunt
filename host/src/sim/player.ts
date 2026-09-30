@@ -67,7 +67,6 @@ export interface SimPlayer {
   /** Meter (seconds) of each pair of goggles carried, the one in use first. */
   goggles: number[];
   gogglesOn: boolean;
-  gogglesCd: number;
   /** Shells left in each shotgun carried, the one in use first. */
   shells: number[];
   reloadT: number;
@@ -81,6 +80,10 @@ export interface SimPlayer {
   attackCd: number;
   attackWindup: number;
   swingT: number;
+  /** Seconds the swing has been charged (left click held); -1 when not charging. */
+  chargeT: number;
+  /** The swing being wound up is a fully charged heavy swipe. */
+  heavy: boolean;
   lungeHit: boolean;
   wasLunging: boolean;
   burstCd: number;
@@ -93,7 +96,6 @@ export interface SimPlayer {
   prompt2: Prompt;
   prompt2Target: number;
   stakedBy: number;
-  slamWindow: number;
   lastScent: number;
   lastBlood: number;
   terror: number;
@@ -150,7 +152,6 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     selItem: 0,
     goggles: [],
     gogglesOn: false,
-    gogglesCd: 0,
     shells: [],
     reloadT: 0,
     confit: 0,
@@ -161,6 +162,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     attackCd: 0,
     attackWindup: 0,
     swingT: 0,
+    chargeT: -1,
+    heavy: false,
     lungeHit: false,
     wasLunging: false,
     burstCd: 0,
@@ -171,7 +174,6 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     prompt2: Prompt.None,
     prompt2Target: -1,
     stakedBy: 0,
-    slamWindow: 0,
     lastScent: 0,
     lastBlood: 0,
     terror: 0,

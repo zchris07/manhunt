@@ -17,7 +17,7 @@ describe('map generation', () => {
     expect(mapHash(c)).not.toBe(mapHash(a));
   });
 
-  it('places every generator, the fixed item counts, doors and barricades (no windows)', () => {
+  it('places every generator, the fixed item counts, doors, barricades and windows', () => {
     const d = generateMap(mapParamsFor(7, rb));
     expect(d.generators.length).toBe(rb.totalGenerators);
     expect(rb.totalGenerators).toBe(rb.requiredGenerators);
@@ -30,8 +30,10 @@ describe('map generation', () => {
     expect(d.hidingSpots.map((h) => h.kind)).toEqual(expect.arrayContaining(['locker', 'wardrobe', 'bed', 'grass', 'barrel']));
     expect(d.doors.length).toBeGreaterThan(5);
     expect(d.barricades.length).toBeGreaterThan(3);
-    expect((d as unknown as { windows?: unknown }).windows).toBeUndefined();
-    expect(d.walls.some((w) => (w.kind as string) === 'window')).toBe(false);
+    // Windows: you can see through them but not walk through them.
+    const windows = d.walls.filter((w) => w.kind === 'window');
+    expect(windows.length).toBeGreaterThan(10);
+    expect(windows.every((w) => !w.vision && w.move)).toBe(true);
     expect(d.trees.some((t) => t.kind === 'oak')).toBe(true);
     expect(d.width).toBe(6000);
   });
@@ -66,5 +68,16 @@ describe('map generation', () => {
       }
     }
     expect(pos.y).toBeLessThan(d.survivorSpawns[0].y);
+  });
+
+  it('keeps doorways clear of hiding spots, stakes and generators', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const d = generateMap(mapParamsFor(seed * 7919, resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 })));
+      const doors = d.doors.map((o) => ({ x: o.hx + (Math.cos(o.angle) * o.length) / 2, y: o.hy + (Math.sin(o.angle) * o.length) / 2 }));
+      const near = (x: number, y: number, r: number): boolean => doors.some((o) => Math.hypot(o.x - x, o.y - y) < r);
+      expect(d.hidingSpots.filter((h) => h.kind !== 'grass' && near(h.x, h.y, 89))).toEqual([]);
+      expect(d.stakes.filter((s) => near(s.x, s.y, 89))).toEqual([]);
+      expect(d.generators.filter((g) => near(g.x, g.y, 100))).toEqual([]);
+    }
   });
 });

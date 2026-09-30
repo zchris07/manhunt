@@ -67,14 +67,16 @@ export class VisionSources {
     } else {
       const cfg = v.hunter ? BALANCE.hunter.vision : BALANCE.survivor.vision;
       const k = v.downed ? BALANCE.survivor.downedVisionMul : 1;
-      const range = cfg.range * k;
+      // The beam runs until it hits something; past the edge of the screen it can't be seen.
+      const range = Math.min(cfg.range * k, viewRadius * 1.05);
       const half = cfg.coneHalfAngleDeg * DEG * v.coneMul;
       own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: v.facing, halfAngle: half, range }, []), ox: v.x, oy: v.y, range });
       own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: cfg.proximity }, []), ox: v.x, oy: v.y, range: cfg.proximity, intensity: 0.9 });
       if (v.xray > 0) {
         // Light that ignores walls; it grows out of the torch while it fades in.
         const ease = 1 - (1 - v.xray) * (1 - v.xray);
-        xray = { poly: conePolygon(v.x, v.y, v.facing, half, range * (0.35 + 0.65 * ease)), fade: ease };
+        const xr = Math.min(range, BALANCE.xray.range);
+        xray = { poly: conePolygon(v.x, v.y, v.facing, half, xr * (0.35 + 0.65 * ease)), fade: ease };
       }
     }
 

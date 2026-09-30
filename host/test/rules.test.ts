@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, BarricadeState, Btn, Health, MoveMode, Prompt } from '@manhunt/shared';
-import { Driver, makeWorld, openSpot, parkSexton, place } from './worldHelpers';
+import { Driver, clearLane, makeWorld, openSpot, parkSexton, place } from './worldHelpers';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -56,6 +56,21 @@ describe('health states and the machete swipe', () => {
     far.d.tap(far.h.id, Btn.Primary, { aim: 0 });
     far.d.run(10, (p) => (p.id === far.h.id ? { aim: 0 } : undefined));
     expect(far.s.health).toBe(Health.Healthy);
+  });
+
+  it('holding left click charges a heavy swipe: longer reach, and it downs a healthy survivor', () => {
+    const w = makeWorld();
+    const { h, s, d } = setupDuel(w, 150);
+    const c = clearLane(w, 300);
+    place(h, c.x, c.y);
+    place(s, c.x + 150, c.y);
+    const C = BALANCE.hunter.attack.charge;
+    d.run(secs(C.max) + 1, (p) => (p.id === h.id ? { buttons: Btn.Primary, aim: 0 } : undefined));
+    expect(h.chargeT).toBeGreaterThanOrEqual(C.heavyAt);
+    expect(s.health).toBe(Health.Healthy);
+    d.run(10, (p) => (p.id === h.id ? { aim: 0 } : undefined));
+    expect(h.chargeT).toBe(-1);
+    expect(s.health).toBe(Health.Downed);
   });
 
   it('the swing is announced so everyone nearby sees the swipe animation', () => {
@@ -251,6 +266,21 @@ describe('barricades and doors', () => {
     d.run(30, (p) => (p === s ? { moveX: -nx, moveY: -ny } : undefined));
     expect(Math.abs((s.move.x - mx) * nx + (s.move.y - my) * ny)).toBeGreaterThan(10);
     void y0;
+    // Zach smashes the closed door with two swipes; it stays open for good.
+    place(s, 5800, 5800);
+    const aim = Math.atan2(ny, nx);
+    const swipe = (): void => {
+      d.tap(h.id, Btn.Primary, { aim });
+      d.run(secs(BALANCE.hunter.attack.hitCooldown + BALANCE.hunter.attack.windup) + 2, (p) => (p === h ? { aim } : undefined));
+    };
+    swipe();
+    expect(w.doorHits[id]).toBe(1);
+    expect(w.doors[id]).toBe(false);
+    swipe();
+    expect(w.doorBroken[id]).toBe(true);
+    expect(w.doors[id]).toBe(true);
+    expect(w.geo.hasLineOfSight(mx - nx * 30, my - ny * 30, mx + nx * 30, my + ny * 30)).toBe(true);
+    expect(h.prompt).not.toBe(Prompt.CloseDoor);
   });
 });
 

@@ -81,14 +81,18 @@ export class GameView {
   private lastReveal = 0;
   private doorVersion = -1;
   private swingUntil = 0;
+  /** Zach: when the current swing charge started (0 = not charging), and its strength 0..1. */
+  private chargeStart = 0;
+  private charge = 0;
   private readonly resize = (w: number, h: number): void => this.vision.resize(w, h);
+  private readonly teleport = (x: number, y: number): void => this.o.client.send({ t: 'teleport', x: Math.round(x), y: Math.round(y) });
   readonly roleIsHunter: boolean;
 
   constructor(private readonly o: GameViewOptions) {
     const m = o.client.match!;
     this.roleIsHunter = m.role === 'hunter';
     this.mapRenderer = new MapRenderer(m.map, o.assets);
-    this.overlays = new Overlays(o.assets);
+    this.overlays = new Overlays(o.assets, m.map.width, m.map.height);
     this.fog = new FogLayer(o.assets, m.map.width, m.map.height);
     this.entities = new EntityLayer(o.assets, m.map, m.players, this.roleIsHunter);
     this.world.addChild(this.mapRenderer.root, this.overlays.decals, this.fog.root);
@@ -109,6 +113,7 @@ export class GameView {
     this.hud = new Hud(o.uiRoot, o.client, o.assets, o.inventory);
     this.minimap = new MiniMap(this.hud.root, m.map, this.roleIsHunter);
     this.hud.topRight.insertBefore(this.minimap.root, this.hud.topRight.firstChild);
+
     this.skill = new SkillCheck(this.hud.root, (id, result) => o.client.send({ t: 'skill', id, result }));
     this.barricadeState = m.map.barricades.map(() => 0);
     this.doorState = m.map.doors.map((d) => !m.map.dynamicSegments[d.dyn].active);
@@ -178,10 +183,26 @@ export class GameView {
     if (inp.isDown('KeyQ') || L('KeyQ')) b |= Btn.Ability;
     if (!menus && (inp.buttons[0] || L('Mouse0'))) b |= Btn.Primary;
     if (this.roleIsHunter) {
-      if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Secondary;
-      if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Lunge;
+      // Right click lunges; F fires the Soundcloud Burst.
+      if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
+      if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
+      // Hold left click to charge the swipe, release to strike.
       const s = this.self;
-      if (b & Btn.Primary && s && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None) this.swingUntil = performance.now() + (BALANCE.hunter.attack.swingTime + BALANCE.hunter.attack.windup) * 1000;
+      const now = performance.now();
+      const C = BALANCE.hunter.attack.charge;
+      const ready = !!s && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
+      if (b & Btn.Primary && inp.buttons[0]) {
+        if (!this.chargeStart && ready) this.chargeStart = now;
+      } else if (this.chargeStart) {
+        this.charge = Math.min(1, (now - this.chargeStart) / 1000 / C.max);
+        this.chargeStart = 0;
+        if (ready) this.swingUntil = now + (BALANCE.hunter.attack.swingTime + BALANCE.hunter.attack.windup) * 1000;
+      } else if (b & Btn.Primary && ready) {
+        // A click shorter than one input step.
+        this.charge = 0;
+        this.swingUntil = now + (BALANCE.hunter.attack.swingTime + BALANCE.hunter.attack.windup) * 1000;
+      }
+      if (!s || s.stunT > 0 || s.carrying) this.chargeStart = 0;
     } else {
       if (inp.isDown('KeyC') || inp.isDown('ControlLeft')) b |= Btn.Crouch;
       const spaceHeld = inp.isDown('Space') && !this.skill.isActive;
@@ -232,7 +253,7 @@ export class GameView {
       case 'hit':
         this.overlays.addBlood(e.x, e.y);
         this.overlays.addBlood(e.x, e.y);
-        this.particles.burst(e.x, e.y, 16, { speed: 200, life: 0.5, tint: 0xff2a3a, size: 1.4 });
+        this.particles.burst(e.x, e.y, 16, { speed: 200, life: 0.5, tint: 0x7a0c14, size: 1.4 });
         if (e.victim === me) {
           this.damage = 1;
           this.shake = Math.max(this.shake, 14);
@@ -275,8 +296,8 @@ export class GameView {
       case 'noise':
         if (e.s === 'gen_explode' || e.s === 'gen_kick') this.particles.burst(e.x, e.y - 10, 40, { speed: 260, life: 0.7 });
         else if (e.s === 'glass') this.particles.burst(e.x, e.y, 22, { speed: 170, life: 0.45, tint: 0x9dffb0, size: 0.8 });
-        else if (e.s === 'smash' || e.s === 'barricade') this.particles.burst(e.x, e.y, 16, { speed: 140, life: 0.5, tint: 0xd09050, size: 1.3 });
-        if (e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash') this.shake = Math.max(this.shake, 7 * near(e.x, e.y, 450));
+        else if (e.s === 'smash' || e.s === 'barricade' || e.s === 'door_smash') this.particles.burst(e.x, e.y, e.s === 'door_smash' ? 30 : 16, { speed: 150, life: 0.55, tint: 0x6e5840, size: 1.3 });
+        if (e.s === 'gen_explode' || e.s === 'barricade' || e.s === 'smash' || e.s === 'door_smash') this.shake = Math.max(this.shake, 7 * near(e.x, e.y, 450));
         break;
       case 'shot': {
         this.entities.shot(e.x, e.y, e.a, e.len);
@@ -285,23 +306,22 @@ export class GameView {
         break;
       }
       case 'burst':
-        this.overlays.addBurst(e.x, e.y, now);
+        // Everyone hears the wave go out.
+        this.overlays.addBurst(e.x, e.y, e.a, now);
+        a.playClip('burst');
         break;
       case 'scare':
         this.hud.jumpScare(BALANCE.hunter.burst.scareTime * 1000);
-        a.playClip('scare');
         break;
       case 'jarvis':
         if (e.by === me) {
           this.hud.big('JARVIS ONLINE', 'jarvis');
           this.minimap.revealAll();
         } else this.hud.feed(`${name(e.by)} brought JARVIS online`);
-        a.announce('Jarvis online');
         break;
       case 'hemp':
         if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
         else this.hud.feed('Zach used a Hemp Battery');
-        a.announce('Hemp battery activated');
         break;
       case 'sexton':
         this.entities.say(e.say, this.time);
@@ -333,7 +353,7 @@ export class GameView {
     ws.doors.forEach((open, i) => {
       if (this.doorState[i] === open) return;
       this.doorState[i] = open;
-      mr.setDoor(i, open);
+      mr.setDoor(i, open, ws.doorsBroken[i] === true);
     });
     if (ws.gateOpen !== this.gateOpen) {
       this.gateOpen = ws.gateOpen;
@@ -343,7 +363,7 @@ export class GameView {
       const r = (g.flags & 1) !== 0;
       if (r !== this.repaired[i]) {
         this.repaired[i] = r;
-        mr.setGenerator(i, r);
+        this.entities.setGenerator(i, r);
       }
     });
   }
@@ -362,29 +382,23 @@ export class GameView {
     if (s.hempT > 0) state |= EF.Hemp;
     if (s.gassed) state |= EF.Gassed;
     if (performance.now() < this.swingUntil) state |= EF.Attacking;
+    const charging = this.chargeStart ? Math.min(1, (performance.now() - this.chargeStart) / 1000 / BALANCE.hunter.attack.charge.max) : 0;
     const stamina = p?.stamina ?? s.stamina;
     const locked = (p?.staminaLock ?? s.staminaLock) > 0;
     if (locked) state |= EF.StaminaLock;
     if (p?.sprinting) state |= EF.Sprinting;
     state |= (Gait.Walk & 3) << EF.GaitShift;
     const cap = maxStamina(s.role === 1 ? 'hunter' : 'survivor', p?.boostT ?? s.boostT);
-    const held = s.role === 1 ? 0 : this.o.inventory.held(s.inv);
-    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux: held, stamina: cap > 0 ? (stamina / cap) * 255 : 0 };
+    // Zach's aux is his swing charge (0-255); a survivor's is the item in hand.
+    const aux = s.role === 1 ? Math.round((charging || (performance.now() < this.swingUntil ? this.charge : 0)) * 255) : this.o.inventory.held(s.inv);
+    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, stamina: cap > 0 ? (stamina / cap) * 255 : 0 };
   }
 
-  /** Atmosphere and the two positional music sources (generators, Sexton's reel). */
-  private updateSounds(ents: InterpEntity[], ws: WorldState): void {
+  /** The only positional sound: Sexton's reel (the burst snippet plays on its event). */
+  private updateSounds(ents: InterpEntity[]): void {
     const a = this.o.audio;
-    const m = this.o.client.match!;
-    const geo = m.mw.geo;
     const lx = this.renderPos.x;
     const ly = this.renderPos.y;
-    ws.gens.forEach((g, i) => {
-      const d = m.map.generators[i];
-      const dist = Math.hypot(d.x - lx, d.y - ly);
-      const on = (g.flags & 1) !== 0 && dist < 1100;
-      a.loop(`gen${i}`, on ? 'gen.hum' : null, { x: d.x, y: d.y, volume: 0.45, occluded: !geo.hasLineOfSight(lx, ly, d.x, d.y), radius: 1000 });
-    });
     const sx = ents.find((e) => e.kind === EntityKind.Sexton && (e.state & SextonFlag.Dead) === 0);
     const X = BALANCE.sexton.audio;
     if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near });
@@ -471,8 +485,8 @@ export class GameView {
         xray: 0,
       };
     }
-    // See-through light fades in over 1.5 s; the Hemp Battery zooms out over 1 s.
-    this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt * 3);
+    // See-through light fades in over 0.75 s and out in 1/6 s; the Hemp Battery zooms out over 1 s.
+    this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt / BALANCE.xray.fadeOut);
     viewer.xray = this.xrayK;
     this.zoomK = hemp && viewer.hunter ? Math.min(1, this.zoomK + dt) : Math.max(0, this.zoomK - dt);
 
@@ -539,15 +553,15 @@ export class GameView {
     this.skill.draw(now);
     if (this.skill.isActive && s.action !== Action.Repair) this.skill.cancel();
     this.hud.update(s, ws);
+    // Testing mode: click the full map to teleport.
+    this.minimap.setTeleport(s.testMode && !spect ? this.teleport : null);
     this.minimap.update({ x: this.renderPos.x, y: this.renderPos.y, facing: spect ? viewer.facing : this.lastAim, world: ws, now });
 
     this.particles.update(dt);
 
-    // Audio: listener, ambience, generator hum, Sexton's reel.
+    // Audio: listener and Sexton's reel.
     const a = this.o.audio;
     a.setListener(this.renderPos.x, this.renderPos.y);
-    this.updateSounds(ents, ws);
-    a.setAmbience(c.match!.mw.inWarehouse(this.renderPos.x, this.renderPos.y), true);
-    a.update(dt);
+    this.updateSounds(ents);
   }
 }

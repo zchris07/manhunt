@@ -50,6 +50,8 @@ export class MiniMap {
   private readonly seenGens = new Set<number>();
   private readonly seenStakes = new Set<number>();
   private open = false;
+  /** Testing mode: clicking the full map teleports you there (world coordinates). */
+  onTeleport: ((x: number, y: number) => void) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -69,12 +71,17 @@ export class MiniMap {
     this.fullWrap.appendChild(this.full);
     this.fullWrap.insertAdjacentHTML(
       'beforeend',
-      `<div class="fm-legend"><span><i style="background:#fff"></i>you</span><span><i style="background:#ffd23a"></i>generator</span><span><i style="background:#4cff6a"></i>item</span>${
+      `<div class="fm-legend"><span><i style="background:#ffe88c"></i>you</span><span><i style="background:#ffd23a"></i>generator</span><span><i style="background:#4cff6a"></i>item</span>${
         hunter ? '<span><i style="background:#ff3a5a"></i>stake</span>' : '<span><i style="background:#ff3a5a"></i>Zach (JARVIS)</span>'
       }</div>`,
     );
     this.fullWrap.style.display = 'none';
     parent.appendChild(this.fullWrap);
+    this.full.addEventListener('pointerdown', (e) => {
+      if (!this.onTeleport) return;
+      const r = this.full.getBoundingClientRect();
+      this.onTeleport(((e.clientX - r.left) / r.width) * map.width, ((e.clientY - r.top) / r.height) * map.height);
+    });
 
     const size = Math.ceil(map.width * ART_SCALE);
     this.art = paintMap(map, ART_SCALE);
@@ -95,6 +102,13 @@ export class MiniMap {
   toggle(): void {
     this.open = !this.open;
     this.fullWrap.style.display = this.open ? 'flex' : 'none';
+  }
+
+  /** Shows the "click to teleport" hint (testing mode). */
+  setTeleport(fn: ((x: number, y: number) => void) | null): void {
+    if (this.onTeleport === fn) return;
+    this.onTeleport = fn;
+    this.fullWrap.classList.toggle('teleport', !!fn);
   }
 
   /** Reveals the whole map (Zach from the start, survivors with JARVIS). */
@@ -276,22 +290,44 @@ export class MiniMap {
       if (!whole && Math.hypot(r.x - s.x, r.y - s.y) > MINI_RADIUS) continue;
       dot(r.x, r.y, 4.5 * k, '#ff2a3a', (4 + pulse * 5) * k);
     }
-    // You.
+    // You: on the full map a big pulsing marker with a label, so you're easy to find.
     const px = tx(s.x);
     const py = ty(s.y);
+    if (whole) {
+      const R = (14 + pulse * 10) * k;
+      const g = c.createRadialGradient(px, py, 0, px, py, R * 1.6);
+      g.addColorStop(0, 'rgba(255,230,120,0.55)');
+      g.addColorStop(1, 'rgba(255,230,120,0)');
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(px, py, R * 1.6, 0, Math.PI * 2);
+      c.fill();
+      c.lineWidth = 2.5 * k;
+      c.strokeStyle = `rgba(255,232,140,${0.9 - pulse * 0.5})`;
+      c.beginPath();
+      c.arc(px, py, R, 0, Math.PI * 2);
+      c.stroke();
+      c.font = `700 ${Math.round(12 * k)}px "Special Elite", monospace`;
+      c.textAlign = 'center';
+      c.fillStyle = '#000';
+      c.fillText('YOU', px + 1, py - R - 5 * k + 1);
+      c.fillStyle = '#ffe88c';
+      c.fillText('YOU', px, py - R - 5 * k);
+    }
+    const kk = whole ? k * 2.2 : k;
     c.save();
     c.translate(px, py);
     c.rotate(s.facing);
     c.beginPath();
-    c.moveTo(8 * k, 0);
-    c.lineTo(-5 * k, 5 * k);
-    c.lineTo(-2 * k, 0);
-    c.lineTo(-5 * k, -5 * k);
+    c.moveTo(8 * kk, 0);
+    c.lineTo(-5 * kk, 5 * kk);
+    c.lineTo(-2 * kk, 0);
+    c.lineTo(-5 * kk, -5 * kk);
     c.closePath();
-    c.fillStyle = '#ffffff';
+    c.fillStyle = whole ? '#ffe88c' : '#ffffff';
     c.fill();
-    c.lineWidth = 1.5;
-    c.strokeStyle = '#140c22';
+    c.lineWidth = whole ? 2.5 : 1.5;
+    c.strokeStyle = '#000';
     c.stroke();
     c.restore();
     c.restore();
@@ -321,24 +357,24 @@ export class MiniMap {
   }
 }
 
-/** Paints a flat, colourful overview of the map (the parts you've explored are shown). */
+/** Paints a dim, desaturated recon map of the map (the parts you've explored are shown). */
 function paintMap(m: MapData, s: number): HTMLCanvasElement {
   const cv = el('canvas');
   cv.width = Math.ceil(m.width * s);
   cv.height = Math.ceil(m.height * s);
   const c = cv.getContext('2d')!;
   c.scale(s, s);
-  c.fillStyle = '#2f6a2c';
+  c.fillStyle = '#1b1e19';
   c.fillRect(0, 0, m.width, m.height);
   c.lineCap = 'round';
   c.lineJoin = 'round';
   for (const cl of m.clearings) {
-    c.fillStyle = '#4c8a3a';
+    c.fillStyle = '#2a2c24';
     c.beginPath();
     c.arc(cl.x, cl.y, cl.r, 0, Math.PI * 2);
     c.fill();
   }
-  c.strokeStyle = '#c99a5c';
+  c.strokeStyle = '#4a4336';
   for (const p of m.paths) {
     c.lineWidth = p.width;
     c.beginPath();
@@ -348,7 +384,7 @@ function paintMap(m: MapData, s: number): HTMLCanvasElement {
     }
     c.stroke();
   }
-  c.fillStyle = '#2a7ed0';
+  c.fillStyle = '#15222a';
   c.beginPath();
   for (let i = 0; i < m.lake.length; i += 2) {
     if (i === 0) c.moveTo(m.lake[i], m.lake[i + 1]);
@@ -356,36 +392,36 @@ function paintMap(m: MapData, s: number): HTMLCanvasElement {
   }
   c.closePath();
   c.fill();
-  c.fillStyle = '#1f4f22';
+  c.fillStyle = '#0f130e';
   for (const t of m.trees) {
     c.beginPath();
     c.arc(t.x, t.y, t.r * 1.6, 0, Math.PI * 2);
     c.fill();
   }
-  c.fillStyle = '#8a92a6';
+  c.fillStyle = '#4a4a46';
   for (const r of m.rocks) {
     c.beginPath();
     c.arc(r.x, r.y, r.r, 0, Math.PI * 2);
     c.fill();
   }
   const wh = m.warehouse;
-  c.fillStyle = '#9a9eaa';
+  c.fillStyle = '#3c3d3b';
   c.fillRect(wh.x, wh.y, wh.w, wh.h);
-  c.fillStyle = '#9a9eaa';
+  c.fillStyle = '#3c3d3b';
   const ez = m.exitZone;
   c.fillRect(ez.x - 10, ez.y - 10, ez.w + 20, ez.h + 80);
-  c.fillStyle = '#b87a42';
+  c.fillStyle = '#3e3226';
   for (const cab of m.cabins) c.fillRect(cab.x, cab.y, cab.w, cab.h);
   for (const w of m.walls) {
     if (w.kind === 'boundary' || w.kind === 'shore' || w.kind === 'log') continue;
-    c.strokeStyle = w.kind === 'warehouse' ? '#241a36' : w.kind === 'cabin' ? '#4a2410' : w.kind === 'fence' || w.kind === 'yard' ? '#e8d8b0' : '#2a2438';
+    c.strokeStyle = w.kind === 'window' ? '#6f8a8c' : w.kind === 'fence' || w.kind === 'yard' ? '#6a6456' : '#a8a498';
     c.lineWidth = w.kind === 'warehouse' ? 16 : w.kind === 'fence' || w.kind === 'yard' ? 5 : 12;
     c.beginPath();
     c.moveTo(w.ax, w.ay);
     c.lineTo(w.bx, w.by);
     c.stroke();
   }
-  c.strokeStyle = '#e8a050';
+  c.strokeStyle = '#8a6a44';
   c.lineWidth = 10;
   for (const d of m.doors) {
     c.beginPath();

@@ -16,7 +16,7 @@ export interface RenderPlayer {
   stamina: number;
 }
 
-const INK = 0x181024;
+const INK = 0x0a0a0a;
 const ITEM_TEX: Record<number, string> = {
   [ItemKind.Bottle]: 'item.bottle',
   [ItemKind.Goggles]: 'item.goggles',
@@ -72,15 +72,12 @@ class StaminaBar {
   draw(frac: number, locked: boolean, time: number, w = 38): void {
     const g = this.g;
     g.clear();
-    const h = 6;
-    g.roundRect(-w / 2 - 1.5, -h / 2 - 1.5, w + 3, h + 3, 3).fill({ color: INK, alpha: 0.9 });
-    g.roundRect(-w / 2, -h / 2, w, h, 2).fill({ color: 0x3a3450 });
+    const h = 4;
+    g.rect(-w / 2 - 1, -h / 2 - 1, w + 2, h + 2).fill({ color: INK, alpha: 0.75 });
+    g.rect(-w / 2, -h / 2, w, h).fill({ color: 0x2a2a26 });
     const f = Math.max(0, Math.min(1, frac));
-    const color = locked ? (Math.sin(time * 18) > 0 ? 0xff3a3a : 0x8a1a1a) : f > 0.5 ? 0x4cff6a : f > 0.25 ? 0xffd23a : 0xff5a3a;
-    if (f > 0.01) {
-      g.roundRect(-w / 2, -h / 2, w * f, h, 2).fill({ color });
-      g.rect(-w / 2 + 1, -h / 2 + 1, Math.max(0, w * f - 2), 1.5).fill({ color: 0xffffff, alpha: 0.45 });
-    }
+    const color = locked ? (Math.sin(time * 18) > 0 ? 0xa02020 : 0x501010) : f > 0.5 ? 0xb8b49a : f > 0.25 ? 0xa08a50 : 0x9a4030;
+    if (f > 0.01) g.rect(-w / 2, -h / 2, w * f, h).fill({ color });
   }
 }
 
@@ -103,8 +100,12 @@ class PlayerSprite {
   readonly label: Text;
   readonly walker = new Walker();
   private shake = 0;
-  private swingT = 0;
+  /** Seconds since the current swing started (-1 when not swinging). */
+  private swingAge = -1;
+  private heavy = false;
   private wasAttacking = false;
+  /** Latest swing charge (0..1) seen before the swing started. */
+  private charge = 0;
   private readonly hunter: boolean;
   private readonly look: number;
 
@@ -142,7 +143,7 @@ class PlayerSprite {
     this.carried = tex('char.survivorDowned', 0);
     this.carried.scale.set(0.7);
     this.carried.visible = false;
-    this.label = new Text({ text: info.name, style: { fontFamily: 'Rubik, Inter, system-ui, sans-serif', fontSize: 12, fontWeight: '700', fill: 0xffffff, stroke: { color: INK, width: 3 } } });
+    this.label = new Text({ text: info.name.toUpperCase(), style: { fontFamily: '"Special Elite", "Courier New", monospace', fontSize: 11, fill: 0xd8d2c0, letterSpacing: 1, stroke: { color: INK, width: 3 } } });
     this.label.anchor.set(0.5, 1);
     this.label.visible = showLabel;
     this.aura.blendMode = 'add';
@@ -163,7 +164,10 @@ class PlayerSprite {
     }
 
     this.shadow.clear();
-    if (!down) this.shadow.ellipse(3, 4, r + 3, r + 1).fill({ color: 0x0a0618, alpha: 0.3 });
+    if (!down) {
+      this.shadow.ellipse(5, 8, r + 5, r + 3).fill({ color: 0x000000, alpha: 0.18 });
+      this.shadow.ellipse(4, 6, r + 1, r).fill({ color: 0x000000, alpha: 0.28 });
+    }
 
     // Legs: two feet swinging along the direction of travel.
     const moving = this.walker.speed > 12 && !staked;
@@ -205,11 +209,17 @@ class PlayerSprite {
         this.carried.position.set(Math.cos(p.facing + Math.PI * 0.6) * 12, Math.sin(p.facing + Math.PI * 0.6) * 12);
         this.carried.rotation = p.facing + Math.PI / 2;
       }
-      // Machete swing: the blade sweeps across and the swiped area flashes.
+      // Machete: hold to charge (the blade draws back and shakes), release to swing.
       const attacking = (p.state & EF.Attacking) !== 0;
-      if (attacking && !this.wasAttacking) this.swingT = BALANCE.hunter.attack.swingTime;
+      const charging = attacking ? 0 : p.aux / 255;
+      if (!attacking) this.charge = charging;
+      if (attacking && !this.wasAttacking) {
+        this.swingAge = 0;
+        const C = BALANCE.hunter.attack.charge;
+        this.heavy = Math.max(this.charge, p.aux / 255) >= C.heavyAt / C.max - 0.02;
+      }
       this.wasAttacking = attacking;
-      this.drawSwing(dt);
+      this.drawSwing(dt, charging, time, p.facing);
       this.body.scale.x *= (p.state & EF.Lunging) !== 0 ? 1.12 : 1;
     }
 
@@ -269,32 +279,94 @@ class PlayerSprite {
       const rr = i % 2 === 0 ? s : s * 0.45;
       pts.push(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
     }
-    this.fx.poly(pts).fill({ color: 0xffe14a }).stroke({ width: 1, color: INK });
+    this.fx.poly(pts).fill({ color: 0xc8b890 }).stroke({ width: 1, color: INK });
   }
 
-  private drawSwing(dt: number): void {
+  /**
+   * The machete: anticipation (blade drawn back during the wind-up), a fast eased strike
+   * across the arc with a fading smear behind the blade, then a follow-through and recovery.
+   * While charging the blade draws back further and trembles; a heavy swipe is wider,
+   * longer and leaves a darker, heavier smear.
+   */
+  private drawSwing(dt: number, charge: number, time: number, facing: number): void {
     const g = this.swipe;
     g.clear();
-    const T = BALANCE.hunter.attack.swingTime;
-    if (this.swingT <= 0) {
-      if (this.weapon) this.weapon.rotation = 0.35;
+    const A = BALANCE.hunter.attack;
+    const C = A.charge;
+    const rest = 0.35;
+    const w = this.weapon;
+    if (this.swingAge < 0) {
+      // Idle or charging.
+      const back = -((A.arcDeg / 2) * DEG + 0.55) * charge;
+      const tremble = charge > 0.05 ? Math.sin(time * 55) * 0.05 * charge : 0;
+      if (w) w.rotation = rest + (back - rest) * Math.min(1, charge * 1.4) + tremble;
+      this.torso.rotation = -0.3 * charge;
+      this.body.position.set(Math.sin(time * 60) * 1.2 * charge, 0);
+      if (charge > 0.05) {
+        // Charge meter: a dark arc filling around Zach's feet, flaring when full.
+        const full = charge >= C.heavyAt / C.max;
+        const R = 30;
+        g.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge).stroke({ width: 3, color: full ? 0xb01818 : 0x6a2020, alpha: full ? 0.6 + 0.3 * Math.sin(time * 20) : 0.6 });
+      }
+      void facing;
       return;
     }
-    this.swingT = Math.max(0, this.swingT - dt);
-    const k = 1 - this.swingT / T; // 0 -> 1 through the swing
-    const half = (BALANCE.hunter.attack.arcDeg / 2) * DEG;
-    const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    const a = -half - 0.2 + (half * 2 + 0.4) * ease;
-    if (this.weapon) this.weapon.rotation = a;
-    // The swiped area: a fading crescent over the part of the arc already covered.
-    const R = BALANCE.hunter.attack.range;
-    const alpha = Math.sin(Math.PI * k) * 0.55;
-    g.moveTo(Math.cos(-half) * 26, Math.sin(-half) * 26);
-    g.arc(0, 0, R, -half, a);
-    g.arc(0, 0, 26, a, -half, true);
-    g.closePath();
-    g.fill({ color: 0xffffff, alpha: alpha * 0.55 });
-    g.arc(0, 0, R, -half, a).stroke({ width: 4, color: 0xff3a5a, alpha });
+    this.swingAge += dt;
+    const total = A.windup + A.swingTime;
+    const t = this.swingAge;
+    const heavy = this.heavy;
+    const half = (A.arcDeg / 2) * DEG * (heavy ? C.arcMul : 1);
+    const R = A.range * (heavy ? C.rangeMul : 1);
+    const start = -half - 0.45;
+    const end = half + 0.35;
+    const strike = 0.13;
+    let a: number;
+    let smear = 0;
+    if (t < A.windup) {
+      // Anticipation: pull back (from wherever the charge left the blade).
+      const k = t / A.windup;
+      const e = 1 - (1 - k) * (1 - k);
+      a = rest + (start - rest) * e;
+      this.torso.rotation = -0.3 * e;
+    } else if (t < A.windup + strike) {
+      // The strike: very fast, easing out.
+      const k = (t - A.windup) / strike;
+      const e = 1 - Math.pow(1 - k, 4);
+      a = start + (end - start) * e;
+      smear = 1;
+      this.torso.rotation = -0.3 + 0.55 * e;
+    } else if (t < total) {
+      // Follow-through and recovery back to rest.
+      const k = (t - A.windup - strike) / (total - A.windup - strike);
+      const e = k * k * (3 - 2 * k);
+      a = end + (rest - end) * e;
+      smear = 1 - k;
+      this.torso.rotation = 0.25 * (1 - e);
+    } else {
+      this.swingAge = -1;
+      this.torso.rotation = 0;
+      if (w) w.rotation = rest;
+      return;
+    }
+    if (w) w.rotation = a;
+    this.body.position.set(0, 0);
+    if (smear <= 0) return;
+    // Smear: slices of the swept arc, brightest right behind the blade.
+    const from = start;
+    const to = Math.min(a, end);
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      const a0 = from + ((to - from) * i) / n;
+      const a1 = from + ((to - from) * (i + 1)) / n;
+      const f = (i + 1) / n;
+      const alpha = smear * f * f * (heavy ? 0.5 : 0.36);
+      g.moveTo(Math.cos(a0) * 24, Math.sin(a0) * 24);
+      g.arc(0, 0, R, a0, a1);
+      g.arc(0, 0, R * 0.55, a1, a0, true);
+      g.closePath();
+      g.fill({ color: heavy ? 0x5a0808 : 0xb8b0a0, alpha });
+    }
+    g.arc(0, 0, R, Math.max(from, to - 0.5), to).stroke({ width: heavy ? 4 : 2.5, color: heavy ? 0x9a1010 : 0xe0dccc, alpha: smear * 0.7 });
   }
 }
 
@@ -329,6 +401,10 @@ export class EntityLayer {
   private readonly markers = new Graphics();
   private readonly gens = new Graphics();
   private readonly effects = new Graphics();
+  /** Objectives (generators, the gate lever): hidden in the fog like everything here. */
+  private readonly objectives = new Container();
+  private readonly genSprites: Sprite[] = [];
+  private readonly genGlows: Sprite[] = [];
   private sexton: { root: Container; body: Sprite; dead: Sprite; walker: Walker; legs: Container; legA: Sprite; legB: Sprite } | null = null;
   private bubble: Bubble | null = null;
   private tablets: TabletFlight[] = [];
@@ -347,7 +423,7 @@ export class EntityLayer {
       const glow = new Sprite(assets.getTexture('fx.glow'));
       glow.anchor.set(0.5);
       glow.scale.set(0.55);
-      glow.tint = 0xffe14a;
+      glow.tint = 0xb09a60;
       glow.blendMode = 'add';
       const s = new Sprite(assets.getTexture(LOOT_TEX[l.item]));
       s.anchor.set(0.5);
@@ -357,7 +433,39 @@ export class EntityLayer {
       this.loot.push(c);
       this.ground.addChild(c);
     }
-    this.root.addChild(this.ground, this.gens, this.markers, this.effects);
+    for (const gen of map.generators) {
+      const glow = new Sprite(assets.getTexture('fx.glow'));
+      glow.anchor.set(0.5);
+      glow.position.set(gen.x, gen.y);
+      glow.scale.set(2.2);
+      glow.tint = 0xd8b060;
+      glow.blendMode = 'add';
+      glow.alpha = 0.5;
+      glow.visible = false;
+      const s = new Sprite(assets.getTexture('obj.generator', 0));
+      s.anchor.set(0.5);
+      s.position.set(gen.x, gen.y);
+      s.rotation = gen.angle;
+      this.objectives.addChild(glow, s);
+      this.genSprites.push(s);
+      this.genGlows.push(glow);
+    }
+    const gt = map.gate;
+    const lever = new Graphics();
+    lever.rect(gt.leverX - 9 + 4, gt.leverY - 13 + 6, 18, 26).fill({ color: 0x000000, alpha: 0.4 });
+    lever.rect(gt.leverX - 9, gt.leverY - 13, 18, 26).fill({ color: 0x4a4636 });
+    lever.rect(gt.leverX - 9, gt.leverY - 13, 18, 4).fill({ color: 0x6a654e });
+    lever.rect(gt.leverX - 3, gt.leverY - 18, 6, 12).fill({ color: 0x6a1a14 });
+    this.objectives.addChild(lever);
+    this.root.addChild(this.objectives, this.ground, this.gens, this.markers, this.effects);
+  }
+
+  /** A generator started (or not): swap its art and light its lamp. */
+  setGenerator(id: number, repaired: boolean): void {
+    const s = this.genSprites[id];
+    if (!s) return;
+    s.texture = this.assets.getTexture('obj.generator', repaired ? 1 : 0);
+    this.genGlows[id].visible = repaired;
   }
 
   /** Testing mode: roles changed, rebuild the player sprites. */
@@ -372,14 +480,14 @@ export class EntityLayer {
   say(text: string, time: number): void {
     this.bubble?.root.destroy({ children: true });
     const root = new Container();
-    const t = new Text({ text, style: { fontFamily: 'Rubik, Inter, system-ui, sans-serif', fontSize: 14, fontWeight: '700', fill: 0x181024, wordWrap: true, wordWrapWidth: 200, align: 'center' } });
+    const t = new Text({ text, style: { fontFamily: '"Special Elite", "Courier New", monospace', fontSize: 14, fill: 0x141210, wordWrap: true, wordWrapWidth: 200, align: 'center' } });
     t.anchor.set(0.5, 1);
     const w = t.width + 20;
     const h = t.height + 12;
     const box = new Graphics();
-    box.roundRect(-w / 2, -h - 10, w, h, 8).fill({ color: 0xffffff }).stroke({ width: 2, color: INK });
-    box.poly([-7, -11, 7, -11, 0, -1]).fill({ color: 0xffffff }).stroke({ width: 2, color: INK });
-    box.rect(-6, -12, 12, 3).fill({ color: 0xffffff });
+    box.rect(-w / 2, -h - 10, w, h).fill({ color: 0xd8d2c0 }).stroke({ width: 2, color: INK });
+    box.poly([-7, -11, 7, -11, 0, -1]).fill({ color: 0xd8d2c0 }).stroke({ width: 2, color: INK });
+    box.rect(-6, -12, 12, 3).fill({ color: 0xd8d2c0 });
     t.position.set(0, -16);
     root.addChild(box, t);
     root.scale.set(0.2);
@@ -512,14 +620,14 @@ export class EntityLayer {
       if (g.flags & GenFlag.Repaired || !(g.flags & GenFlag.Known) || g.progress <= 0.001) return;
       const d = this.map.generators[i];
       this.gens.circle(d.x, d.y - 46, 12).fill({ color: INK, alpha: 0.7 });
-      this.gens.arc(d.x, d.y - 46, 10, -Math.PI / 2, -Math.PI / 2 + g.progress * Math.PI * 2).stroke({ width: 4, color: g.flags & GenFlag.Regressing ? 0xff3a3a : 0x4cff6a });
+      this.gens.arc(d.x, d.y - 46, 10, -Math.PI / 2, -Math.PI / 2 + g.progress * Math.PI * 2).stroke({ width: 4, color: g.flags & GenFlag.Regressing ? 0xa02a20 : 0xc8c0a0 });
     });
     this.markers.clear();
     if (!this.viewerIsHunter) {
       world.hidingOccupied.forEach((occ, i) => {
         if (!occ) return;
         const h = this.map.hidingSpots[i];
-        this.markers.circle(h.x, h.y - 26, 5).fill({ color: 0x4cff6a }).stroke({ width: 1.5, color: INK });
+        this.markers.circle(h.x, h.y - 26, 5).fill({ color: 0x8aa070 }).stroke({ width: 1.5, color: INK });
       });
     }
   }

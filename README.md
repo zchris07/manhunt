@@ -7,9 +7,13 @@ acting. Survivors start every generator in the woods and an abandoned studio war
 the exit gate and escape before he finds them. They can stun him with bottles and shotguns,
 slow him with gas traps and outsmart him, but they can never kill him.
 
-- **Feel:** Darkwood-style limited vision in a bright, comic-book style. Outside your flashlight
-  cone the world is pitch black, and people outside it are invisible even if they're right next
-  to you. A minimap fills in only what you've actually seen (**M** opens the full map).
+- **Feel:** Darkwood. A dark, desaturated, realistic top-down world where every sprite casts a
+  soft shadow, so the flat art reads like a 3D scene seen from above. Your flashlight beam runs
+  on until it hits something. Outside your light the world is a faint grey fog: you can make
+  out the layout, but people, items and objectives in it are invisible, even right next to you.
+  Buildings have windows you can see (and shine your light) through. A minimap fills in only
+  what you've actually seen (**M** opens the full map). The UI is a grimy, clinical,
+  Outlast Trials-inspired one.
 - **Structure:** Dead by Daylight-style asymmetric play. Loops, doors, barricades, hooks
   (scarecrow stakes) and skill checks. Survivors carry items; Zach has a lunge, the Soundcloud
   Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor.
@@ -96,8 +100,8 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Shift | Sprint (8 s meter, refills in 10 s; after it runs dry you wait 1.5 s) |
 | C or Ctrl | Crouch (quiet, slow) |
 | E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton |
-| Left mouse | Use the selected item |
-| Mouse wheel / 1–5 | Select an inventory slot |
+| Left mouse | Use the selected item (hold it for night vision goggles) |
+| Mouse wheel / 1–5 / click a slot | Select an inventory slot |
 | Tab | Rearrange your inventory slots (drag and drop) |
 | Q | JARVIS, once you have Sexton's tablet: reveals the whole map for you and shows Zach for 10 s |
 | Space | Slam a barricade down · skill checks · hold breath while hidden |
@@ -108,7 +112,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Item | |
 |---|---|
 | Bottle (20 on the map) | Throw it at the cursor. A hit stuns Zach. |
-| Night vision goggles (3) | Toggle on and off. A 15 s meter that never refills; your light passes through walls and the cone is 20% wider. |
+| Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; within 650 u your light passes through walls and the cone is 20% wider. |
 | Shotgun (2) | 3 shells, 2 s reload. Stuns Zach for 0.8 s and blasts him back. |
 | Energy drink (8) | For 20 s your sprint refills 1.5× faster and the meter holds 2 s more. |
 | Galaxy gas trap (8) | Plant it. It's hard for Zach to spot. When he comes near it bursts into gas that slows him a lot. |
@@ -118,11 +122,11 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 |---|---|
 | WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
 | Shift | Sprint (6 s meter, refills in 6 s) |
-| Left mouse | Machete swipe (two swipes break a barricade) |
-| F | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. |
-| Right mouse | Soundcloud Burst (12 s): a ring of sound through every wall that jump-scares every survivor it passes |
+| Left mouse | Machete swipe. Hold to charge, release to strike: a full charge is a heavy swipe that reaches 30% farther, sweeps wider and counts as two hits. Two swipes smash a closed door (it stays open) or a dropped barricade. |
+| Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. |
+| F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall. Every survivor it passes is jump-scared. Everyone hears a snippet of GMajor when it goes out. |
 | Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
-| E | Pick up, stake, search a hiding spot, damage a generator, open and close doors |
+| E | Pick up, stake, search a hiding spot (instant), damage a generator, open and close doors |
 | M | Full map. Zach knows the whole map and every stake. |
 
 Zach always sees a red scent trail left by anyone sprinting or bleeding.
@@ -155,8 +159,8 @@ suite on every push.
 ## Adding real art and audio
 
 Every texture and sound has a slot in `client/public/assets/manifest.json`. Out of the box each
-slot points at a procedural generator (canvas drawing or WebAudio synthesis). To use a real file,
-replace the slot:
+texture slot points at a procedural generator (canvas drawing). Sounds are always files: the
+game has no synthesized audio at all. To use a real file, replace the slot:
 
 ```jsonc
 "textures": {
@@ -164,8 +168,7 @@ replace the slot:
   "char.hunter":  { "file": "sprites/zach.png" }
 },
 "sounds": {
-  "amb.wind":     { "file": "audio/wind.ogg" },
-  "scare":        { "file": "audio/scare.mp3", "offset": 17, "duration": 4 }
+  "burst":        { "file": "audio/gmajor.mp3", "offset": 17, "duration": 2.6 }
 }
 ```
 
@@ -174,13 +177,14 @@ replace the slot:
   manifest is enough, even on a deployed site.
 - If a file fails to load, the procedural version is used and a warning is logged.
 - **Sprites** are drawn top-down, **facing right (+x)**, centred, at 1 px per world unit. Sizes
-  that match the current art: survivor 64×64, Zach 80×80, trees 160×160, generator 80×64,
-  locker 48×40, loot icons 36×36. Survivor sprites are tinted per player, so draw them light and
-  greyscale.
-- Textures may set `"anchor": [x, y]` (the pivot as fractions of the image). Trees are anchored
-  at the base of the trunk.
-- **Sounds:** the game plays only ambience (wind, crickets, indoor hum and random night noises),
-  the generator hum, the jump-scare track (`scare`, which plays 4 s from 17 s in) and Sexton's
+  that match the current art: survivor 64×64, Zach 84×84, trees 256×256 (a canopy seen from
+  straight above, radius 100 px, with its shadow baked in down and to the right), generator
+  84×68, locker 48×40, loot icons 40×40. Procedural sprites are graded (desaturated and dimmed)
+  when they're generated; a file is used as it is.
+- Textures may set `"anchor": [x, y]` (the pivot as fractions of the image). Trees and rocks are
+  anchored at the centre of the crown.
+- **Sounds:** the game plays only the two supplied files: a fading 2.6 s snippet of GMajor
+  (`burst`, from 17 s in) that everyone hears when Zach fires a Soundcloud Burst, and Sexton's
   reel (`sexton.reel`, a positional loop that gets louder the closer you are). Sounds may set
   `offset` and `duration` in seconds. Loops should loop seamlessly.
 - The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`).
@@ -241,17 +245,21 @@ The host itself is trusted.
 
 **Vision.** Each frame the client computes visibility polygons with an angular sweep: rays are
 cast at ±ε around wall endpoints and tree silhouettes, and 256 angular bins keep ray tests cheap.
-It computes the flashlight cone, a proximity circle, a 360° line of sight and up to 6 light
-polygons. These are drawn into a half-resolution three-channel mask and blurred. A GLSL filter
-keeps full colour inside the mask and renders everything else black. Areas you can see but that
-aren't lit show at 70% brightness. Night vision and the Hemp Battery add an x-ray cone that
-passes through walls and fades in over 1.5 s. A second filter hides entities outside the mask
-with a hard threshold.
+It computes the flashlight cone (which runs until it hits something, clipped to the screen), a
+proximity circle, a 360° line of sight and up to 6 light polygons. These are drawn into a
+half-resolution three-channel mask and blurred. A GLSL filter grades lit areas in warm, flat
+colour and renders everything else as a colourless fog at low brightness, so the layout stays
+readable. Lamps and campfires light the scene, but only your own light (cone, proximity circle,
+x-ray) reveals characters, items and objectives: a second filter hides them everywhere else
+with a hard threshold, and the host never sends what you can't see. Night vision and the Hemp
+Battery add an x-ray cone (650 u) that passes through walls; it fades in over 0.75 s and out
+in 1/6 s.
 
 **Testing mode.** Press **Testing mode** on the landing page to play alone. You get every item
 and ability with infinite uses (Zach's Hemp Battery toggles on and off), there's no win
 condition, Sexton comes back 10 s after he's slain, and **T** switches you between Zach and a
-survivor. A lobby owner can also tick **Testing mode** in the lobby settings to test with
+survivor. Open the full map (**M**) and click anywhere to teleport there. Survivors see their
+own scent trail. A lobby owner can also tick **Testing mode** in the lobby settings to test with
 friends.
 
 Dev URL flags: `?lag=100` simulates 100 ms of latency on your connection, `?handicap=N`

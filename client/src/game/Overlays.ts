@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import { BALANCE } from '@manhunt/shared';
+import { BALANCE, burstSag } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 
 interface Mark {
@@ -13,18 +13,20 @@ interface ScentMark extends Mark {
   seed: number;
 }
 
-interface Ring {
+interface Wave {
   x: number;
   y: number;
+  a: number;
   born: number;
 }
 
 const SCENT_LIFE = BALANCE.trails.maxAgeSec * 1000;
 
 /**
- * Supernatural senses drawn above the vision filter (so they show in the dark): Zach's red
- * scent trail, the Soundcloud Burst ring sweeping across the screen, breathing ripples and
- * teammate stake auras. Blood decals go on the ground layer and are subject to vision.
+ * Supernatural senses drawn above the vision filter (so they show in the dark): the red
+ * scent trail (Zach; survivors see their own in testing mode), the Soundcloud Burst wave
+ * racing across the map, breathing ripples and teammate stake auras. Blood decals go on the
+ * ground layer and are subject to vision.
  */
 export class Overlays {
   readonly senses = new Container();
@@ -35,9 +37,13 @@ export class Overlays {
   private scent: ScentMark[] = [];
   private readonly scentSprites: Sprite[] = [];
   private breaths: Mark[] = [];
-  private bursts: Ring[] = [];
+  private bursts: Wave[] = [];
 
-  constructor(private readonly assets: AssetManager) {
+  constructor(
+    private readonly assets: AssetManager,
+    private readonly mapW = 6000,
+    private readonly mapH = 6000,
+  ) {
     this.rings.blendMode = 'add';
     this.senses.addChild(this.scentLayer, this.g, this.rings);
   }
@@ -54,8 +60,8 @@ export class Overlays {
     this.breaths.push({ x, y, born: now });
   }
 
-  addBurst(x: number, y: number, now: number): void {
-    this.bursts.push({ x, y, born: now });
+  addBurst(x: number, y: number, a: number, now: number): void {
+    this.bursts.push({ x, y, a, born: now });
   }
 
   addBlood(x: number, y: number): void {
@@ -107,24 +113,37 @@ export class Overlays {
       sp.rotation = t * 0.3 + s.seed;
     });
 
-    // Soundcloud Burst: a faint purple band racing outward with a fixed width.
+    // Soundcloud Burst: a purple, slightly concave lens of fixed width flying straight on.
     const B = BALANCE.hunter.burst;
     const r = this.rings;
     r.clear();
-    const far = Math.hypot(view.w, view.h);
+    const maxD = Math.hypot(this.mapW, this.mapH) + B.width;
     this.bursts = this.bursts.filter((b) => {
-      const radius = (B.speed * (now - b.born)) / 1000;
-      const d = Math.hypot(b.x - (view.x + view.w / 2), b.y - (view.y + view.h / 2));
-      if (radius - B.width / 2 > d + far) return false;
-      const bands = 7;
-      for (let i = 0; i < bands; i++) {
-        const f = i / (bands - 1);
-        const rr = radius - B.width / 2 + f * B.width;
-        if (rr <= 0) continue;
-        const a = Math.sin(f * Math.PI) * 0.16;
-        r.circle(b.x, b.y, rr).stroke({ width: B.width / bands + 2, color: f > 0.5 ? 0xb07aff : 0x8a5aff, alpha: a });
-      }
-      r.circle(b.x, b.y, radius + B.width / 2).stroke({ width: 3, color: 0xe0b0ff, alpha: 0.35 });
+      const front = (B.speed * (now - b.born)) / 1000;
+      if (front - B.thickness > maxD) return false;
+      const dx = Math.cos(b.a);
+      const dy = Math.sin(b.a);
+      const half = B.width / 2;
+      const N = 16;
+      const at = (along: number, side: number): [number, number] => [b.x + dx * along - dy * side, b.y + dy * along + dx * side];
+      // The lens: front face and back face both bow out toward the edges.
+      const lens = (depth: number, grow: number): number[] => {
+        const pts: number[] = [];
+        for (let i = 0; i <= N; i++) {
+          const sd = -half + (B.width * i) / N;
+          pts.push(...at(front + burstSag(sd) + grow, sd));
+        }
+        for (let i = N; i >= 0; i--) {
+          const sd = -half + (B.width * i) / N;
+          pts.push(...at(front - depth - burstSag(sd) - grow, sd));
+        }
+        return pts;
+      };
+      // Fading echoes trail behind, then a soft glow and the bright core.
+      for (let k = 1; k <= 4; k++) r.poly(lens(B.thickness * 0.6, 0).map((v, i) => v - (i % 2 === 0 ? dx : dy) * k * 30)).fill({ color: 0x5a1ab8, alpha: 0.14 / k });
+      r.poly(lens(B.thickness, 10)).fill({ color: 0x5a2ab0, alpha: 0.25 });
+      r.poly(lens(B.thickness, 0)).fill({ color: 0x7a3ae0, alpha: 0.4 });
+      r.poly(lens(B.thickness * 0.35, -4)).fill({ color: 0xa070f0, alpha: 0.35 });
       return true;
     });
   }

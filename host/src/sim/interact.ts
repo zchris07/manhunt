@@ -1,8 +1,8 @@
 import { Action, BALANCE, BarricadeState, Btn, Health, ItemKind, Prompt, pointSegDist2, resolveOverlaps, type InputCmd, type LootKind } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
-import { attemptAttack, carrySurvivor, damageSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, lockerSlam, useItem } from './items';
+import { carrySurvivor, startCharge, damageSurvivor, stakeSurvivor } from './combat';
+import { dropBarricade, useItem } from './items';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
 
 const R = BALANCE.reach;
@@ -41,6 +41,7 @@ export function nearbyDoor(w: World, x: number, y: number, reach: number = R.doo
   let best = -1;
   let bd = reach * reach;
   w.map.doors.forEach((d, i) => {
+    if (w.doorBroken[i]) return;
     const bx = d.hx + Math.cos(d.angle) * d.length;
     const by = d.hy + Math.sin(d.angle) * d.length;
     const d2 = pointSegDist2(x, y, d.hx, d.hy, bx, by);
@@ -191,8 +192,8 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
     return;
   }
   if (p.role !== 'hunter' || !canAct(p)) return;
-  if (pressed & Btn.Primary) attemptAttack(w, p);
-  if (pressed & Btn.Secondary) tryBurst(w, p);
+  if (pressed & Btn.Primary) startCharge(p);
+  if (pressed & Btn.Secondary) tryBurst(w, p, cmd.aim);
   if (pressed & Btn.Ability) tryHemp(w, p);
   if (p.action !== Action.None || p.attackWindup > 0) return;
   if (pressed & Btn.Interact) {
@@ -205,9 +206,13 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         w.startAction(p, Action.Stake, H.stakeTime, p.promptTarget);
         break;
       case Prompt.Search: {
-        w.startAction(p, Action.Search, H.searchTime, p.promptTarget);
+        // Searching is instant.
         const occupant = w.players.get(w.hiding[p.promptTarget]);
-        if (occupant) occupant.slamWindow = BALANCE.hiding.slamWindow;
+        if (occupant && occupant.hideState >= 1) {
+          exitHiding(w, occupant, true);
+          damageSurvivor(w, occupant, p);
+          w.feed(`${p.name} dragged ${occupant.name} out of hiding`);
+        }
         break;
       }
       case Prompt.DamageGen:
@@ -235,8 +240,6 @@ function toggleDoor(w: World, id: number): void {
 
 function survivorInteract(w: World, p: SimPlayer): void {
   if (p.hideState === 2) {
-    // A slam only works while Zach is mid-search on this spot.
-    if (p.slamWindow > 0 && lockerSlam(w, p)) return;
     p.hideState = 3;
     w.startAction(p, Action.HideExit, BALANCE.hiding.exitTime, p.hideSpot);
     return;
@@ -306,7 +309,6 @@ function survivorInteract(w: World, p: SimPlayer): void {
 /** Progresses timed interactions. */
 export function updateInteractions(w: World, dt: number): void {
   for (const p of w.order) {
-    if (p.slamWindow > 0) p.slamWindow = Math.max(0, p.slamWindow - dt);
     if (p.action === Action.None || p.action === Action.Attack || p.action === Action.Talk) continue;
     const holding = (p.lastCmd.buttons & Btn.Interact) !== 0;
     const H = BALANCE.hunter;
@@ -415,18 +417,6 @@ export function updateInteractions(w: World, dt: number): void {
         if (q && w.stakes[p.actionTarget] === 0) stakeSurvivor(w, p, q, p.actionTarget);
         continue;
       }
-      case Action.Search: {
-        p.actionT += dt;
-        if (p.actionT < p.actionDur) continue;
-        p.action = Action.None;
-        const occupant = w.players.get(w.hiding[p.actionTarget]);
-        if (occupant && occupant.hideState >= 1) {
-          exitHiding(w, occupant, true);
-          damageSurvivor(w, occupant, p);
-          w.feed(`${p.name} dragged ${occupant.name} out of hiding`);
-        }
-        continue;
-      }
       case Action.DamageGen: {
         p.actionT += dt;
         if (p.actionT < H.damageGenTime) continue;
@@ -464,7 +454,6 @@ export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {
   p.hideSpot = -1;
   p.hideState = 0;
   p.holdingBreath = false;
-  p.slamWindow = 0;
   if (p.action === Action.HideExit || p.action === Action.HideEnter) p.action = Action.None;
   resolveOverlaps(w.geo, p.move, p.radius);
 }

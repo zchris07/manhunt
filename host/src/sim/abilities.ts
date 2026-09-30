@@ -1,4 +1,4 @@
-import { BALANCE, Health } from '@manhunt/shared';
+import { BALANCE, Health, burstSag } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 
@@ -10,14 +10,15 @@ function hunterAudience(w: World, h: SimPlayer): number[] {
 }
 
 /**
- * Soundcloud Burst (right click): a ring of sound expands from Zach through every wall. Each
- * survivor it passes is jump-scared: their screen is covered for a few seconds.
+ * Soundcloud Burst (F): Zach fires an aimed wave of sound, a slightly concave lens of fixed
+ * width that flies across the whole map through every wall. Each survivor it passes is
+ * jump-scared: their screen is covered for a few seconds.
  */
-export function tryBurst(w: World, h: SimPlayer): void {
+export function tryBurst(w: World, h: SimPlayer, aim: number): void {
   if (h.burstCd > 0) return;
   h.burstCd = H.burst.cooldown;
-  w.bursts.push({ x: h.move.x, y: h.move.y, t0: w.time, by: h.id, hit: new Set() });
-  w.emit('all', { k: 'burst', x: Math.round(h.move.x), y: Math.round(h.move.y) });
+  w.bursts.push({ x: h.move.x, y: h.move.y, dx: Math.cos(aim), dy: Math.sin(aim), t0: w.time, by: h.id, hit: new Set() });
+  w.emit('all', { k: 'burst', x: Math.round(h.move.x), y: Math.round(h.move.y), a: aim });
 }
 
 /** Hemp Battery (Q): wider view, light through walls and a speed boost for a few seconds. */
@@ -43,7 +44,7 @@ export function tryJarvis(w: World, p: SimPlayer): void {
   w.emit('all', { k: 'jarvis', by: p.id });
 }
 
-/** Scent trail points near a hunter that they haven't been sent yet. */
+/** Scent trail points near a hunter (or a survivor in testing mode) not sent yet. */
 function sendScent(w: World, h: SimPlayer): void {
   let sent = w.trailSent.get(h.id);
   if (!sent) {
@@ -65,6 +66,8 @@ function sendScent(w: World, h: SimPlayer): void {
 export function updateAbilities(w: World, dt: number): void {
   const sendNow = Math.floor(w.time / H.scent.sendEvery) !== Math.floor((w.time - dt) / H.scent.sendEvery);
   for (const h of w.order) {
+    // Testing mode: survivors see their own scent trail.
+    if (h.role === 'survivor' && w.testMode && sendNow) sendScent(w, h);
     if (h.role !== 'hunter') continue;
     h.burstCd = Math.max(0, h.burstCd - dt);
     // Testing mode: the battery never runs down while it's on.
@@ -78,20 +81,27 @@ export function updateAbilities(w: World, dt: number): void {
     for (const sent of w.trailSent.values()) for (const id of sent) if (!live.has(id)) sent.delete(id);
   }
 
-  // Soundcloud Burst rings sweep outward with a fixed width, through everything.
+  // Soundcloud Burst waves fly straight on, through everything. Tested against the swept
+  // band between last tick's and this tick's front so nothing slips between ticks.
   const B = H.burst;
-  const maxR = Math.hypot(w.map.width, w.map.height) + B.width;
+  const maxD = Math.hypot(w.map.width, w.map.height) + B.width;
   w.bursts = w.bursts.filter((b) => {
-    const radius = B.speed * (w.time - b.t0);
+    const front = B.speed * (w.time - b.t0);
+    const prev = Math.max(0, front - B.speed * dt);
     for (const p of w.order) {
       if (p.role !== 'survivor' || b.hit.has(p.id)) continue;
       if (p.health === Health.Escaped || p.health === Health.Eliminated) continue;
-      const d = Math.hypot(p.move.x - b.x, p.move.y - b.y);
-      if (d > radius + B.width / 2) continue;
+      const rx = p.move.x - b.x;
+      const ry = p.move.y - b.y;
+      const along = rx * b.dx + ry * b.dy;
+      const side = rx * -b.dy + ry * b.dx;
+      if (Math.abs(side) > B.width / 2 + p.radius) continue;
+      const sag = burstSag(Math.min(Math.abs(side), B.width / 2));
+      if (along < prev - B.thickness - sag - p.radius || along > front + sag + p.radius) continue;
       b.hit.add(p.id);
       p.scareT = B.scareTime;
       w.emit([p.id], { k: 'scare' });
     }
-    return radius - B.width / 2 < maxR;
+    return prev < maxD;
   });
 }

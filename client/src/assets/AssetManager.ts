@@ -1,5 +1,8 @@
 import { Assets, Texture } from 'pixi.js';
-import { TEXTURE_ANCHORS, TEXTURE_GENERATORS } from './procedural/textures';
+import { TEXTURE_ANCHORS, TEXTURE_GENERATORS, gradeCanvas } from './procedural/textures';
+
+/** Texture ids whose colours stay as drawn (effects, and ground tiles painted pre-graded). */
+const UNGRADED = /^(fx\.|ground\.|tree\.|prop\.|grass\.)/;
 
 export interface AssetEntry {
   procedural?: string;
@@ -76,7 +79,8 @@ export class AssetManager {
       console.warn(`[assets] no generator for ${id}`);
       return Texture.WHITE;
     }
-    const tex = Texture.from(gen(variant));
+    const canvas = gen(variant);
+    const tex = Texture.from(UNGRADED.test(id) ? canvas : gradeCanvas(canvas));
     tex.source.scaleMode = 'linear';
     return tex;
   }

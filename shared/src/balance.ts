@@ -16,6 +16,8 @@ const HUNTER_WIDTH = HUNTER_RADIUS * 2;
 const SPEED_UP = 1.2;
 const SURVIVOR_WALK = 120 * SPEED_UP;
 const SURVIVOR_RUN = 190 * SPEED_UP;
+/** Flashlight beams run on until they hit something; this is only a practical cap. */
+const BEAM_RANGE = 2600;
 
 export const BALANCE = {
   world: {
@@ -50,7 +52,7 @@ export const BALANCE = {
     unreliableBurst: 200,
     snapshotHistory: 32,
     /** Everything farther than this from a viewer is never sent to them. */
-    maxSensingRadius: 1400,
+    maxSensingRadius: BEAM_RANGE + 100,
   },
 
   survivor: {
@@ -64,7 +66,7 @@ export const BALANCE = {
     /** Speed burst after being hit (DBD-style), multiplier and duration. */
     hitHasteMul: 1.3,
     hitHasteTime: 1.8,
-    vision: { coneHalfAngleDeg: 50, range: 620, proximity: 95 },
+    vision: { coneHalfAngleDeg: 50, range: BEAM_RANGE, proximity: 95 },
     downedVisionMul: 0.6,
     /** How far away others notice you moving (bots and hiding only; there is no audio for it). */
     noise: { idle: 0, crouch: 45, walk: 170, run: 430 },
@@ -82,7 +84,7 @@ export const BALANCE = {
     sprint: SURVIVOR_RUN * 1.2,
     stamina: { max: 6, refill: 6 },
     carrySpeedMul: 0.9,
-    vision: { coneHalfAngleDeg: 65, range: 470, proximity: 125 },
+    vision: { coneHalfAngleDeg: 65, range: BEAM_RANGE, proximity: 125 },
     attack: {
       /** The swipe covers twice the old 62 u reach, in a 100 degree arc in front of him. */
       range: 124,
@@ -94,23 +96,32 @@ export const BALANCE = {
       hitSlowMul: 0.45,
       missCooldown: 0.9,
       missSlowMul: 0.7,
-      /** Two melee hits break a dropped barricade. */
+      /** Two melee hits break a dropped barricade or a door. */
       barricadeHits: 2,
+      doorHits: 2,
+      /**
+       * Hold left click to charge the swing, release to strike. A full charge (`max` s) is a
+       * heavy swipe: longer reach, wider arc, and it counts as two hits (downs a healthy
+       * survivor, breaks a door or barricade outright).
+       */
+      charge: { max: 0.9, heavyAt: 0.85, rangeMul: 1.3, arcMul: 1.25, slowMul: 0.65 },
     },
     /**
-     * Lunge (F): a League-of-Legends-style dash. Speed starts at `peak` and eases out to zero
+     * Lunge (right click): a League-of-Legends-style dash. Speed starts at `peak` and eases out to zero
      * over `duration` ((1 - t/T)^2 curve). Two charges; each recharges in `recharge` seconds,
      * one at a time, starting as soon as one is spent.
      */
     lunge: { charges: 2, recharge: 7, duration: 0.5, peak: 1150, hitboxMul: 1.5 },
-    /** Soundcloud Burst (right click): a ring that passes through everything. */
-    burst: { cooldown: 12, speed: 2600, width: HUNTER_WIDTH * 6, scareTime: 4 },
+    /**
+     * Soundcloud Burst (F): an aimed wave of sound, a slightly concave purple lens of fixed
+     * `width` that flies across the whole map through everything. `thickness` is its depth.
+     */
+    burst: { cooldown: 12, speed: 3400, width: HUNTER_WIDTH * 6, thickness: 36, scareTime: 4 },
     /** Scent trail (always on): survivors running or bleeding leave red scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /** Hemp Battery (Q, dropped by Sexton Science). */
     hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
     breakBarricadeTime: 2.2,
-    searchTime: 1.5,
     damageGenTime: 2.0,
     pickupTime: 1.0,
     stakeTime: 1.2,
@@ -131,8 +142,6 @@ export const BALANCE = {
     breathMax: 6,
     breathRegen: 0.6,
     breathingHearRadius: 130,
-    slamWindow: 0.7,
-    slamStun: 1.5,
     peek: { coneHalfAngleDeg: 28, range: 420, proximity: 40 },
     grassPeek: { coneHalfAngleDeg: 180, range: 150, proximity: 150 },
     breathingIntervalSec: 1.5,
@@ -145,8 +154,8 @@ export const BALANCE = {
     /** Items spread over the whole map. */
     counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 },
     bottle: { speed: 760, maxRange: 460, stun: 1.4, hitRadius: 10 },
-    /** Night vision goggles: a 15 s meter that never refills, used in any number of bursts. */
-    goggles: { meter: 15, toggleDelay: 0.5, coneMul: 1.2 },
+    /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
+    goggles: { meter: 15, coneMul: 1.2 },
     shotgun: { shells: 3, reload: 2, range: 420, spreadDeg: 9, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
     /** Energy drink: stamina refills 1.5x faster and the meter holds 2 s more, fading over 20 s. */
     energy: { duration: 20, refillMul: 1.5, bonusSec: 2 },
@@ -157,8 +166,11 @@ export const BALANCE = {
     barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
   },
 
-  /** Penetrating light (goggles, Hemp Battery): brightness of what walls would hide. */
-  xray: { brightness: 0.7, fadeIn: 1.5 },
+  /**
+   * Penetrating light (goggles, Hemp Battery): within `range` of the cone it sees through
+   * everything, at `brightness`. It grows in over `fadeIn` s and fades out over `fadeOut` s.
+   */
+  xray: { range: 650, brightness: 0.7, fadeIn: 0.75, fadeOut: 1 / 6 },
 
   sexton: {
     radius: 15,
@@ -313,3 +325,13 @@ export function resolveBalance(shape: LobbyShape): ResolvedBalance {
 }
 
 export const TICK_DT = 1 / BALANCE.net.tickHz;
+
+/**
+ * Soundcloud Burst lens curvature at lateral offset `s` from its centre line: the wave is a
+ * slightly concave lens, thinnest in the middle, so each face bows out toward the edges by
+ * this much (the edges lead, the middle trails).
+ */
+export function burstSag(s: number): number {
+  const half = BALANCE.hunter.burst.width / 2;
+  return 0.12 * half * (Math.min(Math.abs(s), half) / half) ** 2;
+}

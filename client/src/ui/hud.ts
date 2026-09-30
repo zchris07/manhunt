@@ -90,6 +90,7 @@ export class Inventory {
 
 interface SlotEls {
   root: HTMLElement;
+  name: HTMLElement;
   icon: HTMLImageElement;
   count: HTMLElement;
   meter: HTMLElement;
@@ -248,26 +249,39 @@ export class Hud {
     const hb = $(this.root, '#hotbar');
     hb.innerHTML = '';
     this.slots = [];
-    const slot = (label: string, iconId: string, extraClass = ''): SlotEls => {
-      const root = el('div', `slot ${extraClass}`, `<b class="slot-key">${esc(label)}</b><img alt="" draggable="false"><i class="count"></i><div class="meter"><div></div></div><div class="cd"></div>`);
+    // Every box spells out its full name; the box grows to fit it.
+    const slot = (label: string, name: string, iconId: string, extraClass = ''): SlotEls => {
+      const root = el(
+        'div',
+        `slot ${extraClass}`,
+        `<b class="slot-key">${esc(label)}</b><img alt="" draggable="false"><i class="count"></i><span class="slot-name">${esc(name)}</span><div class="meter"><div></div></div><div class="cd"></div>`,
+      );
       const icon = root.querySelector('img')!;
       if (iconId) icon.src = this.assets.iconUrl(iconId);
       hb.appendChild(root);
-      const s: SlotEls = { root, icon, count: root.querySelector('.count')!, meter: root.querySelector('.meter')!, cd: root.querySelector('.cd')! };
+      const s: SlotEls = { root, name: root.querySelector('.slot-name')!, icon, count: root.querySelector('.count')!, meter: root.querySelector('.meter')!, cd: root.querySelector('.cd')! };
       this.slots.push(s);
       return s;
     };
     if (role === 'survivor') {
-      this.inventory.order.forEach((kind, i) => slot(String(i + 1), ITEM_ICON[kind]));
+      this.inventory.order.forEach((kind, i) => {
+        const s = slot(String(i + 1), ITEM_NAMES[kind], ITEM_ICON[kind], 'item');
+        // Click a slot to take that item in hand.
+        s.root.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.inventory.select(i);
+        });
+      });
       hb.appendChild(el('div', 'sep'));
-      slot('Q', 'item.tablet', 'ability');
-      slot('', 'item.confit', 'confit');
+      slot('Q', 'JARVIS', 'item.tablet', 'ability');
+      slot('E', 'Duck Confit', 'item.confit', 'confit');
     } else if (role === 'hunter') {
-      const machete = slot('LMB', 'char.machete', 'ability wide');
+      const machete = slot('LMB', 'Machete Swipe', 'char.machete', 'ability');
       machete.icon.classList.add('rot');
-      slot('F', '', 'ability lunge');
-      slot('RMB', '', 'ability burst');
-      slot('Q', 'item.hemp', 'ability');
+      slot('RMB', 'Lunge', '', 'ability lunge');
+      slot('F', 'Soundcloud Burst', '', 'ability burst');
+      slot('Q', 'Hemp Battery', 'item.hemp', 'ability');
     }
   }
 
@@ -382,19 +396,19 @@ export class Hud {
           meter = test ? 1 : self.shells / BALANCE.items.shotgun.shells;
           cd = self.reloadT / BALANCE.items.shotgun.reload;
         }
-        if (kind === ItemKind.Goggles) cd = self.gogglesCd / BALANCE.items.goggles.toggleDelay;
         set(this.slots[i], { on: n > 0, sel: i === this.inventory.selected, count: n > 0 ? (test ? '∞' : `×${n}`) : '', meter, cd, active: kind === ItemKind.Goggles && self.gogglesOn === 1 });
       });
       const j = self.jarvis;
-      set(this.slots[5], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : j === 1 ? 'JARVIS' : '', active: self.jarvisT > 0, hidden: j === 0 });
+      set(this.slots[5], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : '', active: self.jarvisT > 0, hidden: j === 0 });
       set(this.slots[6], { on: self.confit > 0, count: test ? '∞' : '', hidden: self.confit <= 0 });
     } else if (role === 'hunter') {
       const H = BALANCE.hunter;
-      set(this.slots[0], { cd: self.attackCd / H.attack.hitCooldown, count: 'Swipe' });
+      const charge = self.chargeT >= 0 ? self.chargeT / H.attack.charge.max : null;
+      set(this.slots[0], { cd: self.attackCd / H.attack.hitCooldown, count: charge !== null && charge >= H.attack.charge.heavyAt / H.attack.charge.max ? 'HEAVY' : 'hold', meter: charge, active: charge !== null });
       const charges = self.lungeCharges;
-      set(this.slots[1], { on: charges > 0, count: `Lunge ${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
-      set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : 'Burst', cd: self.burstCd / H.burst.cooldown });
-      set(this.slots[3], { on: self.hemp > 0 || self.hempT > 0, count: self.hemp === 2 ? '∞' : self.hempT > 0 ? `${Math.ceil(self.hempT)}s` : 'Hemp', active: self.hempT > 0, hidden: self.hemp === 0 && self.hempT <= 0 });
+      set(this.slots[1], { on: charges > 0, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
+      set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
+      set(this.slots[3], { on: self.hemp > 0 || self.hempT > 0, count: self.hemp === 2 ? '∞' : self.hempT > 0 ? `${Math.ceil(self.hempT)}s` : '', active: self.hempT > 0, hidden: self.hemp === 0 && self.hempT <= 0 });
     }
   }
 
