@@ -18,10 +18,44 @@ interface Loop {
 }
 
 /**
- * The game's sounds are the two custom audio files in assets/manifest.json (a short fading
- * GMajor snippet that only Zach hears when he fires a Soundcloud Burst, and Sexton Science's
- * positional reel) plus two spoken announcements (JARVIS and the Hemp Battery). There is no
- * other procedural or synthesized audio.
+ * Soft, quick footsteps (a pitter-patter) as a 2 s loop: 12 light steps, each a short burst
+ * of filtered noise over a faint low thump, alternating feet.
+ */
+function pitterPatter(ctx: BaseAudioContext): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * 2);
+  const buf = ctx.createBuffer(1, len, rate);
+  const d = buf.getChannelData(0);
+  let seed = 7;
+  const rnd = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const steps = 12;
+  for (let i = 0; i < steps; i++) {
+    const at = Math.floor(((i + (i % 2 ? 0.06 : 0)) / steps) * len);
+    const amp = (i % 2 ? 0.75 : 1) * (0.85 + rnd() * 0.3);
+    const n = Math.floor(rate * 0.07);
+    let lp = 0;
+    for (let k = 0; k < n && at + k < len; k++) {
+      const t = k / rate;
+      // Dull noise (one-pole low-pass) for the scuff, a decaying 110 Hz sine for the thump.
+      lp += ((rnd() * 2 - 1) - lp) * 0.18;
+      const scuff = lp * Math.exp(-t / 0.018) * 0.9;
+      const thump = Math.sin(2 * Math.PI * (110 + (i % 2) * 14) * t) * Math.exp(-t / 0.025) * 0.55;
+      d[at + k] += (scuff + thump) * amp * 0.5;
+    }
+  }
+  return buf;
+}
+
+const SOUND_GENERATORS: Record<string, (ctx: BaseAudioContext) => AudioBuffer> = { pitterPatter };
+
+/**
+ * The game's sounds: the custom audio files in assets/manifest.json (a short fading GMajor
+ * snippet that only Zach hears when he fires a Soundcloud Burst, and Sexton Science's
+ * positional reel), Shane Jeans's synthesized pitter-patter while he's alerted, and two spoken
+ * announcements (JARVIS and the Hemp Battery).
  */
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -82,6 +116,12 @@ export class AudioEngine {
     const cached = this.buffers.get(id);
     if (cached) return cached;
     const entry = this.assets.soundEntry(id);
+    const gen = entry && !entry.file ? SOUND_GENERATORS[entry.procedural ?? ''] : undefined;
+    if (gen) {
+      const b = gen(ctx);
+      this.buffers.set(id, b);
+      return b;
+    }
     if (entry?.file && !this.loading.has(id)) {
       this.loading.add(id);
       fetch(this.assets.resolveUrl(entry.file))

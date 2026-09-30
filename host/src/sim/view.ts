@@ -186,7 +186,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     for (const b of w.bottles) {
       if (Math.hypot(b.x - v.move.x, b.y - v.move.y) > 900) continue;
-      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), 0, 0, Math.round(Math.min(1, b.travelled / b.max) * 255)));
+      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), 0, 0, Math.min(255, Math.round(b.travelled / 4))));
     }
     for (const t of w.traps) {
       if (Math.hypot(t.x - v.move.x, t.y - v.move.y) > R) continue;
@@ -213,6 +213,8 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     // still only drawn inside your own light).
     const sh = w.shane;
     if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= R) entities.push(sh.record());
+    const cz = w.chris;
+    if (!cz.gone && Math.hypot(cz.x - v.move.x, cz.y - v.move.y) <= R) entities.push(cz.record());
     const hd = w.hempDrop;
     if (hd && Math.hypot(hd.x - v.move.x, hd.y - v.move.y) <= R) entities.push(quantizeEntity(hd.id, EntityKind.Hemp, hd.x, hd.y, 0, 0, 0, 0));
   }

@@ -1,4 +1,4 @@
-import { Action, BALANCE, BarricadeState, Btn, DEG, Health, ItemKind, angleDiff, pointSegDist2, type InputCmd } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, DEG, Health, ItemKind, angleDiff, pointSegDist2, raySegment, type InputCmd } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { dropCarried } from './combat';
@@ -61,10 +61,9 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
   if (!kind || p.inv[kind] <= 0 || p.action !== Action.None || !canAct(p)) return;
   switch (kind) {
     case ItemKind.Bottle: {
-      const dist = Math.min(I.bottle.maxRange, Math.max(60, cmd.aimDist));
       const dx = Math.cos(cmd.aim);
       const dy = Math.sin(cmd.aim);
-      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, max: dist, owner: p.id });
+      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, owner: p.id });
       consume(w, p, kind);
       break;
     }
@@ -136,28 +135,46 @@ function fireShotgun(w: World, p: SimPlayer, aim: number): void {
   if (stunHunter(w, hitH, S.stun, 'shotgun', p)) w.feed(`${p.name} blasted ${hitH.name} with a shotgun`);
 }
 
+/** Distance along a ray to the nearest unbroken window (bottles shatter on the glass). */
+function windowHit(w: World, x: number, y: number, dx: number, dy: number, max: number): number {
+  const ms = w.geo.moveSeg;
+  let best = max;
+  w.geo.windowSegs.forEach((m, i) => {
+    if (w.windowsBroken[i]) return;
+    const o = m * 4;
+    const t = raySegment(x, y, dx, dy, ms[o], ms[o + 1], ms[o + 2], ms[o + 3]);
+    if (t < best) best = t;
+  });
+  return best;
+}
+
 export function updateItems(w: World, dt: number): void {
-  // Bottles in flight: they shatter on walls, at the end of the throw, or on Zach.
+  // Bottles in flight fly on until they hit something: a wall, a tree, a closed door, an
+  // unbroken window, Zach or an NPC.
   const B = I.bottle;
+  const maxFlight = Math.hypot(w.map.width, w.map.height);
   const keep: typeof w.bottles = [];
   for (const b of w.bottles) {
-    const step = Math.min(B.speed * dt, b.max - b.travelled);
-    const free = w.geo.raycastVision(b.x, b.y, Math.atan2(b.dy, b.dx), step + 1);
+    const step = B.speed * dt;
+    const ang = Math.atan2(b.dy, b.dx);
+    const free = Math.min(w.geo.raycastVision(b.x, b.y, ang, step + 1), windowHit(w, b.x, b.y, b.dx, b.dy, step + 1));
     const nx = b.x + b.dx * Math.min(step, free);
     const ny = b.y + b.dy * Math.min(step, free);
+    const touches = (x: number, y: number, r: number): boolean => pointSegDist2(x, y, b.x, b.y, nx, ny) <= (r + B.hitRadius) ** 2;
     let hit: SimPlayer | null = null;
     for (const h of w.order) {
       if (h.role !== 'hunter' || h.health === Health.Eliminated) continue;
-      if (pointSegDist2(h.move.x, h.move.y, b.x, b.y, nx, ny) <= (h.radius + B.hitRadius) ** 2) {
+      if (touches(h.move.x, h.move.y, h.radius)) {
         hit = h;
         break;
       }
     }
     const sh = w.shane;
-    const hitShane = !hit && sh.chasing && pointSegDist2(sh.x, sh.y, b.x, b.y, nx, ny) <= (BALANCE.shane.radius + B.hitRadius) ** 2;
+    const hitShane = !hit && touches(sh.x, sh.y, BALANCE.shane.radius);
+    const hitNpc = !hit && !hitShane && ((w.sexton.alive && touches(w.sexton.x, w.sexton.y, BALANCE.sexton.radius)) || (w.chris.hittable && touches(w.chris.x, w.chris.y, BALANCE.chris.radius)));
     b.x = nx;
     b.y = ny;
-    b.travelled += step;
+    b.travelled += Math.min(step, free);
     if (hitShane) {
       w.noise(nx, ny, 900, 'glass');
       sh.bottleHit();
@@ -169,7 +186,7 @@ export function updateItems(w: World, dt: number): void {
       if (stunHunter(w, hit, B.stun, 'bottle', owner)) w.feed(`${owner?.name ?? 'Someone'} smashed a bottle on ${hit.name}`);
       continue;
     }
-    if (free <= step || b.travelled >= b.max - 0.01) {
+    if (hitNpc || free <= step || b.travelled >= maxFlight) {
       w.noise(nx, ny, 900, 'glass');
       continue;
     }

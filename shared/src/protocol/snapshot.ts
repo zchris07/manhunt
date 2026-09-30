@@ -164,6 +164,21 @@ export const ShaneFlag = {
   Fleeing: 2,
 } as const;
 
+/** Chris Zelley's state bits (EntityRecord.state for EntityKind.Chris). */
+export const ChrisFlag = {
+  Dead: 1,
+  Fleeing: 2,
+  /** Activated: he's left the ambulance and waits to be needed. */
+  Active: 4,
+  /** Running to a downed or staked survivor. */
+  Rescuing: 8,
+  /** Reviving or cutting someone down. */
+  Working: 16,
+  /** Done: wings out, flying to the heavens. */
+  Ascending: 32,
+  Hurt: 64,
+} as const;
+
 /** Sexton Science's state bits (EntityRecord.state for EntityKind.Sexton). */
 export const SextonFlag = {
   Dead: 1,

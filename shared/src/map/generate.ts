@@ -9,6 +9,7 @@ import { MapWorld, inRect } from './world';
 import {
   LOOT_KINDS,
   SURFACES,
+  type AmbulanceDef,
   type BarricadeDef,
   type DoorDef,
   type GeneratorDef,
@@ -622,6 +623,53 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   }
   for (const s of wh.lampSpots) lights.push({ x: s.x, y: s.y, radius: BALANCE.lights.lampRadius, kind: 'lamp' });
 
+  // Chris Zelley's ambulance: parked somewhere in the woods, off the paths, with a clear ring
+  // around it for him to pace.
+  const A = BALANCE.chris.ambulance;
+  const ar = rng.fork(9);
+  const ambHalfDiag = Math.hypot(A.length, A.width) / 2;
+  const ambClear = ambHalfDiag + BALANCE.chris.pace + 40;
+  const fenceWalls = walls.filter((w) => w.kind === 'fence');
+  let ambulance: AmbulanceDef | null = null;
+  for (let tries = 0; tries < 4000 && !ambulance; tries++) {
+    const x = ar.range(450, W - 450);
+    const y = ar.range(450, W - 450);
+    const dRect = Math.max(Math.abs(x - W / 2) - WH / 2, Math.abs(y - W / 2) - WH / 2);
+    if (dRect < ambClear + 200 || inRect(yard, x, y, ambClear + 100) || !lakeClear(x, y, ambClear + 60)) continue;
+    if (Math.hypot(spawn.x - x, spawn.y - y) < 700 || Math.hypot(hunterClearing.x - x, hunterClearing.y - y) < 700) continue;
+    if (cabins.some((r) => inRect(r, x, y, ambClear + 80))) continue;
+    if (kitCircles.some((k) => Math.hypot(k.x - x, k.y - y) < k.r + ambClear + 60)) continue;
+    if (generators.some((g) => Math.hypot(g.x - x, g.y - y) < ambClear + 140)) continue;
+    if (grassPatches.some((g) => Math.hypot(g.x - x, g.y - y) < g.r + ambClear + 40)) continue;
+    if (logs.some((l) => Math.hypot(l.x - x, l.y - y) < ambClear + 90)) continue;
+    if (lights.some((l) => Math.hypot(l.x - x, l.y - y) < ambClear + 80)) continue;
+    if (fenceWalls.some((f) => pointSegDist2(x, y, f.ax, f.ay, f.bx, f.by) < (ambClear + 40) ** 2)) continue;
+    const pathClear = tries < 2500 ? ambClear + 20 : ambHalfDiag + 10;
+    if (paths.some((p) => distToPolyline(x, y, p.points) < pathClear)) continue;
+    ambulance = { x, y, angle: ar.range(0, Math.PI), length: A.length, width: A.width };
+  }
+  ambulance ??= { x: spawn.x, y: spawn.y - 900, angle: 0, length: A.length, width: A.width };
+  {
+    const { x, y, angle } = ambulance;
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const hl = A.length / 2;
+    const hw = A.width / 2;
+    const c = [
+      [x + ux * hl - uy * hw, y + uy * hl + ux * hw],
+      [x + ux * hl + uy * hw, y + uy * hl - ux * hw],
+      [x - ux * hl + uy * hw, y - uy * hl - ux * hw],
+      [x - ux * hl - uy * hw, y - uy * hl + ux * hw],
+    ];
+    for (let i = 0; i < 4; i++) {
+      const [ax, ay] = c[i];
+      const [bx, by] = c[(i + 1) % 4];
+      walls.push({ ax, ay, bx, by, kind: 'ambulance', vision: true, move: true });
+    }
+    keep.circle(x, y, ambClear);
+    kitCircles.push({ x, y, r: ambHalfDiag + 30 });
+  }
+
   // Scarecrow stakes, spread out.
   const stakeCandidates: { x: number; y: number }[] = [...wh.stakeSpots];
   for (const c of clearings.slice(1)) {
@@ -679,6 +727,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     const y = tr.range(60, W - 60);
     if (inRect(warehouse, x, y, 20) || !lakeClear(x, y, 20) || inRect(yard, x, y, 20)) continue;
     if (cabins.some((r) => inRect(r, x, y, 10))) continue;
+    if (Math.hypot(x - ambulance.x, y - ambulance.y) < ambHalfDiag + 20) continue;
     bushes.push({ x, y, r: tr.range(18, 30), variant: tr.int(0, 2) });
   }
 
@@ -726,6 +775,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     cabins,
     racks: wh.racks,
     wrecks: wreckRects,
+    ambulance,
     exitZone,
     generators: generators.map((g, id) => ({ id, ...clearOfEntrances(g, entrancePts()) })),
     hidingSpots: hidingSpots.filter((h) => h.kind === 'grass' || !nearEntrance(h.x, h.y, ENTRANCE_CLEAR)).map((h, id) => ({ id, ...h })),

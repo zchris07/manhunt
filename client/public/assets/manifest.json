@@ -1,5 +1,5 @@
 {
-  "$comment": "Asset slots. Each id maps to a procedural generator or a file. To use real art or audio, replace {\"procedural\": ...} with {\"file\": \"sprites/name.png\"} (textures) (sounds are always files, e.g. {\"file\": \"audio/name.ogg\"}). Files are resolved relative to this manifest. Use {v} in a file name for variants, e.g. \"sprites/pine_{v}.png\". Textures may set \"anchor\": [x, y] (pivot as fractions of the image). Sounds may set \"offset\" and \"duration\" in seconds, or \"random\": true to start from a random point. If a file fails to load, the procedural fallback is used.",
+  "$comment": "Asset slots. Each id maps to a procedural generator or a file. To use real art or audio, replace {\"procedural\": ...} with {\"file\": \"sprites/name.png\"} (textures) (sounds are files, e.g. {\"file\": \"audio/name.ogg\"}, or a built-in synthesized sound). Files are resolved relative to this manifest. Use {v} in a file name for variants, e.g. \"sprites/pine_{v}.png\". Textures may set \"anchor\": [x, y] (pivot as fractions of the image). Sounds may set \"offset\" and \"duration\" in seconds, or \"random\": true to start from a random point. If a file fails to load, the procedural fallback is used.",
   "textures": {
     "ground.forest": { "procedural": "groundForest" },
     "ground.path": { "procedural": "groundPath" },
@@ -15,12 +15,14 @@
     "prop.bush": { "procedural": "bush", "variants": 3 },
     "char.survivor": { "procedural": "survivor", "variants": 10 },
     "char.survivorDowned": { "procedural": "survivorDowned", "variants": 10 },
-    "char.legs": { "procedural": "survivorLegs", "variants": 31 },
+    "char.legs": { "procedural": "survivorLegs", "variants": 32 },
     "char.hunter": { "procedural": "hunter" },
     "char.machete": { "procedural": "machete" },
     "char.sexton": { "procedural": "sexton" },
     "char.sextonDead": { "procedural": "sextonDead" },
     "char.shane": { "procedural": "shane" },
+    "char.chris": { "procedural": "chris" },
+    "char.chrisDead": { "procedural": "chrisDead" },
     "obj.generator": { "procedural": "generator", "variants": 2 },
     "obj.locker": { "procedural": "locker" },
     "obj.wardrobe": { "procedural": "wardrobe" },
@@ -48,7 +50,8 @@
   },
   "sounds": {
     "burst": { "file": "audio/gmajor.mp3", "duration": 2.6, "random": true },
-    "sexton.reel": { "file": "audio/reel.mp3" }
+    "sexton.reel": { "file": "audio/reel.mp3" },
+    "shane.steps": { "procedural": "pitterPatter" }
   },
   "images": {
     "ui.scare": { "file": "images/scare.webp" }

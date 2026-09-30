@@ -8,6 +8,7 @@ import {
   Gait,
   Health,
   SextonFlag,
+  ShaneFlag,
   TICK_DT,
   VisibilityComputer,
   maxStamina,
@@ -341,7 +342,10 @@ export class GameView {
         a.announce('Hemp battery activated');
         break;
       case 'sexton':
-        this.entities.say(e.say, this.time);
+        this.entities.say(e.say, this.time, 'sexton');
+        break;
+      case 'chris':
+        this.entities.say(e.say, this.time, 'chris');
         break;
       case 'tablet':
         this.entities.handTablet(e.x, e.y, e.to);
@@ -416,7 +420,7 @@ export class GameView {
     return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, stamina: cap > 0 ? (stamina / cap) * 255 : 0 };
   }
 
-  /** The only positional sound: Sexton's reel (the burst snippet plays on its event). */
+  /** Positional sounds: Sexton's reel and Shane's pitter-patter while he's alerted. */
   private updateSounds(ents: InterpEntity[]): void {
     const a = this.o.audio;
     const lx = this.renderPos.x;
@@ -425,6 +429,10 @@ export class GameView {
     const X = BALANCE.sexton.audio;
     if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near });
     else a.loop('sexton', null);
+    const sh = ents.find((e) => e.kind === EntityKind.Shane && (e.state & ShaneFlag.Chasing) !== 0);
+    const P = BALANCE.shane.steps;
+    if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
+    else a.loop('shane', null);
   }
 
   frame(dtMs: number, now: number): void {
@@ -554,6 +562,20 @@ export class GameView {
     // Shane Jeans carries a faint light wherever he goes.
     const jeans = ents.find((e) => e.kind === EntityKind.Shane);
     if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
+    // Chris Zelley's ambulance glows faintly on both sides (he himself carries no light).
+    const amb = map.ambulance;
+    const AL = BALANCE.chris.ambulance;
+    for (const side of [-1, 1]) {
+      const off = side * (amb.width / 2 + 12);
+      lights.push({
+        key: `amb${side}`,
+        x: amb.x - Math.sin(amb.angle) * off,
+        y: amb.y + Math.cos(amb.angle) * off,
+        radius: AL.lightRadius,
+        intensity: AL.lightIntensity * (0.9 + 0.1 * Math.sin(this.time * 3.1 + side)),
+        static: true,
+      });
+    }
     const sources = this.sources.build(viewer, lights, Math.hypot(vw, vh) / 2);
     sources.reveal = ws.reveal;
     this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources, z);

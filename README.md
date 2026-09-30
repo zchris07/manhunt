@@ -16,7 +16,8 @@ slow him with gas traps and outsmart him, but they can never kill him.
   Outlast Trials-inspired one.
 - **Structure:** Dead by Daylight-style asymmetric play. Loops, doors, barricades, hooks
   (scarecrow stakes) and skill checks. Survivors carry items; Zach has a lunge, the Soundcloud
-  Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor.
+  Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor,
+  Shane Jeans tails anyone who bothers him, and Chris Zelley waits by his ambulance to save a life.
 - **Hiding:** Outlast-style lockers, wardrobes, beds, barrels and tall grass, with a slatted
   peek view and breath holding.
 - **Play like a .io game:** no accounts. Pick a name, share a 4-letter code, play.
@@ -99,7 +100,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | WASD / mouse | Move / aim your flashlight |
 | Shift | Sprint (8 s meter, refills in 10 s; after it runs dry you wait 1.5 s) |
 | C or Ctrl | Crouch (quiet, slow) |
-| E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton |
+| E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton or Chris Zelley |
 | Left mouse | Use the selected item (hold it for night vision goggles) |
 | Mouse wheel / 1–5 / click a slot | Select an inventory slot |
 | Tab | Rearrange your inventory slots (drag and drop) |
@@ -111,7 +112,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 
 | Item | |
 |---|---|
-| Bottle (20 on the map) | Throw it at the cursor. A hit stuns Zach. |
+| Bottle (20 on the map) | Throw it toward the cursor. It flies on until it hits something: a wall, a tree, a closed door or window, Zach, or an NPC. A hit stuns Zach. |
 | Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; your whole beam passes through walls and the cone is 20% wider. |
 | Shotgun (2) | 3 shells, 2 s reload. Stuns Zach for 0.8 s and blasts him back. |
 | Energy drink (8) | For 20 s your sprint refills 1.5× faster and the meter holds 2 s more. |
@@ -122,8 +123,8 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 |---|---|
 | WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
 | Shift | Sprint (6 s meter, refills in 6 s) |
-| Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself): a full charge is a heavy swipe that reaches 30% farther, sweeps wider and counts as two hits. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which you can then climb through (slowly). Survivors can't use smashed windows. |
-| Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. |
+| Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself): a full charge is a heavy swipe that reaches 30% farther, sweeps wider and counts as two hits. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which you can then climb through (slowly). Survivors can't use smashed windows. A whiff recovers in 0.2 s; any hit that lands (on a survivor, an NPC, a door, a barricade or a window) locks the machete for 0.8 s. |
+| Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. Swipe mid-lunge, or lunge mid-charge, for a combo: the lunge and the swipe can both land. |
 | F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared. Only you hear it go out: a quiet snippet of GMajor from a random point in the song. |
 | Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
 | E | Pick up, stake, search a hiding spot (instant), damage a generator, open and close doors |
@@ -139,7 +140,19 @@ as closely as he can at 200 u/s (Sexton's panic speed) while Zach gets an arrow 
 toward him. Zach never alerts him. He gives up after 20 s, when Zach comes within 260 u of
 him, or when the survivor gets 1100 u away; 2 bottles or 1 shotgun blast shake him off (he
 runs away for 4 s). He can't open doors or break barricades, and after a chase he can't be
-alerted again for 10 s.
+alerted again for 10 s. While he's alerted you can hear his soft, quick footsteps pitter-patter
+after you.
+
+**Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
+structure parked at a random spot in the woods with medical gear around it and a faint glow of
+its own (he carries no light). Until a survivor talks to him (E) he never leaves it. Talk to
+him and he says *"I'll be there when you need me."* and starts wandering the map. The first
+time a survivor has been downed for 15 s, or on a stake for 12 s, he runs to them from wherever
+he is at Zach's sprint speed, opening doors on the way, and revives them (8 s) or cuts them
+down (1.6 s), just as long as a survivor would take. Then he sprouts wings and flies to the
+heavens, never to be seen again: he helps once. Zach can kill him in two hits at any time,
+before or after he's activated, or mid-rescue; when he's hit he flees, much slower than
+Sexton does.
 
 **Distances** are in world units (u); at normal zoom 1 u is one screen pixel. A survivor is
 30 u across and Zach 38 u. A warehouse door is 72 u long and a cabin door 76 u. The map is
@@ -197,10 +210,12 @@ game has no synthesized audio at all. To use a real file, replace the slot:
   when they're generated; a file is used as it is.
 - Textures may set `"anchor": [x, y]` (the pivot as fractions of the image). Trees and rocks are
   anchored at the centre of the crown.
-- **Sounds:** the game plays only the two supplied files, plus spoken "Jarvis online" and
+- **Sounds:** the game plays the two supplied files, plus spoken "Jarvis online" and
   "Hemp battery activated" announcements: a fading 2.6 s snippet of GMajor (`burst`, from a
   random point, half volume) that only Zach hears when he fires a Soundcloud Burst, and Sexton's
-  reel (`sexton.reel`, a positional loop that gets louder the closer you are). Sounds may set
+  reel (`sexton.reel`, a positional loop that gets louder the closer you are). Shane Jeans's
+  footsteps (`shane.steps`) are synthesized in the browser (`"procedural": "pitterPatter"`);
+  point the id at a file to replace them. Sounds may set
   `offset` and `duration` in seconds. Loops should loop seamlessly.
 - The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`).
 - The full list of ids is in the manifest. Everything under `client/public/assets/` is public

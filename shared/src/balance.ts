@@ -92,9 +92,10 @@ export const BALANCE = {
       windup: 0.15,
       /** Length of the visible swing animation. */
       swingTime: 0.32,
-      hitCooldown: 2.2,
+      /** Any landed hit (swipe or lunge, on anyone) locks the machete this long; a whiff only `missCooldown`. */
+      hitCooldown: 0.8,
       hitSlowMul: 0.45,
-      missCooldown: 0.9,
+      missCooldown: 0.2,
       missSlowMul: 0.7,
       /** Two melee hits break a dropped barricade or a door. */
       barricadeHits: 2,
@@ -155,7 +156,8 @@ export const BALANCE = {
     maxStack: 2,
     /** Items spread over the whole map. */
     counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 },
-    bottle: { speed: 760, maxRange: 460, stun: 1.4, hitRadius: 10 },
+    /** Bottles fly on until they hit a wall, Zach or an NPC. */
+    bottle: { speed: 760, stun: 1.4, hitRadius: 10 },
     /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
     goggles: { meter: 15, coneMul: 1.2 },
     shotgun: { shells: 3, reload: 2, range: 420, spreadDeg: 9, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
@@ -211,6 +213,32 @@ export const BALANCE = {
     cooldown: 10,
     /** His faint light (client only). */
     light: { radius: 150, intensity: 0.4 },
+    /** Soft pitter-patter footsteps while he's alerted (client only): full within `near`, silent past `far`. */
+    steps: { volume: 0.55, near: 70, far: 750 },
+  },
+
+  /**
+   * Chris Zelley, the paramedic. He paces around his ambulance until a survivor talks to him;
+   * then he wanders the map. Once a survivor has been downed for `downedAfter` s or staked for
+   * `stakedAfter` s he runs to them at Zach's sprint speed, revives or unstakes them in the
+   * same time a survivor would, then flies to the heavens (`ascendTime`), gone for good.
+   * Zach kills him in `hp` hits; hit, he flees at `flee` (well below Sexton's) for `fleeTime`.
+   */
+  chris: {
+    radius: 15,
+    hp: 2,
+    walk: 60,
+    wander: 70,
+    run: SURVIVOR_RUN * 1.2,
+    flee: 125,
+    fleeTime: 5,
+    reach: 72,
+    /** How far from the ambulance's sides he paces before he's activated. */
+    pace: 42,
+    downedAfter: 15,
+    stakedAfter: 12,
+    ascendTime: 3,
+    ambulance: { length: 300, width: 150, lightRadius: 230, lightIntensity: 0.35 },
   },
 
   objectives: {

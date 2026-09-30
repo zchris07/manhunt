@@ -412,8 +412,19 @@ function paintMap(m: MapData, s: number): HTMLCanvasElement {
   c.fillRect(ez.x - 10, ez.y - 10, ez.w + 20, ez.h + 80);
   c.fillStyle = '#3e3226';
   for (const cab of m.cabins) c.fillRect(cab.x, cab.y, cab.w, cab.h);
+  // The ambulance: a white box with a red cross.
+  const amb = m.ambulance;
+  c.save();
+  c.translate(amb.x, amb.y);
+  c.rotate(amb.angle);
+  c.fillStyle = '#d8d6ce';
+  c.fillRect(-amb.length / 2, -amb.width / 2, amb.length, amb.width);
+  c.fillStyle = '#c8262e';
+  c.fillRect(-18, -50, 36, 100);
+  c.fillRect(-50, -18, 100, 36);
+  c.restore();
   for (const w of m.walls) {
-    if (w.kind === 'boundary' || w.kind === 'shore' || w.kind === 'log') continue;
+    if (w.kind === 'boundary' || w.kind === 'shore' || w.kind === 'log' || w.kind === 'ambulance') continue;
     c.strokeStyle = w.kind === 'window' ? '#6f8a8c' : w.kind === 'fence' || w.kind === 'yard' ? '#6a6456' : '#a8a498';
     c.lineWidth = w.kind === 'warehouse' ? 16 : w.kind === 'fence' || w.kind === 'yard' ? 5 : 12;
     c.beginPath();

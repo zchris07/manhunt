@@ -101,6 +101,8 @@ export type GameEvent =
   | { k: 'shane'; alerted: boolean }
   | { k: 'hemp'; by: number }
   | { k: 'sexton'; say: string }
+  /** Chris Zelley speaks (a speech bubble over him). */
+  | { k: 'chris'; say: string }
   /** Sexton hands a glowing tablet to a survivor. */
   | { k: 'tablet'; to: number; x: number; y: number }
   | { k: 'gas'; x: number; y: number }

@@ -114,6 +114,7 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   }
 
   if (p.prompt === Prompt.None && w.sexton.canTalk(p)) set(Prompt.TalkSexton, 0);
+  if (p.prompt === Prompt.None && w.chris.canTalk(p)) set(Prompt.TalkChris, 0);
   if (p.prompt === Prompt.None) {
     const li = nearestIndex(w.map.loot, x, y, R.loot, (_l, i) => !w.lootTaken[i]);
     if (li >= 0) set(roomFor(p, w.map.loot[li].item) ? Prompt.Loot : Prompt.InventoryFull, li);
@@ -298,6 +299,9 @@ function survivorInteract(w: World, p: SimPlayer): void {
       break;
     case Prompt.TalkSexton:
       w.sexton.startTalk(p);
+      break;
+    case Prompt.TalkChris:
+      w.chris.activate(p);
       break;
     case Prompt.OpenDoor:
     case Prompt.CloseDoor:

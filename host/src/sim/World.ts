@@ -29,6 +29,7 @@ import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
 import { Shane } from './shane';
+import { Chris } from './chris';
 
 export interface GenState {
   progress: number;
@@ -44,7 +45,6 @@ export interface ThrownBottle {
   dx: number;
   dy: number;
   travelled: number;
-  max: number;
   owner: number;
 }
 
@@ -137,6 +137,7 @@ export class World {
   hempDrop: { id: number; x: number; y: number } | null = null;
   readonly sexton: Sexton;
   readonly shane: Shane;
+  readonly chris: Chris;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -179,6 +180,7 @@ export class World {
     this.survivorsTotal = this.order.filter((p) => p.role === 'survivor').length;
     this.sexton = new Sexton(this);
     this.shane = new Shane(this);
+    this.chris = new Chris(this);
   }
 
   get geo() {
@@ -345,6 +347,7 @@ export class World {
     updateAbilities(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
+    this.chris.update(dt);
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -446,6 +449,7 @@ export class World {
     }
     this.sexton.unstick();
     this.shane.unstick();
+    this.chris.unstick();
   }
 
   allocEntityId(): number {

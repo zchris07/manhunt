@@ -50,6 +50,22 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       s.unstick();
       break;
     }
+    case 'shane': {
+      // Bring Shane Jeans next to this player (close enough to alert him).
+      const sh = w.shane;
+      sh.x = p.move.x + (args[0] ?? 40);
+      sh.y = p.move.y + (args[1] ?? 0);
+      sh.unstick();
+      break;
+    }
+    case 'chris': {
+      // Bring Chris Zelley next to this player.
+      const c = w.chris;
+      c.x = p.move.x + (args[0] ?? 60);
+      c.y = p.move.y + (args[1] ?? 0);
+      c.unstick();
+      break;
+    }
     case 'gens':
       // Nearly finish every generator; the objective system completes them next tick.
       for (const g of w.gens) {

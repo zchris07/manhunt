@@ -90,6 +90,7 @@ export const Prompt = {
   TakeHemp: 24,
   ConfitRevive: 25,
   ConfitUnstake: 26,
+  TalkChris: 27,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -115,6 +116,7 @@ export const PROMPT_LABELS: Record<number, string> = {
   24: 'Press E to take the Hemp Battery',
   25: 'Press E to feed duck confit (instant revive)',
   26: 'Press E to feed duck confit (instant rescue)',
+  27: 'Press E to talk to Chris Zelley',
 };
 
 /** Items that take an inventory slot. Duck confit is carried separately (HUD icon). */
@@ -146,6 +148,7 @@ export const EntityKind = {
   Sexton: 4,
   Hemp: 5,
   Shane: 6,
+  Chris: 7,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

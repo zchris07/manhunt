@@ -1,4 +1,4 @@
-import { Health, generateMap, hashString, mapParamsFor, resolveBalance, type InputCmd, type MatchPlayerInfo } from '@manhunt/shared';
+import { Health, generateMap, overlapsCollider, hashString, mapParamsFor, resolveBalance, type InputCmd, type MatchPlayerInfo } from '@manhunt/shared';
 import { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -69,16 +69,13 @@ export function parkSexton(w: World): void {
 
 /** A spot with a clear, straight east-west lane of `half` units either side (no trees or walls). */
 export function clearLane(w: World, half = 450): { x: number; y: number } {
-  for (const c of w.map.clearings) {
-    for (let oy = -120; oy <= 120; oy += 40) {
-      const x = c.x;
-      const y = c.y + oy;
-      if (x - half < 50 || x + half > w.map.width - 50) continue;
-      let ok = true;
-      for (const dy of [-28, 0, 28]) if (!w.geo.hasLineOfSight(x - half, y + dy, x + half, y + dy)) ok = false;
-      if (ok) return { x, y };
-    }
-  }
+  const clear = (x: number, y: number): boolean => {
+    if (x - half < 50 || x + half > w.map.width - 50 || y < 300 || y > w.map.height - 300) return false;
+    return [-28, 0, 28].every((dy) => w.geo.hasLineOfSight(x - half, y + dy, x + half, y + dy) && !overlapsCollider(w.geo, x, y + dy, 20));
+  };
+  // Clearings first, then anywhere on the map.
+  for (const c of w.map.clearings) for (let oy = -120; oy <= 120; oy += 40) if (clear(c.x, c.y + oy)) return { x: c.x, y: c.y + oy };
+  for (let y = 300; y < w.map.height - 300; y += 60) for (let x = half + 60; x < w.map.width - half - 60; x += 60) if (clear(x, y)) return { x, y };
   throw new Error('no clear lane on this map');
 }
 
@@ -86,4 +83,10 @@ export function clearLane(w: World, half = 450): { x: number; y: number } {
 export function parkShane(w: World): void {
   w.shane.x = w.map.width - 60;
   w.shane.y = 60;
+}
+
+/** Keeps Chris Zelley out of the way (a far corner) so he doesn't wander into a test. */
+export function parkChris(w: World): void {
+  w.chris.x = w.map.width - 60;
+  w.chris.y = w.map.height - 60;
 }

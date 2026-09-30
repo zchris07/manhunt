@@ -4,8 +4,14 @@ import { eliminate, type World } from './World';
 
 const H = BALANCE.hunter;
 
+/** Lunging doesn't stop a swipe: slash and lunge combo freely. */
 function canSwing(h: SimPlayer): boolean {
-  return !h.carrying && h.attackCd <= 0 && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0 && h.move.lungeT <= 0;
+  return !h.carrying && h.attackCd <= 0 && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0;
+}
+
+/** A charge in progress survives a lunge hit that lands mid-combo. */
+function canKeepCharging(h: SimPlayer): boolean {
+  return !h.carrying && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0;
 }
 
 /** Left click pressed: start charging a swing (released in updateCombat). */
@@ -73,6 +79,9 @@ function resolveAttack(w: World, h: SimPlayer): void {
     hit = true;
   } else if (w.sexton.alive && inSwipe(h, w.sexton.x, w.sexton.y, BALANCE.sexton.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.sexton.x, w.sexton.y)) {
     w.sexton.hit(h);
+    hit = true;
+  } else if (w.chris.hittable && inSwipe(h, w.chris.x, w.chris.y, BALANCE.chris.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.chris.x, w.chris.y)) {
+    w.chris.hit(h);
     hit = true;
   } else {
     // Two swings break a dropped barricade.
@@ -144,11 +153,7 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
       if (pointSegDist2(pos.x, pos.y, fromX, fromY, h.move.x, h.move.y) > r * r) continue;
       if (!w.geo.hasLineOfSight(h.move.x, h.move.y, pos.x, pos.y)) continue;
       damageSurvivor(w, q, h);
-      h.lungeHit = true;
-      h.move.lungeT = 0;
-      h.attackCd = Math.max(h.attackCd, H.attack.hitCooldown * 0.6);
-      h.move.slowT = H.attack.hitCooldown * H.hitSlowFraction * 0.6;
-      h.move.slowMul = H.attack.hitSlowMul;
+      lungeLanded(h);
       w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'swing', id: h.id, hit: true });
       return;
     }
@@ -158,10 +163,28 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
     const r = reach + BALANCE.sexton.radius;
     if (pointSegDist2(sx.x, sx.y, fromX, fromY, h.move.x, h.move.y) <= r * r) {
       sx.hit(h);
-      h.lungeHit = true;
-      h.move.lungeT = 0;
+      lungeLanded(h);
+      return;
     }
   }
+  const cz = w.chris;
+  if (cz.hittable) {
+    const r = reach + BALANCE.chris.radius;
+    if (pointSegDist2(cz.x, cz.y, fromX, fromY, h.move.x, h.move.y) <= r * r) {
+      cz.hit(h);
+      lungeLanded(h);
+    }
+  }
+}
+
+/** The dash stops on contact. A swipe already charging or winding up still goes off (the combo). */
+function lungeLanded(h: SimPlayer): void {
+  h.lungeHit = true;
+  h.move.lungeT = 0;
+  if (h.chargeT >= 0 || h.attackWindup > 0) return;
+  h.attackCd = Math.max(h.attackCd, H.attack.hitCooldown);
+  h.move.slowT = H.attack.hitCooldown * H.hitSlowFraction;
+  h.move.slowMul = H.attack.hitSlowMul;
 }
 
 /** One hit: Healthy -> Wounded -> Downed. */
@@ -242,7 +265,7 @@ export function updateCombat(w: World, dt: number): void {
     if (p.role === 'hunter') {
       if (p.chargeT >= 0) {
         const C = H.attack.charge;
-        if (!canSwing(p)) p.chargeT = -1;
+        if (!canKeepCharging(p)) p.chargeT = -1;
         else if (p.lastCmd.buttons & Btn.Primary && p.chargeHeld + dt < C.autoRelease) {
           p.chargeHeld += dt;
           p.chargeT = Math.min(C.max, p.chargeT + dt);

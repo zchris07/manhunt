@@ -53,6 +53,8 @@ export class MapRenderer {
   private readonly windows: { g: Graphics; w: WallSeg }[] = [];
   private readonly gateSprite: Sprite;
   private readonly glows: { sprite: Sprite; index: number; kind: string; base: number }[] = [];
+  /** The ambulance's light bar: a red and a blue lamp that trade places slowly. */
+  private readonly beacons: Sprite[] = [];
 
   constructor(
     readonly map: MapData,
@@ -62,6 +64,7 @@ export class MapRenderer {
     this.high = new ChunkedLayer(map.width, map.height);
     const ground = this.buildGround();
     this.buildLowProps();
+    this.buildAmbulance();
     const walls = this.buildWalls();
     const props = new Container();
     this.gateSprite = this.buildDynamicProps(props);
@@ -197,6 +200,112 @@ export class MapRenderer {
       this.low.add(this.sprite(id, 0, h.x, h.y, h.kind === 'barrel' ? 0.85 : 1, rot), h.x, h.y);
     }
     for (const st of m.stakes) this.low.add(this.sprite('obj.stake', 0, st.x, st.y, 1, (st.x + st.y) % 6.28), st.x, st.y);
+  }
+
+  /**
+   * Chris Zelley's ambulance, seen from above (front at +x in its own frame): a white box
+   * body with red side stripes and a red cross on the roof, the cab and light bar up front,
+   * and medical gear left around it (gurney, trauma bags, oxygen, an IV stand).
+   */
+  private buildAmbulance(): void {
+    const a = this.map.ambulance;
+    const hl = a.length / 2;
+    const hw = a.width / 2;
+    const cos = Math.cos(a.angle);
+    const sin = Math.sin(a.angle);
+    const root = new Container();
+    root.position.set(a.x, a.y);
+    const shadow = new Graphics();
+    const corners = [
+      [hl, hw],
+      [hl, -hw],
+      [-hl, -hw],
+      [-hl, hw],
+    ].flatMap(([x, y]) => [x * cos - y * sin, x * sin + y * cos]);
+    for (const [k, alpha] of [
+      [1.25, 0.12],
+      [1.1, 0.18],
+      [1, 0.3],
+    ] as const) {
+      shadow.poly(corners.map((v, i) => v + (i % 2 === 0 ? SHADOW.x : SHADOW.y) * k * 1.4)).fill({ color: 0x000000, alpha });
+    }
+    const g = new Graphics();
+    g.rotation = a.angle;
+    // Gear on the ground first (under the body's overhang).
+    const gear = new Graphics();
+    gear.rotation = a.angle;
+    // Gurney behind the open rear doors.
+    gear.roundRect(-hl - 96, -22, 70, 44, 6).fill({ color: 0x2a2a2a, alpha: 0.35 });
+    gear.roundRect(-hl - 100, -24, 70, 44, 6).fill({ color: 0xc8ccd0 }).stroke({ width: 2, color: 0x1a1a1a });
+    gear.roundRect(-hl - 96, -20, 62, 36, 4).fill({ color: 0x3a6a9a });
+    gear.roundRect(-hl - 94, -14, 14, 24, 5).fill({ color: 0xf0f0ea });
+    for (const y of [-24, 20]) gear.rect(-hl - 100, y, 70, 4).fill({ color: 0x8a8e92 });
+    // Orange trauma bag with a white cross, and a red one.
+    const bag = (x: number, y: number, c: number, rot: number): void => {
+      const b = new Graphics();
+      b.roundRect(-13, -9, 26, 18, 4).fill({ color: c }).stroke({ width: 1.6, color: 0x1a1a1a });
+      b.rect(-2, -6, 4, 12).fill({ color: 0xffffff });
+      b.rect(-6, -2, 12, 4).fill({ color: 0xffffff });
+      b.moveTo(-10, -9).quadraticCurveTo(0, -16, 10, -9).stroke({ width: 2, color: 0x1a1a1a });
+      b.position.set(x, y);
+      b.rotation = rot;
+      gear.addChild(b);
+    };
+    bag(-hl + 30, hw + 26, 0xe8762a, 0.3);
+    bag(hl - 70, -hw - 24, 0xc8262e, -0.2);
+    // Oxygen tanks (green cylinders) leaning by the side door.
+    for (const [x, y] of [
+      [-10, hw + 20],
+      [6, hw + 24],
+    ]) {
+      gear.roundRect(x - 5, y - 14, 10, 28, 5).fill({ color: 0x3a8a4a }).stroke({ width: 1.4, color: 0x1a1a1a });
+      gear.rect(x - 3, y - 17, 6, 4).fill({ color: 0xb0b4b8 });
+    }
+    // IV stand with a saline bag.
+    gear.circle(-hl - 20, -hw - 26, 10).stroke({ width: 2, color: 0x8a8e92 });
+    gear.circle(-hl - 20, -hw - 26, 2.5).fill({ color: 0x5a5e62 });
+    gear.roundRect(-hl - 27, -hw - 33, 14, 9, 3).fill({ color: 0xd8f0f8, alpha: 0.9 }).stroke({ width: 1, color: 0x1a1a1a });
+    // Body.
+    g.roundRect(-hl, -hw, a.length, a.width, 14).fill({ color: 0xe4e2da }).stroke({ width: 3, color: 0x1a1a1a });
+    // Box roof panel and vents.
+    g.roundRect(-hl + 8, -hw + 8, a.length - 88, a.width - 16, 8).fill({ color: 0xd4d2ca });
+    g.rect(-hl + 20, -12, 26, 24).fill({ color: 0xa8a8a2 }).stroke({ width: 1.2, color: 0x3a3a38 });
+    // Red stripes down both sides.
+    for (const y of [-hw + 2, hw - 12]) g.rect(-hl + 4, y, a.length - 8, 10).fill({ color: 0xc8262e });
+    // Big red cross on the roof.
+    const cx = -hl + (a.length - 80) / 2 + 10;
+    g.rect(cx - 10, -34, 20, 68).fill({ color: 0xc8262e });
+    g.rect(cx - 34, -10, 68, 20).fill({ color: 0xc8262e });
+    // Cab: darker roof, windscreen, mirrors.
+    g.roundRect(hl - 78, -hw + 6, 70, a.width - 12, 10).fill({ color: 0xcfcdc5 }).stroke({ width: 2, color: 0x2a2a28 });
+    g.roundRect(hl - 20, -hw + 14, 14, a.width - 28, 5).fill({ color: 0x1c2a30 });
+    g.rect(hl - 17, -hw + 18, 4, a.width - 60).fill({ color: 0x5a7a86, alpha: 0.7 });
+    for (const y of [-hw - 6, hw + 6]) g.roundRect(hl - 40, y - 4, 10, 8, 2).fill({ color: 0x2a2a28 });
+    // Light bar.
+    g.roundRect(hl - 66, -40, 18, 80, 4).fill({ color: 0x2a2a28 });
+    g.roundRect(hl - 64, -36, 14, 32, 3).fill({ color: 0xe8323a });
+    g.roundRect(hl - 64, 4, 14, 32, 3).fill({ color: 0x3a6ae8 });
+    // Rear doors seam and handles.
+    g.moveTo(-hl + 2, 0).lineTo(-hl + 16, 0).stroke({ width: 2, color: 0x2a2a28 });
+    for (const y of [-12, 12]) g.rect(-hl + 4, y - 2, 8, 4).fill({ color: 0x5a5a58 });
+    root.addChild(shadow, gear, g);
+    // Beacons (faint, slow).
+    for (const [y, tint] of [
+      [-20, 0xff3a3a],
+      [20, 0x4a7aff],
+    ] as const) {
+      const lx = hl - 57;
+      const glow = new Sprite(this.tex('fx.glow'));
+      glow.anchor.set(0.5);
+      glow.position.set(lx * cos - y * sin, lx * sin + y * cos);
+      glow.scale.set(1.2);
+      glow.tint = tint;
+      glow.blendMode = 'add';
+      glow.alpha = 0.2;
+      root.addChild(glow);
+      this.beacons.push(glow);
+    }
+    this.low.add(root, a.x, a.y);
   }
 
   /**
@@ -398,6 +507,7 @@ export class MapRenderer {
   update(camX: number, camY: number, w: number, h: number, time: number, dt = 1 / 60): void {
     this.low.cull(camX, camY, w, h);
     this.high.cull(camX, camY, w, h);
+    this.beacons.forEach((b, i) => (b.alpha = 0.12 + 0.2 * Math.max(0, Math.sin(time * 3 + i * Math.PI))));
     for (const g of this.glows) g.sprite.alpha = g.base * lightFlicker(g.kind, time, g.index) * 1.1;
     // Doors swing with an ease-out over about a third of a second.
     for (const d of this.doors) {

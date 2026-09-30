@@ -49,7 +49,7 @@ describe('health states and the machete swipe', () => {
     duel.d.tap(duel.h.id, Btn.Primary, { aim: 0 });
     duel.d.run(10, (p) => (p.id === duel.h.id ? { aim: 0 } : undefined));
     expect(duel.s.health).toBe(Health.Healthy);
-    expect(duel.h.attackCd).toBeGreaterThan(0.3);
+    expect(duel.h.stats.hits).toBe(0);
     // Out of reach in front: also a miss.
     const w3 = makeWorld();
     const far = setupDuel(w3, 170);

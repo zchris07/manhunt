@@ -633,6 +633,8 @@ export const SURVIVOR_LOOKS: readonly Look[] = [
 const HUNTER_LOOK: Look = { skin: '#d9c9a8', hair: '#2a2420', style: 'short', shirt: '#3b3f2a', pants: '#23262e', shoes: '#1a1614', jacket: '#4a5236' };
 /** Shane Jeans: double denim. */
 const SHANE_LOOK: Look = { skin: '#e0b890', hair: '#3a2a1c', style: 'long', shirt: '#d8d0c0', pants: '#3a5a8a', shoes: '#2a2622', jacket: '#4a6a9a' };
+/** Chris Zelley: paramedic greens with hi-vis stripes. */
+const CHRIS_LOOK: Look = { skin: '#d7a67c', hair: '#2a1e16', style: 'buzz', shirt: '#e8ecee', pants: '#1f3a2a', shoes: '#1a1a1a', jacket: '#2f7a4a' };
 const SEXTON_LOOK: Look = { skin: '#f4cfae', hair: '#f5d86a', style: 'short', shirt: '#2f86f0', pants: '#cdb57c', shoes: '#5a3a22' };
 
 /** A leg + shoe, pointing +x from the hip (used in pairs for the walk cycle). */
@@ -812,7 +814,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 30 ? SHANE_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -949,8 +951,8 @@ export const shane: CanvasGen = () => {
   return c;
 };
 
-export const sextonDead: CanvasGen = () => {
-  const look = SEXTON_LOOK;
+/** A slain NPC lying face down in a pool of blood. */
+function corpse(look: Look): HTMLCanvasElement {
   const [c, ctx] = canvas(84, 64);
   ctx.fillStyle = 'rgba(190,20,30,0.8)';
   ellipse(ctx, 42, 34, 34, 18, -0.15);
@@ -977,7 +979,31 @@ export const sextonDead: CanvasGen = () => {
     ctx.stroke();
   }
   return c;
+}
+
+export const sextonDead: CanvasGen = () => corpse(SEXTON_LOOK);
+
+/** Chris Zelley: paramedic, with hi-vis shoulder stripes and a star of life on his back. */
+export const chris: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, CHRIS_LOOK, 30, 32, 1);
+  ctx.strokeStyle = '#e8e24a';
+  ctx.lineWidth = 2;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(24, 32 + side * 10);
+    ctx.lineTo(34, 32 + side * 12);
+    ctx.stroke();
+  }
+  circle(ctx, 24, 32, 4.2);
+  fillInk(ctx, '#f4f4f4', 1);
+  ctx.fillStyle = '#2d6fe8';
+  ctx.fillRect(22.9, 29.2, 2.2, 5.6);
+  ctx.fillRect(21.2, 30.9, 5.6, 2.2);
+  return c;
 };
+
+export const chrisDead: CanvasGen = () => corpse(CHRIS_LOOK);
 
 // ---------------------------------------------------------------------------------------
 // Objects and structures
@@ -1511,6 +1537,8 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   sexton,
   sextonDead,
   shane,
+  chris,
+  chrisDead,
   generator,
   locker,
   wardrobe,
