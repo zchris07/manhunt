@@ -27,6 +27,10 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
       <section class="hero">
         <div class="kicker">Crystal Lake · Night shoot</div>
         <h1 class="title">MANHUNT</h1>
+        <p class="tagline">Zach Branch plays the masked killer on the new <i>Crystal Lake</i> series.
+        Tonight he stopped acting. Start every generator, power the gate and get out of the woods.</p>
+        <p class="tagline">Zach Branch plays the masked killer on the new <i>Crystal Lake</i> series.
+        Tonight he stopped acting. Start every generator, power the gate and get out of the woods.</p>
       </section>
       <section class="card" aria-label="Play">
         <div class="field">

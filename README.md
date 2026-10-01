@@ -134,7 +134,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
 
-Zach always has a red scent trail left by anyone sprinting: an unbroken, rippling ribbon like a thin strip of red aurora. Bleeding survivors leave red puffs too. He only sees it where his own light falls.
+Zach always has a scent trail left by anyone sprinting: thin wisps of pale smoke curling along their path and thinning out as it ages. Bleeding survivors leave red puffs too. He only sees it where his own light falls.
 
 Next to an NPC or an item, Zach sees its name where survivors see their prompt.
 
@@ -174,11 +174,11 @@ gas shake him off like Shane, and he trips gas traps while alerted.
 
 **Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
 structure parked at a random spot in the woods with medical gear around it and a faint glow of
-its own (he carries no light). Until a survivor talks to him (E) he never leaves it. Talk to
+its own. Until a survivor talks to him (E) he never leaves it. Talk to
 him and he says *"I'll be there when you need me."* and starts wandering the map. The first
-time a survivor has been downed for 15 s, or on a stake for 12 s, he runs to them from wherever
+time a survivor has been downed or staked for 4 s, he runs to them from wherever
 he is at Zach's sprint speed, opening doors on the way, and revives them (8 s) or cuts them
-down (1.6 s), just as long as a survivor would take. Then he sprouts wings and flies to the
+down (1.6 s), just as long as a survivor would take. He can't rescue anyone Zach is carrying. Then he sprouts wings and flies to the
 heavens, never to be seen again: he helps once. Zach can kill him in two hits at any time,
 before or after he's activated, or mid-rescue; when he's hit he flees, much slower than
 Sexton does. A survivor's bottle or pellets just make him flinch.
