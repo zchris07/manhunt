@@ -639,6 +639,8 @@ const CHRIS_LOOK: Look = { skin: '#d7a67c', hair: '#2a1e16', style: 'buzz', shir
 const MARC_LOOK: Look = { skin: '#c68a5e', hair: '#1e1612', style: 'short', shirt: '#e8e4dc', pants: '#3c4a6a', shoes: '#4a3424', jacket: '#9a2a24' };
 /** Plasma.TTV: black gaming hoodie, headset. */
 const PLASMA_LOOK: Look = { skin: '#e8c0a0', hair: '#2a1e1a', style: 'curly', shirt: '#2a2a30', pants: '#26262c', shoes: '#e8e8ec', jacket: '#1c1c22' };
+/** Jaden Nguyen: backwards cap, olive bomber over a white tee. */
+const JADEN_LOOK: Look = { skin: '#d8b08a', hair: '#121010', style: 'cap', hat: '#1e1e22', shirt: '#eeeeee', pants: '#2a2a30', shoes: '#e8e8e8', jacket: '#4e5a36' };
 const SEXTON_LOOK: Look = { skin: '#f4cfae', hair: '#f5d86a', style: 'short', shirt: '#2f86f0', pants: '#cdb57c', shoes: '#5a3a22' };
 
 /** A leg + shoe, pointing +x from the hip (used in pairs for the walk cycle). */
@@ -818,7 +820,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant === 23 ? JADEN_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -1008,6 +1010,13 @@ export const chris: CanvasGen = () => {
 };
 
 export const chrisDead: CanvasGen = () => corpse(CHRIS_LOOK);
+
+/** Jaden Nguyen. */
+export const jaden: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, JADEN_LOOK, 30, 32, 1);
+  return c;
+};
 
 /** Marc Cortez: red flannel with a check pattern on the shoulders. */
 export const marc: CanvasGen = () => {
@@ -1708,6 +1717,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   chris,
   chrisDead,
   marc,
+  jaden,
   plasma,
   plasmaBeast,
   generator,

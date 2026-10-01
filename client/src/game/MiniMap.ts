@@ -1,4 +1,4 @@
-import { GenFlag, type MapData, type WorldState } from '@manhunt/shared';
+import { GenFlag, NPC_NAMES, type MapData, type WorldState } from '@manhunt/shared';
 import { el } from '../ui/dom';
 
 /** World units per pixel of the exploration mask. */
@@ -68,7 +68,7 @@ export class MiniMap {
     this.root.insertAdjacentHTML('beforeend', '<div class="mm-hint">M · map</div>');
     parent.appendChild(this.root);
 
-    this.fullWrap = el('div', 'fullmap', '<div class="fm-title">MAP <span>press M to close</span></div>');
+    this.fullWrap = el('div', 'fullmap', '<div class="fm-title">MAP</div>');
     this.full = el('canvas');
     this.fullWrap.appendChild(this.full);
     this.fullWrap.insertAdjacentHTML(
@@ -291,6 +291,19 @@ export class MiniMap {
     for (const r of s.world.radar) {
       if (!whole && (Math.abs(r.x - s.x) > this.radius || Math.abs(r.y - s.y) > this.radius)) continue;
       dot(r.x, r.y, 4.5 * k, '#ff2a3a', (4 + pulse * 5) * k);
+    }
+    // Testing mode: every NPC on the map, named on the full map.
+    for (const n of s.world.npcs) {
+      if (!whole && (Math.abs(n.x - s.x) > this.radius || Math.abs(n.y - s.y) > this.radius)) continue;
+      dot(n.x, n.y, 3.5 * k, '#b48aff', (3 + pulse * 3) * k);
+      if (whole) {
+        c.font = `700 ${Math.round(11 * k)}px "Special Elite", monospace`;
+        c.textAlign = 'center';
+        c.fillStyle = '#000';
+        c.fillText(NPC_NAMES[n.k] ?? '', tx(n.x) + 1, ty(n.y) - 8 * k + 1);
+        c.fillStyle = '#d8c8ff';
+        c.fillText(NPC_NAMES[n.k] ?? '', tx(n.x), ty(n.y) - 8 * k);
+      }
     }
     // You: on the full map a big pulsing marker with a label, so you're easy to find.
     const px = tx(s.x);

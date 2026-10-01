@@ -13,13 +13,15 @@ export function buildGeometry(data: MapData): Geometry {
   for (const g of data.generators) circles.push({ x: g.x, y: g.y, r: GENERATOR_RADIUS, vision: false, move: true });
   for (const h of data.hidingSpots) if (h.kind === 'barrel') circles.push({ x: h.x, y: h.y, r: BARREL_RADIUS, vision: false, move: true });
   for (const l of data.lights) if (l.kind === 'campfire') circles.push({ x: l.x, y: l.y, r: CAMPFIRE_RADIUS, vision: false, move: true });
-  return new Geometry(
+  const geo = new Geometry(
     data.width,
     data.height,
     segments,
     circles,
     data.dynamicSegments.map((d) => ({ ...d })),
   );
+  geo.setWater(data.lake, data.dock);
+  return geo;
 }
 
 export function inRect(r: Rect, x: number, y: number, pad = 0): boolean {

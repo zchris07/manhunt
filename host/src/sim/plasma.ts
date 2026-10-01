@@ -94,10 +94,10 @@ export class Plasma implements NpcTarget {
     if (p.role === 'hunter') {
       p.pump = BALANCE.items.zachPump.shots;
       p.chargeT = -1;
-      w.emit([p.id], { k: 'item', text: 'Plasma handed you a golden pump: it replaces your machete for 10 shots.' });
+      w.emit([p.id], { k: 'item', text: 'Got golden pump' });
     } else {
       giveShotgun(w, p, true, BALANCE.items.golden.shells);
-      w.emit([p.id], { k: 'item', text: 'Plasma handed you a golden pump: 5 shells, fast reload. It takes your shotgun slot.' });
+      w.emit([p.id], { k: 'item', text: 'Got golden pump' });
     }
   }
 
@@ -221,6 +221,7 @@ export class Plasma implements NpcTarget {
     if (this.gasT > 0) speed *= P.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     moveCircle(w.geo, this, this.radius, Math.cos(this.heading) * speed * dt, Math.sin(this.heading) * speed * dt);

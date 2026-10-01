@@ -27,13 +27,6 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
       <section class="hero">
         <div class="kicker">Crystal Lake · Night shoot</div>
         <h1 class="title">MANHUNT</h1>
-        <p class="tagline">Zach Branch plays the masked killer on the new <i>Crystal Lake</i> series.
-        Tonight he stopped acting. Start every generator, power the gate and get out of the woods.</p>
-        <div class="chips">
-          <span class="chip-lg">2–10 players</span>
-          <span class="chip-lg">No account</span>
-          <span class="chip-lg">Runs in your browser</span>
-        </div>
       </section>
       <section class="card" aria-label="Play">
         <div class="field">
@@ -41,15 +34,13 @@ export function renderLanding(root: HTMLElement, o: LandingOptions, h: LandingHa
           <input type="text" id="name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="2-16 characters" value="${esc(o.name)}">
         </div>
         <button class="primary big" id="create">Create lobby</button>
-        <div class="divider"><span>or join a friend</span></div>
+        <div class="divider"><span>or</span></div>
         <div class="row join-row">
-          <input type="text" id="room" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Room code or invite link" value="${esc(o.room)}">
+          <input type="text" id="room" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Room code" value="${esc(o.room)}">
           <button class="secondary" id="join">Join</button>
         </div>
-        <button class="ghost" id="test" title="An offline match on your own: switch between Zach and survivor with T, every item and ability is infinite">Testing mode</button>
+        <button class="ghost" id="test">Testing mode</button>
         <div class="error" id="err">${esc(o.busy || o.error)}</div>
-        <p class="note">The player who creates the lobby hosts the game in their browser; friends connect straight to them.
-        Hosts: keep your tab in the foreground.</p>
         <div class="links">
           <button class="linklike" id="howto">How to play</button>
           <a href="sandbox/">Vision sandbox</a>

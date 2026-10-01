@@ -1,16 +1,7 @@
 import { resolveBalance, type AssignedRole, type LobbySettings, type RolePref } from '@manhunt/shared';
 import type { GameClient, LobbyView } from '../net/GameClient';
 import { inviteLink } from '../net/config';
-import { readMatchLog } from '../net/matchLog';
-import { summarize } from '@manhunt/host';
 import { $, el, esc } from './dom';
-
-/** One-line summary of the host's stored match log (telemetry). */
-function logSummary(): string {
-  const s = summarize(readMatchLog());
-  if (!s.matches) return 'No matches logged yet.';
-  return `${s.matches} match${s.matches === 1 ? '' : 'es'} logged · Zach won ${Math.round(s.hunterWinRate * 100)}% ·`;
-}
 
 export interface LobbyHandlers {
   onLeave(): void;
@@ -60,7 +51,7 @@ export class LobbyScreen {
           <div class="note" style="word-break:break-all" id="link">${esc(inviteLink(client.room))}</div>
           <ul class="players" id="players"></ul>
           <div class="field">
-            <label>I want to play</label>
+            <label>Role</label>
             <div class="row" id="prefs">
               <button data-pref="survivor">Survivor</button>
               <button data-pref="hunter">Zach (hunter)</button>
@@ -69,11 +60,10 @@ export class LobbyScreen {
               <button id="ready">Ready</button>
             </div>
           </div>
-          ${this.isHost ? '<div class="warning">You are hosting. The game runs in this tab: keep it in the foreground and don\'t close it until the night is over.</div>' : ''}
           <div class="error" id="err"></div>
           <div class="row" style="justify-content:space-between;margin-top:6px">
             <button id="leave">Leave</button>
-            ${this.isHost ? `<span class="note">${logSummary()} <button class="linklike" id="log">Download match log</button></span>` : ''}
+            ${this.isHost ? `<button class="linklike" id="log">Match log</button>` : ''}
           </div>
         </div>
         <div class="panel" style="width:auto">
@@ -165,13 +155,13 @@ export class LobbyScreen {
     const s = v.settings;
     const pv = rolePreview(v);
     const allReady = v.players.filter((p) => p.connected).every((p) => p.ready);
-    const canStart = owner && allReady && (s.testMode || (pv.h >= 1 && pv.s >= 1));
+    const canStart = owner && (s.testMode || (allReady && pv.h >= 1 && pv.s >= 1));
     const rb = resolveBalance({ hunters: Math.max(1, pv.h), survivors: Math.max(1, pv.s), difficulty: s.difficulty, escapeFraction: s.escapeFraction });
     const settings = $(this.root, '#settings');
     const focused = document.activeElement?.id;
     const seedValue = focused === 'seed' ? (document.getElementById('seed') as HTMLInputElement).value : s.seed;
     settings.innerHTML = `
-      <div class="field"><label>Match settings ${owner ? '' : '<span class="note">(set by the host)</span>'}</label></div>
+      <div class="field"><label>Match settings</label></div>
       <div class="row" style="justify-content:space-between">
         <span>Hunters (Zach)</span>
         <span class="stepper"><button data-step="hunters" data-d="-1" ${owner ? '' : 'disabled'}>−</button><span>${s.hunters}</span><button data-step="hunters" data-d="1" ${owner ? '' : 'disabled'}>+</button></span>
@@ -200,8 +190,8 @@ export class LobbyScreen {
               <span style="flex:1"></span>
               <button class="primary" id="start" ${canStart ? '' : 'disabled'}>Start the night</button>
             </div>
-            <div class="note" style="margin-top:6px">${allReady ? ((pv.h < 1 || pv.s < 1) && !s.testMode ? 'Need at least 1 hunter and 1 survivor.' : 'Everyone is ready.') : 'Waiting for everyone to ready up.'}</div>`
-          : `<div class="note" style="margin-top:12px">Waiting for the host to start.</div>`
+            <div class="note" style="margin-top:6px">${allReady ? ((pv.h < 1 || pv.s < 1) && !s.testMode ? 'Need 1 hunter and 1 survivor.' : 'Ready.') : 'Waiting for players.'}</div>`
+          : `<div class="note" style="margin-top:12px">Waiting for host.</div>`
       }`;
     if (!owner) return;
     settings.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((b) =>

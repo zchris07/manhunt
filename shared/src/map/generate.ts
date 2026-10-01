@@ -308,15 +308,16 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     const a = ring[i];
     const b = ring[(i + 1) % ring.length];
     if (a === dockA && b === dockB) continue;
-    walls.push({ ax: a[0], ay: a[1], bx: b[0], by: b[1], kind: 'shore', vision: false, move: true });
+    walls.push({ ax: a[0], ay: a[1], bx: b[0], by: b[1], kind: 'shore', vision: false, move: false });
   }
   const dockLen = 280;
   const dockA2: [number, number] = [dockA[0] + dx * dockLen, dockA[1] + dy * dockLen];
   const dockB2: [number, number] = [dockB[0] + dx * dockLen, dockB[1] + dy * dockLen];
+  // The shore and the dock's edges don't block: people wade into the lake (slowly).
   walls.push(
-    { ax: dockA[0], ay: dockA[1], bx: dockA2[0], by: dockA2[1], kind: 'dock', vision: false, move: true },
-    { ax: dockB[0], ay: dockB[1], bx: dockB2[0], by: dockB2[1], kind: 'dock', vision: false, move: true },
-    { ax: dockA2[0], ay: dockA2[1], bx: dockB2[0], by: dockB2[1], kind: 'dock', vision: false, move: true },
+    { ax: dockA[0], ay: dockA[1], bx: dockA2[0], by: dockA2[1], kind: 'dock', vision: false, move: false },
+    { ax: dockB[0], ay: dockB[1], bx: dockB2[0], by: dockB2[1], kind: 'dock', vision: false, move: false },
+    { ax: dockA2[0], ay: dockA2[1], bx: dockB2[0], by: dockB2[1], kind: 'dock', vision: false, move: false },
   );
   const lake = ring.flat();
   const dock = [...dockA, ...dockA2, ...dockB2, ...dockB];

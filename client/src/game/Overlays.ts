@@ -24,14 +24,16 @@ interface Wave {
 const SCENT_LIFE = BALANCE.trails.maxAgeSec * 1000;
 
 /**
- * Supernatural senses drawn above the vision filter (so they show in the dark): the red
- * scent trail (Zach; survivors see their own in testing mode), the Soundcloud Burst wave
- * racing across the map, breathing ripples and teammate stake auras. Blood decals go on the
- * ground layer and are subject to vision.
+ * Supernatural senses drawn above the vision filter (so they show in the dark): the
+ * Soundcloud Burst wave racing across the map, breathing ripples and teammate stake auras.
+ * The red scent trail (Zach; survivors see their own in testing mode) and blood decals are
+ * subject to vision: the scent only shows where his light falls.
  */
 export class Overlays {
   readonly senses = new Container();
   readonly decals = new Container();
+  /** The scent trail: goes on the entity layer, hidden outside the viewer's light. */
+  readonly scentRoot = new Container();
   private readonly scentLayer = new Container();
   private readonly g = new Graphics();
   /** The scent: glowing red ribbons, drawn fresh each frame. */
@@ -49,7 +51,8 @@ export class Overlays {
   ) {
     this.rings.blendMode = 'add';
     this.aurora.blendMode = 'add';
-    this.senses.addChild(this.aurora, this.scentLayer, this.g, this.rings);
+    this.scentRoot.addChild(this.aurora, this.scentLayer);
+    this.senses.addChild(this.g, this.rings);
   }
 
   /** New scent points: x, y, kind (0 scent, 1 blood), age in tenths of a second, owner. */

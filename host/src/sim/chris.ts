@@ -232,6 +232,7 @@ export class Chris implements NpcTarget {
     }
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     moveCircle(w.geo, this, C.radius, Math.cos(this.heading) * speed * dt, Math.sin(this.heading) * speed * dt);
@@ -378,7 +379,7 @@ export class Chris implements NpcTarget {
     this.ascendT = 0;
     this.moving = false;
     w.emit('all', { k: 'chris', say: 'My work here is done.' });
-    w.feed('Chris Zelley sprouted wings and flew to the heavens');
+    w.feed('Chris Zelley ascended');
   }
 
   /**

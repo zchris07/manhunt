@@ -97,6 +97,10 @@ export const Prompt = {
   TalkPlasma: 29,
   SextonMore: 30,
   PickDrop: 31,
+  /** Zach next to an NPC or an item: just its name (target: NPC_NAMES index, loot index, drop item). */
+  NameNpc: 32,
+  NameLoot: 33,
+  NameDrop: 34,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -108,26 +112,29 @@ export const PROMPT_LABELS: Record<number, string> = {
   8: 'Hold E to open the gate',
   9: 'Press E to pick up',
   10: 'Press E to hide',
-  11: 'Press E to leave · Space hold breath',
+  11: 'Press E to leave',
   13: 'Press Space to slam the barricade',
   14: 'Press E to pick up',
   15: 'Press E to stake',
   16: 'Press E to search',
   18: 'Hold E to damage generator',
   19: 'The gate has no power',
-  20: 'You can only carry 2 of those',
+  20: 'Full',
   21: 'Press E to open the door',
   22: 'Press E to close the door',
   23: 'Press E to talk to Sexton Science',
   24: 'Press E to take the Hemp Battery',
-  25: 'Press E to feed duck confit (instant revive)',
-  26: 'Press E to feed duck confit (instant rescue)',
+  25: 'Press E to feed duck confit',
+  26: 'Press E to feed duck confit',
   27: 'Press E to talk to Chris Zelley',
   28: 'Press E to talk to Marc Cortez',
   29: 'Press E to talk to Plasma.TTV',
-  30: 'Press E to keep listening to Sexton',
+  30: 'Press E to keep listening',
   31: 'Press E to pick up',
 };
+
+/** NPC names, indexed by the NameNpc prompt target. */
+export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen'];
 
 /** Items that take an inventory slot. Duck confit is carried separately (HUD icon). */
 export const ItemKind = {
@@ -165,6 +172,8 @@ export const EntityKind = {
   Drop: 10,
   /** Sexton's Hemp Beam: x,y origin, facing, extra = length / 8. */
   Beam: 11,
+  /** Jaden Nguyen: state = ShaneFlag (+ JadenFlag.Firing). */
+  Jaden: 12,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

@@ -5,11 +5,11 @@ const tmp: number[] = [];
 const MAX_ITER = 3;
 
 /**
- * Moves a circle by (dx, dy) through the world, sliding along walls and trees. `hunter` lets
- * Zach through smashed windows. Deterministic: the client runs the same function for
+ * Moves a circle by (dx, dy) through the world, sliding along walls and trees. `vault` lets
+ * players through smashed windows. Deterministic: the client runs the same function for
  * prediction as the host.
  */
-export function moveCircle(geo: Geometry, pos: Vec2, radius: number, dx: number, dy: number, hunter = false): void {
+export function moveCircle(geo: Geometry, pos: Vec2, radius: number, dx: number, dy: number, vault = false): void {
   const len = Math.hypot(dx, dy);
   const steps = Math.max(1, Math.ceil(len / (radius * 0.5)));
   const sx = dx / steps;
@@ -17,12 +17,12 @@ export function moveCircle(geo: Geometry, pos: Vec2, radius: number, dx: number,
   for (let i = 0; i < steps; i++) {
     pos.x += sx;
     pos.y += sy;
-    resolveOverlaps(geo, pos, radius, hunter);
+    resolveOverlaps(geo, pos, radius, vault);
   }
 }
 
 /** Pushes a circle out of every movement collider it overlaps. */
-export function resolveOverlaps(geo: Geometry, pos: Vec2, radius: number, hunter = false): void {
+export function resolveOverlaps(geo: Geometry, pos: Vec2, radius: number, vault = false): void {
   const r2 = radius * radius;
   for (let iter = 0; iter < MAX_ITER; iter++) {
     let pushed = false;
@@ -30,7 +30,7 @@ export function resolveOverlaps(geo: Geometry, pos: Vec2, radius: number, hunter
     const ms = geo.moveSeg;
     for (let k = 0; k < segs.length; k++) {
       const id = segs[k];
-      if (!geo.moveSegActive[id] || (hunter && geo.hunterPass[id])) continue;
+      if (!geo.moveSegActive[id] || (vault && geo.hunterPass[id])) continue;
       const o = id * 4;
       const ax = ms[o];
       const ay = ms[o + 1];

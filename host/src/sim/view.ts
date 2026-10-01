@@ -56,8 +56,8 @@ export function visionFor(w: World, v: SimPlayer): Vision {
  * anywhere in the near part of a see-through (x-ray) cone.
  */
 export function canSee(w: World, v: SimPlayer, x: number, y: number): boolean {
-  // JARVIS: for a few seconds everyone sees everything on their screen.
-  if (w.revealT > 0) return true;
+  // JARVIS: for a few seconds survivors see everything on their screen (never Zach).
+  if (w.revealT > 0 && v.role !== 'hunter') return true;
   const { cone, prox, xray } = visionFor(w, v);
   if (xray && inCone({ ...cone, range: Math.min(cone.range, BALANCE.xray.range) }, x, y)) return true;
   const d = Math.hypot(x - v.move.x, y - v.move.y);
@@ -179,6 +179,8 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
   const entities: EntityRecord[] = [];
   const survivorSide = peerPlayer.role !== 'hunter';
   const R = BALANCE.net.maxSensingRadius;
+  // Testing mode: every NPC is sent to everyone, wherever they are.
+  const npcR = w.testMode ? Infinity : R;
   if (v) {
     for (const q of w.order) {
       if (q.role === 'spectator' || q.health === Health.Escaped || q.health === Health.Eliminated || q.health === Health.Carried) continue;
@@ -210,7 +212,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     // Sexton is sent to everyone in earshot: his reel audio plays around him even in the dark.
     const sx = w.sexton;
-    if (Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= BALANCE.sexton.audio.far + 250) {
+    if (w.testMode || Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= BALANCE.sexton.audio.far + 250) {
       let st = 0;
       if (!sx.alive) st |= SextonFlag.Dead;
       if (sx.mode === 'flee') st |= SextonFlag.Fleeing;
@@ -223,18 +225,17 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     // Shane Jeans is sent to everyone nearby (his faint light shows even in the dark; he is
     // still only drawn inside your own light).
-    const sh = w.shane;
-    if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= R) entities.push(sh.record());
+    for (const sh of [w.shane, w.jaden]) if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= npcR) entities.push(sh.record());
     // His Hemp Beam glows: everyone nearby gets it.
     if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
       entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));
     }
-    for (const n of [w.marc, w.plasma]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= R) entities.push(n.record());
+    for (const n of [w.marc, w.plasma]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= npcR) entities.push(n.record());
     for (const d of w.drops) {
       if (Math.hypot(d.x - v.move.x, d.y - v.move.y) <= R) entities.push(quantizeEntity(d.id, EntityKind.Drop, d.x, d.y, 0, 0, 0, d.kind | (d.golden ? 8 : 0)));
     }
     const cz = w.chris;
-    if (!cz.gone && Math.hypot(cz.x - v.move.x, cz.y - v.move.y) <= R) entities.push(cz.record());
+    if (!cz.gone && Math.hypot(cz.x - v.move.x, cz.y - v.move.y) <= npcR) entities.push(cz.record());
     const hd = w.hempDrop;
     if (hd && Math.hypot(hd.x - v.move.x, hd.y - v.move.y) <= R) entities.push(quantizeEntity(hd.id, EntityKind.Hemp, hd.x, hd.y, 0, 0, 0, 0));
   }
@@ -280,9 +281,13 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     doorsBroken: w.doorBroken.slice(),
     windowsBroken: w.windowsBroken.slice(),
     radar,
-    reveal: w.revealT > 0,
+    reveal: w.revealT > 0 && !!v && v.role !== 'hunter',
     // Zach gets only the direction to a chasing Shane, never his position.
     shaneDir: v && v.role === 'hunter' && w.shane.chasing ? Math.atan2(w.shane.y - v.move.y, w.shane.x - v.move.x) : null,
+    // Testing mode: where every NPC is (the map shows them all), in NPC_NAMES order.
+    npcs: w.testMode
+      ? [w.sexton.alive ? w.sexton : null, w.shane, w.chris.gone ? null : w.chris, w.marc, w.plasma, w.jaden].flatMap((n, k) => (n ? [{ k, x: n.x, y: n.y }] : []))
+      : [],
   };
   return { self: selfState(w, peerPlayer, v), entities, world };
 }

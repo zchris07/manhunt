@@ -76,7 +76,8 @@ export const BALANCE = {
     healTime: 12,
     reviveTime: 8,
     unstakeTime: 1.6,
-    pickupTime: 0.35,
+    /** Vaulting through a smashed window. */
+    windowClimbMul: 0.4,
   },
 
   hunter: {
@@ -153,6 +154,8 @@ export const BALANCE = {
 
   /** Sprinting (everyone): after the meter empties you must wait this long to sprint again. */
   sprintLockout: 1.5,
+  /** Speed while wading through the lake. */
+  wadeMul: 0.45,
 
   hiding: {
     enterTime: 0.6,
@@ -278,6 +281,39 @@ export const BALANCE = {
   },
 
   /**
+   * Jaden Nguyen: wanders and gets alerted just like Shane Jeans (crowd him or keep a light on
+   * him), but he carries a pistol: he keeps his distance and shoots the survivor who set him
+   * off until they've lost `stopAfter` of their health (or he loses them), then wanders off.
+   * Bottles, shotgun blasts and gas shake him off the same way. Nothing kills him.
+   */
+  jaden: {
+    radius: 15,
+    walk: 62,
+    chase: 175,
+    alertRadius: 80,
+    flashAlertSec: 2,
+    alertDecay: 0.3,
+    chaseTime: 20,
+    hunterBreakRadius: 260,
+    loseRadius: 1100,
+    bottlesToShake: 2,
+    fleeTime: 4,
+    cooldown: 12,
+    light: { radius: 150, intensity: 0.4 },
+    steps: { volume: 0.55, near: 70, far: 750 },
+    pistol: {
+      /** He opens fire inside this range (with a clear line), and closes in to `keep`. */
+      range: 420,
+      keep: 220,
+      cooldown: 0.9,
+      damage: 0.125,
+      spreadDeg: 5,
+      /** He stops once his target has lost this much health to him. */
+      stopAfter: 0.5,
+    },
+  },
+
+  /**
    * Marc Cortez wanders the warehouse (and beyond: he opens doors). Talk to him and he heals you
    * to full; the first time he also hands you duck confit. Nothing kills him: slashed he
    * protests, hit by a survivor he flinches. A very faint light.
@@ -379,6 +415,8 @@ export const BALANCE = {
     door: 62,
     stake: 78,
     pickup: 68,
+    /** Zach sees an NPC's name this close. */
+    npcName: 110,
   },
 
   trails: {

@@ -29,6 +29,7 @@ import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
 import { Shane } from './shane';
+import { Jaden } from './jaden';
 import { Chris } from './chris';
 import { Marc } from './marc';
 import { Plasma } from './plasma';
@@ -153,6 +154,7 @@ export class World {
   hempDrop: { id: number; x: number; y: number } | null = null;
   readonly sexton: Sexton;
   readonly shane: Shane;
+  readonly jaden: Jaden;
   readonly chris: Chris;
   readonly marc: Marc;
   readonly plasma: Plasma;
@@ -198,6 +200,7 @@ export class World {
     this.survivorsTotal = this.order.filter((p) => p.role === 'survivor').length;
     this.sexton = new Sexton(this);
     this.shane = new Shane(this);
+    this.jaden = new Jaden(this);
     this.chris = new Chris(this);
     this.marc = new Marc(this);
     this.plasma = new Plasma(this);
@@ -367,6 +370,7 @@ export class World {
     updateAbilities(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
+    this.jaden.update(dt);
     this.chris.update(dt);
     this.marc.update(dt);
     this.plasma.update(dt);
@@ -467,10 +471,11 @@ export class World {
   private pushOutOfColliders(): void {
     for (const p of this.order) {
       if (p.role === 'spectator' || p.health === Health.Carried || p.hideState === 2) continue;
-      resolveOverlaps(this.geo, p.move, p.radius, p.role === 'hunter');
+      resolveOverlaps(this.geo, p.move, p.radius, true);
     }
     this.sexton.unstick();
     this.shane.unstick();
+    this.jaden.unstick();
     this.chris.unstick();
     this.marc.unstick();
     this.plasma.unstick();
@@ -478,7 +483,7 @@ export class World {
 
   /** NPCs that bottles and pellets can hit right now. */
   npcTargets(): NpcTarget[] {
-    return [this.sexton, this.shane, this.chris, this.marc, this.plasma].filter((n) => n.solid);
+    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma].filter((n) => n.solid);
   }
 
   allocEntityId(): number {

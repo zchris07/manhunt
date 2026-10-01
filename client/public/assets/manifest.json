@@ -24,6 +24,7 @@
     "char.chris": { "procedural": "chris" },
     "char.chrisDead": { "procedural": "chrisDead" },
     "char.marc": { "procedural": "marc" },
+    "char.jaden": { "procedural": "jaden" },
     "char.plasma": { "procedural": "plasma" },
     "char.plasmaBeast": { "procedural": "plasmaBeast" },
     "obj.generator": { "procedural": "generator", "variants": 2 },

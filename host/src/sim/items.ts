@@ -80,7 +80,7 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
         if (p.shells[0] <= 0) {
           p.shells.shift();
           consume(w, p, kind);
-          w.emit([p.id], { k: 'item', text: p.golden ? 'The golden pump is empty' : 'The shotgun is empty and you drop it' });
+          w.emit([p.id], { k: 'item', text: p.golden ? 'Golden pump empty' : 'Shotgun empty' });
           p.golden = false;
         }
       }
@@ -93,7 +93,7 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       p.move.staminaLock = 0;
       p.move.sprintBlocked = 0;
       consume(w, p, kind);
-      w.emit([p.id], { k: 'item', text: 'Energy drink! Full sprint, and you move faster for a while.' });
+      w.emit([p.id], { k: 'item', text: 'Energy drink' });
       break;
     }
     case ItemKind.Trap:
@@ -108,7 +108,7 @@ export function plantTrap(w: World, p: SimPlayer): void {
   if (p.inv[ItemKind.Trap] <= 0) return;
   w.traps.push({ id: w.allocEntityId(), x: p.move.x, y: p.move.y, owner: p.id, armT: I.trap.armTime });
   consume(w, p, ItemKind.Trap);
-  w.emit([p.id], { k: 'item', text: 'Galaxy gas trap planted' });
+  w.emit([p.id], { k: 'item', text: 'Trap planted' });
 }
 
 /** Zach's golden pump (it replaces his machete until the shots run out). */
@@ -117,7 +117,7 @@ export function fireZachPump(w: World, h: SimPlayer, aim: number): void {
   fireShotgun(w, h, aim, I.zachPump.pelletDamage);
   h.reloadT = I.zachPump.reload;
   if (!w.testMode) h.pump--;
-  if (h.pump <= 0) w.emit([h.id], { k: 'item', text: 'The golden pump is empty. Back to the machete.' });
+  if (h.pump <= 0) w.emit([h.id], { k: 'item', text: 'Golden pump empty' });
 }
 
 /**
@@ -361,10 +361,10 @@ export function updateItems(w: World, dt: number): void {
   w.traps = w.traps.filter((t) => {
     t.armT = Math.max(0, t.armT - dt);
     if (t.armT > 0) return true;
-    // Zach, an alerted Shane Jeans or a raging Plasma sets it off.
+    // Zach, an alerted Shane Jeans or Jaden Nguyen, or a raging Plasma sets it off.
     const near = (x: number, y: number): boolean => Math.hypot(x - t.x, y - t.y) <= T.triggerRadius;
     const h = w.order.find((q) => q.role === 'hunter' && q.health !== Health.Eliminated && near(q.move.x, q.move.y));
-    const who = h ? h.name : w.shane.chasing && near(w.shane.x, w.shane.y) ? 'Shane Jeans' : w.plasma.raging && near(w.plasma.x, w.plasma.y) ? 'Plasma.TTV' : '';
+    const who = h ? h.name : w.shane.chasing && near(w.shane.x, w.shane.y) ? 'Shane Jeans' : w.jaden.chasing && near(w.jaden.x, w.jaden.y) ? 'Jaden Nguyen' : w.plasma.raging && near(w.plasma.x, w.plasma.y) ? 'Plasma.TTV' : '';
     if (!who) return true;
     w.gases.push({ id: w.allocEntityId(), x: t.x, y: t.y, age: 0 });
     w.emit(w.near(t.x, t.y, BALANCE.net.maxSensingRadius), { k: 'gas', x: Math.round(t.x), y: Math.round(t.y) });
@@ -384,6 +384,7 @@ export function updateItems(w: World, dt: number): void {
     // NPCs in the gas: Shane gives up his chase, Sexton is slowed, Plasma is blinded and slowed.
     const inGas = (x: number, y: number): boolean => Math.hypot(x - g.x, y - g.y) <= r;
     if (inGas(w.shane.x, w.shane.y)) w.shane.gassed();
+    if (inGas(w.jaden.x, w.jaden.y)) w.jaden.gassed();
     if (inGas(w.sexton.x, w.sexton.y)) w.sexton.gasT = 0.25;
     if (inGas(w.plasma.x, w.plasma.y)) w.plasma.gasT = 0.25;
     return g.age < T.gasTime;
@@ -404,7 +405,7 @@ export function updateItems(w: World, dt: number): void {
         p.goggles.shift();
         p.inv[ItemKind.Goggles] = Math.max(0, p.inv[ItemKind.Goggles] - 1);
         p.gogglesOn = false;
-        w.emit([p.id], { k: 'item', text: 'Your night vision goggles died' });
+        w.emit([p.id], { k: 'item', text: 'Goggles dead' });
       }
     }
   }

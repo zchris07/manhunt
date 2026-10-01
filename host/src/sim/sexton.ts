@@ -158,7 +158,7 @@ export class Sexton implements NpcTarget {
       this.mode = 'idle';
       this.moving = false;
       w.hempDrop = { id: w.allocEntityId(), x: this.x + Math.cos(this.facing) * 22, y: this.y + Math.sin(this.facing) * 22 };
-      w.feed(`${h.name} slayed Sexton Science. Something is glowing where he fell.`);
+      w.feed(`${h.name} slayed Sexton Science`);
       return;
     }
     this.mode = 'flee';
@@ -256,6 +256,7 @@ export class Sexton implements NpcTarget {
     if (this.gasT > 0) speed *= D.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     moveCircle(w.geo, this, X.radius, Math.cos(this.heading) * speed * dt, Math.sin(this.heading) * speed * dt);
@@ -435,7 +436,7 @@ export class Sexton implements NpcTarget {
           this.talkStage = 'await';
           this.talkT = 8;
           p.action = Action.None;
-          w.emit([p.id], { k: 'item', text: 'Press E again to keep listening to Sexton' });
+          w.emit([p.id], { k: 'item', text: 'Press E' });
         }
         return;
       case 'await':
@@ -466,7 +467,7 @@ export class Sexton implements NpcTarget {
         // Then he walks away, mysteriously.
         this.leaveFrom = { x: p.move.x, y: p.move.y };
         this.setMode('leave', X.leaveTime);
-        w.emit([p.id], { k: 'item', text: 'Sexton handed you a glowing tablet. Press Q: JARVIS.' });
+        w.emit([p.id], { k: 'item', text: 'Got JARVIS' });
         return;
     }
   }

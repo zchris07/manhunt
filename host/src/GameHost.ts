@@ -238,7 +238,8 @@ export class GameHost {
     if (msg.t === 'hello') return this.onHello(ps, msg.name, msg.token, msg.version);
     const lp = this.lobby.players.get(ps.playerId);
     if (!lp) return;
-    const isOwner = lp.id === this.ownerId;
+    // Testing mode: everyone in the room has the host's permissions.
+    const isOwner = lp.id === this.ownerId || this.lobby.settings.testMode;
     switch (msg.t) {
       case 'rolePref':
         lp.pref = msg.pref;
@@ -355,11 +356,21 @@ export class GameHost {
       if (sp) {
         this.world.setConnected(lp.id, true);
       } else {
-        // Late joiner: spectate the current match.
         const spawn = this.world.map.survivorSpawns[0];
-        sp = createPlayer(lp.id, lp.name, 'spectator', 0, spawn.x, spawn.y);
-        this.world.addPlayer(sp);
-        this.matchPlayers.push({ id: lp.id, name: lp.name, role: 'spectator', tint: 0 });
+        if (this.world.testMode) {
+          // Testing mode: late joiners drop straight in as survivors with the full kit.
+          const tint = this.world.order.filter((q) => q.role === 'survivor').length % 10;
+          sp = createPlayer(lp.id, lp.name, 'survivor', tint, spawn.x, spawn.y);
+          this.world.addPlayer(sp);
+          this.world.fillTestKit(sp);
+          this.matchPlayers = this.world.playerInfo();
+          for (const q of this.world.order) if (q.id !== lp.id) this.sendToPlayer(q.id, { t: 'ev', e: { k: 'roles', players: this.matchPlayers } });
+        } else {
+          // Late joiner: spectate the current match.
+          sp = createPlayer(lp.id, lp.name, 'spectator', 0, spawn.x, spawn.y);
+          this.world.addPlayer(sp);
+          this.matchPlayers.push({ id: lp.id, name: lp.name, role: 'spectator', tint: 0 });
+        }
       }
       this.sendStart(ps.id, lp.id);
     }
@@ -367,7 +378,7 @@ export class GameHost {
   }
 
   private startMatch(ownerPeer: PeerState): void {
-    if (!this.lobby.allReady(this.ownerId)) {
+    if (!this.lobby.settings.testMode && !this.lobby.allReady(this.ownerId)) {
       this.send(ownerPeer.id, { t: 'err', msg: 'Everyone must be ready' });
       return;
     }

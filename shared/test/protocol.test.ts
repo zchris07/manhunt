@@ -41,6 +41,7 @@ const world = (): WorldState => ({
   windowsBroken: [true, false],
   reveal: true,
   shaneDir: 1.25,
+  npcs: [{ k: 1, x: 100, y: 2000 }],
   radar: [{ x: 1200, y: 3400 }],
 });
 

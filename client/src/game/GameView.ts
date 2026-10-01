@@ -102,7 +102,7 @@ export class GameView {
     this.entities = new EntityLayer(o.assets, m.map, m.players, this.roleIsHunter);
     this.world.addChild(this.mapRenderer.root, this.overlays.decals, this.fog.root);
     this.particles = new Particles(o.assets);
-    this.entityWorld.addChild(this.entities.root, this.particles.root);
+    this.entityWorld.addChild(this.overlays.scentRoot, this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
     this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow);
@@ -124,7 +124,7 @@ export class GameView {
     this.doorState = m.map.doors.map((d) => !m.map.dynamicSegments[d.dyn].active);
     this.repaired = m.map.generators.map(() => false);
     o.audio.stopAllLoops();
-    this.hud.center(this.roleIsHunter ? 'You are Zach Branch. Hunt them.' : m.role === 'spectator' ? 'Spectating' : 'Start every generator. Stay out of sight.', 4500);
+    this.hud.center(this.roleIsHunter ? 'Hunt them' : m.role === 'spectator' ? 'Spectating' : 'Start the generators', 4500);
 
     // Fixed 30 Hz input steps on their own timer, independent of the render frame rate.
     let next = performance.now();
@@ -279,7 +279,7 @@ export class GameView {
         } else this.shake = Math.max(this.shake, 6 * near(e.x, e.y, 300));
         break;
       case 'down':
-        if (e.victim === me) this.hud.center('You are down. Crawl, and wait for help.', 4000);
+        if (e.victim === me) this.hud.center('You are down', 4000);
         break;
       case 'stun':
         if (e.target === me) {
@@ -288,14 +288,14 @@ export class GameView {
         }
         break;
       case 'staked':
-        if (e.victim === me) this.hud.center(e.stage >= 2 ? 'Sacrificed.' : 'Staked. Your team has 60 seconds.', 4000);
+        if (e.victim === me) this.hud.center(e.stage >= 2 ? 'Sacrificed.' : 'Staked', 4000);
         else this.hud.feed(`${name(e.victim)} ${e.stage >= 2 ? 'was sacrificed' : 'is on a stake'}`);
         break;
       case 'eliminated':
-        if (e.victim === me) this.hud.center('You were sacrificed. Spectating.', 5000);
+        if (e.victim === me) this.hud.center('Sacrificed', 5000);
         break;
       case 'escaped':
-        if (e.victim === me) this.hud.center('You escaped the woods.', 5000);
+        if (e.victim === me) this.hud.center('Escaped', 5000);
         break;
       case 'gatePowered':
         this.hud.center('The exit gate has power', 4000);
@@ -346,7 +346,7 @@ export class GameView {
           this.minimap.revealAll();
           this.minimap.widenView(BALANCE.sexton.jarvisMinimapMul);
         } else this.hud.big('JARVIS ONLINE', 'jarvis');
-        this.hud.feed(`${name(e.by)} brought JARVIS online. Everything is visible for 10 s.`);
+        this.hud.feed(`${name(e.by)} used JARVIS`);
         a.announce('Jarvis online');
         break;
       case 'shane':
@@ -452,7 +452,7 @@ export class GameView {
     const X = BALANCE.sexton.audio;
     if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near, curve: X.curve });
     else a.loop('sexton', null);
-    const sh = ents.find((e) => e.kind === EntityKind.Shane && (e.state & ShaneFlag.Chasing) !== 0);
+    const sh = ents.find((e) => (e.kind === EntityKind.Shane || e.kind === EntityKind.Jaden) && (e.state & ShaneFlag.Chasing) !== 0);
     const P = BALANCE.shane.steps;
     if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
     else a.loop('shane', null);
@@ -585,6 +585,9 @@ export class GameView {
     // Shane Jeans carries a faint light wherever he goes.
     const jeans = ents.find((e) => e.kind === EntityKind.Shane);
     if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
+    // Jaden Nguyen carries one too.
+    const jaden = ents.find((e) => e.kind === EntityKind.Jaden);
+    if (jaden) lights.push({ key: 'jaden', x: jaden.x, y: jaden.y, radius: BALANCE.jaden.light.radius, intensity: BALANCE.jaden.light.intensity, static: false });
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
     if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });
