@@ -361,10 +361,10 @@ export function updateItems(w: World, dt: number): void {
   w.traps = w.traps.filter((t) => {
     t.armT = Math.max(0, t.armT - dt);
     if (t.armT > 0) return true;
-    // Zach, an alerted Shane Jeans or a raging Plasma sets it off.
+    // Zach, an alerted Shane Jeans or Jaden Nguyen, or a raging Plasma sets it off.
     const near = (x: number, y: number): boolean => Math.hypot(x - t.x, y - t.y) <= T.triggerRadius;
     const h = w.order.find((q) => q.role === 'hunter' && q.health !== Health.Eliminated && near(q.move.x, q.move.y));
-    const who = h ? h.name : w.shane.chasing && near(w.shane.x, w.shane.y) ? 'Shane Jeans' : w.plasma.raging && near(w.plasma.x, w.plasma.y) ? 'Plasma.TTV' : '';
+    const who = h ? h.name : w.shane.chasing && near(w.shane.x, w.shane.y) ? 'Shane Jeans' : w.jaden.chasing && near(w.jaden.x, w.jaden.y) ? 'Jaden Nguyen' : w.plasma.raging && near(w.plasma.x, w.plasma.y) ? 'Plasma.TTV' : '';
     if (!who) return true;
     w.gases.push({ id: w.allocEntityId(), x: t.x, y: t.y, age: 0 });
     w.emit(w.near(t.x, t.y, BALANCE.net.maxSensingRadius), { k: 'gas', x: Math.round(t.x), y: Math.round(t.y) });
@@ -384,6 +384,7 @@ export function updateItems(w: World, dt: number): void {
     // NPCs in the gas: Shane gives up his chase, Sexton is slowed, Plasma is blinded and slowed.
     const inGas = (x: number, y: number): boolean => Math.hypot(x - g.x, y - g.y) <= r;
     if (inGas(w.shane.x, w.shane.y)) w.shane.gassed();
+    if (inGas(w.jaden.x, w.jaden.y)) w.jaden.gassed();
     if (inGas(w.sexton.x, w.sexton.y)) w.sexton.gasT = 0.25;
     if (inGas(w.plasma.x, w.plasma.y)) w.plasma.gasT = 0.25;
     return g.age < T.gasTime;

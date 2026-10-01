@@ -17,7 +17,8 @@ slow him with gas traps and outsmart him, but they can never kill him.
 - **Structure:** Dead by Daylight-style asymmetric play. Loops, doors, barricades, hooks
   (scarecrow stakes) and skill checks. Survivors carry items; Zach has a lunge, the Soundcloud
   Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor,
-  Shane Jeans tails anyone who bothers him, and Chris Zelley waits by his ambulance to save a life.
+  Shane Jeans tails anyone who bothers him, Jaden Nguyen shoots them, and Chris Zelley waits by
+  his ambulance to save a life.
 - **Hiding:** Outlast-style lockers, wardrobes, beds, barrels and tall grass, with a slatted
   peek view and breath holding.
 - **Play like a .io game:** no accounts. Pick a name, share a 4-letter code, play.
@@ -105,7 +106,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | G | Drop one of the selected item on the ground for a teammate (JARVIS and duck confit can't be dropped or taken in hand) |
 | Mouse wheel / 1–5 / click a slot | Select an inventory slot |
 | Tab | Rearrange your inventory slots (drag and drop) |
-| Q | JARVIS, once you have Sexton's tablet: for 10 s every player's whole screen is visible; your own map is fully revealed and shows Zach |
+| Q | JARVIS, once you have Sexton's tablet: for 10 s every survivor's whole screen is visible (never Zach's); your own map is fully revealed and shows Zach |
 | Space | Slam a barricade down · skill checks · hold breath while hidden |
 | M | Full map (only the parts you've explored) |
 
@@ -125,7 +126,7 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 |---|---|
 | WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
 | Shift | Sprint (6 s meter, refills in 6 s) |
-| Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself). A swipe takes a third of a survivor's health; a full charge takes two thirds (in between, proportionally) and is a heavy swipe that reaches 30% farther and sweeps wider. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which you can then climb through (slowly). Survivors can't use smashed windows. A whiff recovers in 0.2 s; any hit that lands (on a survivor, an NPC, a door, a barricade or a window) locks the machete for 0.8 s. |
+| Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself). A swipe takes a third of a survivor's health; a full charge takes two thirds (in between, proportionally) and is a heavy swipe that reaches 30% farther and sweeps wider. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which anyone can then climb through (slowly), survivors included. A whiff recovers in 0.2 s; any hit that lands (on a survivor, an NPC, a door, a barricade or a window) locks the machete for 0.8 s. |
 | Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. Swipe mid-lunge, or lunge mid-charge, for a combo: the lunge and the swipe can both land. |
 | F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared for 2.5 s (the image and a snippet of the song fade in and out). Only you hear it go out: a very quiet snippet of GMajor from a random point in the song. |
 | Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
@@ -133,13 +134,16 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
 
-Zach always sees a red scent trail left by anyone sprinting: an unbroken, rippling ribbon like a thin strip of red aurora. Bleeding survivors leave red puffs too.
+Zach always has a red scent trail left by anyone sprinting: an unbroken, rippling ribbon like a thin strip of red aurora. Bleeding survivors leave red puffs too. He only sees it where his own light falls.
 
-**Health.** Everyone has a health bar over their head. Survivors are down at zero; each machete
+Next to an NPC or an item, Zach sees its name where survivors see their prompt.
+
+**Health.** Survivors have a health bar over their head (Zach has none). Survivors are down at zero; each machete
 swipe takes a third (a full charge two thirds), a lunge a third, a bottle a fifth, a shotgun
 pellet 15%, a Hemp Beam a third and a Plasma punch a quarter. Anyone hit flinches. Lost health
 stays lost until a teammate heals you (or Marc Cortez does); a revive, unstake or struggle-free
-leaves you on a third. The sprint meter is the wide bar above your inventory.
+leaves you on a third. The sprint meter is the wide bar above your inventory. Items are picked
+up instantly. The lake can be waded into: everyone moves at under half speed in the water.
 
 **NPCs.** There is exactly one **Sexton Science**; once Zach slays him he never comes back.
 Talk to him and he says *"I'm working on something big"*; press E again and he says *"This is
@@ -161,6 +165,12 @@ him, or when the survivor gets 1100 u away; 2 bottles or 1 shotgun blast shake h
 runs away for 4 s). He can't open doors or break barricades, and after a chase he can't be
 alerted again for 10 s. While he's alerted you can hear his soft, quick footsteps pitter-patter
 after you.
+
+**Jaden Nguyen** (one, unkillable) wanders and is alerted exactly like Shane Jeans, but he has a
+pistol. Alerted, he says *"Back up!"*, closes to about 220 u and fires every 0.9 s (each hit
+takes 12.5% of your health; a stray shot hits whoever is in the way). Once his target has lost
+half their health to him he lets them go and wanders off. Bottles, a shotgun blast and galaxy
+gas shake him off like Shane, and he trips gas traps while alerted.
 
 **Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
 structure parked at a random spot in the woods with medical gear around it and a faint glow of
@@ -317,18 +327,20 @@ readable. Lamps and campfires light the scene, but only your own light (cone, pr
 x-ray) reveals characters, items and objectives: a second filter hides them everywhere else
 with a hard threshold, and the host never sends what you can't see. Night vision and the Hemp
 Battery turn the whole beam into x-ray light that passes through walls; it fades in over 0.75 s
-and out in 1/6 s. While JARVIS runs, every player's whole screen counts as lit.
+and out in 1/6 s. While JARVIS runs, every survivor's whole screen counts as lit.
 
-**Testing mode.** Press **Testing mode** on the landing page to play alone. You get every item
-and ability with infinite uses (Zach's Hemp Battery toggles on and off), there's no win
-condition, and **T** switches you between Zach and a
-survivor. Open the full map (**M**) and click anywhere to teleport there. Survivors see their
-own scent trail. A lobby owner can also tick **Testing mode** in the lobby settings to test with
-friends.
+**Testing mode.** Press **Testing mode** on the landing page. It opens a room and drops you
+straight into a match; its code is in the top-left panel, and anyone who joins with it lands
+in the match as a survivor with the same permissions as the host (settings, start, back to
+lobby). If no room can be opened it runs offline. You get every item and ability with infinite
+uses (Zach's Hemp Battery toggles on and off), there's no win condition, and **T** switches you
+between Zach and a survivor. Every NPC is shown on the map. Open the full map (**M**) and click
+anywhere to teleport there. Survivors see their own scent trail. A lobby owner can also tick
+**Testing mode** in the lobby settings.
 
 Dev URL flags: `?lag=100` simulates 100 ms of latency on your connection, `?handicap=N`
 overrides the host handicap, and `?dev=1` (host only) enables test commands used by the e2e
-suite (`tp`, `tpTo`, `give [item, count]`, `confit`, `jarvis`, `hemp`, `sexton`, `gens`, `gate`,
+suite (`tp`, `tpTo`, `give [item, count]`, `confit`, `jarvis`, `hemp`, `sexton`, `shane`, `jaden`, `gens`, `gate`,
 `time`, `heal`…; see `host/src/dev/devCommands.ts`). Never use `?dev=1` for real games.
 
 ## Moving to a dedicated server later

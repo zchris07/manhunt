@@ -102,7 +102,7 @@ export class GameView {
     this.entities = new EntityLayer(o.assets, m.map, m.players, this.roleIsHunter);
     this.world.addChild(this.mapRenderer.root, this.overlays.decals, this.fog.root);
     this.particles = new Particles(o.assets);
-    this.entityWorld.addChild(this.entities.root, this.particles.root);
+    this.entityWorld.addChild(this.overlays.scentRoot, this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
     this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow);
@@ -452,7 +452,7 @@ export class GameView {
     const X = BALANCE.sexton.audio;
     if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near, curve: X.curve });
     else a.loop('sexton', null);
-    const sh = ents.find((e) => e.kind === EntityKind.Shane && (e.state & ShaneFlag.Chasing) !== 0);
+    const sh = ents.find((e) => (e.kind === EntityKind.Shane || e.kind === EntityKind.Jaden) && (e.state & ShaneFlag.Chasing) !== 0);
     const P = BALANCE.shane.steps;
     if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
     else a.loop('shane', null);
@@ -585,6 +585,9 @@ export class GameView {
     // Shane Jeans carries a faint light wherever he goes.
     const jeans = ents.find((e) => e.kind === EntityKind.Shane);
     if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
+    // Jaden Nguyen carries one too.
+    const jaden = ents.find((e) => e.kind === EntityKind.Jaden);
+    if (jaden) lights.push({ key: 'jaden', x: jaden.x, y: jaden.y, radius: BALANCE.jaden.light.radius, intensity: BALANCE.jaden.light.intensity, static: false });
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
     if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });

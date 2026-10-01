@@ -6,6 +6,7 @@ import {
   Health,
   ITEM_NAMES,
   ItemKind,
+  NPC_NAMES,
   PROMPT_LABELS,
   Prompt,
   SLOT_ITEMS,
@@ -321,7 +322,7 @@ export class Hud {
     const gate = world.gateOpen ? '<b class="ok">OPEN · escape through the yard</b>' : world.gatePowered ? `<b class="warn">POWERED</b> ${Math.round(world.gateProgress * 100)}%` : '<span class="dim">no power</span>';
     const known = world.gens.filter((g) => g.flags & GenFlag.Known && !(g.flags & GenFlag.Repaired) && g.progress > 0);
     const obj =
-      `<div class="obj-title">${test ? 'TESTING MODE' : hunter ? 'HUNT THEM DOWN' : 'START THE GENERATORS'}</div>` +
+      `<div class="obj-title">${test ? `TESTING MODE${this.client.room && this.client.room !== 'TEST' ? ` · ${esc(this.client.room)}` : ''}` : hunter ? 'HUNT THEM DOWN' : 'START THE GENERATORS'}</div>` +
       `<div class="gens">${Array.from({ length: req }, (_, i) => `<i class="${i < done ? 'on' : ''}"></i>`).join('')}<span>${done}/${req}</span></div>` +
       `<div>Exit gate: ${gate}</div>` +
       `<div class="dim">Escaped ${world.escaped} · Sacrificed ${world.eliminated}${test ? '' : ` · ${fmtTime(world.timeLeft)}`}</div>` +
@@ -488,6 +489,9 @@ export class Hud {
     const label = PROMPT_LABELS[p] ?? '';
     const m = this.client.match!;
     let text = label;
+    if (p === Prompt.NameNpc) return esc(NPC_NAMES[target] ?? '');
+    if (p === Prompt.NameLoot) return esc(cap(LOOT_NAMES[m.map.loot[target]?.item] ?? ''));
+    if (p === Prompt.NameDrop) return esc((target & 8) !== 0 ? 'Golden pump' : (ITEM_NAMES[target & 7] ?? ''));
     if (p === Prompt.Loot && m.map.loot[target]) text = `Press E to pick up the ${LOOT_NAMES[m.map.loot[target].item] ?? m.map.loot[target].item}`;
     if ((p === Prompt.Heal || p === Prompt.Revive || p === Prompt.Unstake || p === Prompt.PickUp) && m.players.get(target)) {
       text = `${label} ${m.players.get(target)!.name}`;
@@ -505,6 +509,8 @@ export class Hud {
     this.root.remove();
   }
 }
+
+const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
 const LOOT_NAMES: Record<string, string> = {
   bottle: 'bottle',

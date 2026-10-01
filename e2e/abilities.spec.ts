@@ -44,7 +44,7 @@ test('hiding, searching and a thrown bottle work between two browsers', async ({
   await surv.waitForTimeout(700);
   await surv.keyboard.press('KeyE');
   await expect.poll(async () => (await self(surv)).hideState, { timeout: 10000 }).toBe(2);
-  await expect(surv.locator('.hud .prompt')).toContainText('hold breath');
+  await expect(surv.locator('.hud .prompt')).toContainText('leave');
 
   // Zach stands at the locker: the hidden survivor is not in his snapshots.
   await dev(zach, 'tp', [info.locker.exitX, info.locker.exitY]);

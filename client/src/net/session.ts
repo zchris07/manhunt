@@ -10,6 +10,8 @@ export interface Session {
   isHost: boolean;
   /** Offline testing mode (no other players can join). */
   solo?: boolean;
+  /** Testing mode room: starts straight away; anyone with the code can join. */
+  testing?: boolean;
   close(): void;
 }
 

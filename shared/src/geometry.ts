@@ -1,5 +1,5 @@
 import { GridIndex } from './spatialHash';
-import { pointSegDist2, rayCircle, raySegment, segmentCircle, segmentsIntersect } from './math';
+import { pointInPolygon, pointSegDist2, rayCircle, raySegment, segmentCircle, segmentsIntersect } from './math';
 
 export interface SegmentDef {
   ax: number;
@@ -60,8 +60,12 @@ export class Geometry {
   readonly dynamicBase: number;
   /** Move segment index of each window, in map order. */
   readonly windowSegs: number[];
-  /** Per move segment: 1 where Zach may pass (a smashed window). */
+  /** Per move segment: 1 where people may climb through (a smashed window). */
   readonly hunterPass: Uint8Array;
+  /** The lake (wading slows you) and the dock over it (dry), as flat x,y polygons. */
+  private water: number[] = [];
+  private dock: number[] = [];
+  private waterBox = [0, 0, 0, 0];
   private readonly tmpA: number[] = [];
   private readonly tmpB: number[] = [];
 
@@ -129,6 +133,21 @@ export class Geometry {
     if (v !== undefined && v >= 0) this.visSegActive[v] = active ? 1 : 0;
   }
 
+  setWater(lake: number[], dock: number[]): void {
+    this.water = lake;
+    this.dock = dock;
+    const xs = lake.filter((_, i) => i % 2 === 0);
+    const ys = lake.filter((_, i) => i % 2 === 1);
+    this.waterBox = xs.length ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] : [0, 0, 0, 0];
+  }
+
+  /** True if (x,y) is in the lake (and not up on the dock). */
+  inWater(x: number, y: number): boolean {
+    const b = this.waterBox;
+    if (!this.water.length || x < b[0] || y < b[1] || x > b[2] || y > b[3]) return false;
+    return pointInPolygon(x, y, this.water) && !(this.dock.length && pointInPolygon(x, y, this.dock));
+  }
+
   /** Smashes (or restores) window `index`: Zach can climb through a smashed one. */
   setWindowBroken(index: number, broken: boolean): void {
     const m = this.windowSegs[index];
@@ -140,7 +159,7 @@ export class Geometry {
     return m !== undefined && this.hunterPass[m] === 1;
   }
 
-  /** True if a circle at (x,y) overlaps a smashed window (Zach is climbing through). */
+  /** True if a circle at (x,y) overlaps a smashed window (someone is climbing through). */
   inBrokenWindow(x: number, y: number, r: number): boolean {
     const ms = this.moveSeg;
     for (const m of this.windowSegs) {

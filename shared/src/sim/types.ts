@@ -97,6 +97,10 @@ export const Prompt = {
   TalkPlasma: 29,
   SextonMore: 30,
   PickDrop: 31,
+  /** Zach next to an NPC or an item: just its name (target: NPC_NAMES index, loot index, drop item). */
+  NameNpc: 32,
+  NameLoot: 33,
+  NameDrop: 34,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -128,6 +132,9 @@ export const PROMPT_LABELS: Record<number, string> = {
   30: 'Press E to keep listening',
   31: 'Press E to pick up',
 };
+
+/** NPC names, indexed by the NameNpc prompt target. */
+export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen'];
 
 /** Items that take an inventory slot. Duck confit is carried separately (HUD icon). */
 export const ItemKind = {
@@ -165,6 +172,8 @@ export const EntityKind = {
   Drop: 10,
   /** Sexton's Hemp Beam: x,y origin, facing, extra = length / 8. */
   Beam: 11,
+  /** Jaden Nguyen: state = ShaneFlag (+ JadenFlag.Firing). */
+  Jaden: 12,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

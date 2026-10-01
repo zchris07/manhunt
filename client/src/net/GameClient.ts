@@ -171,7 +171,8 @@ export class GameClient {
   }
 
   get isOwner(): boolean {
-    return !!this.lobby && this.lobby.owner === this.you;
+    // Testing mode: everyone in the room has the host's permissions.
+    return !!this.lobby && (this.lobby.owner === this.you || this.lobby.settings.testMode);
   }
 
   private onData(data: Uint8Array): void {

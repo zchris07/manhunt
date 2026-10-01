@@ -221,6 +221,7 @@ export class Plasma implements NpcTarget {
     if (this.gasT > 0) speed *= P.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     moveCircle(w.geo, this, this.radius, Math.cos(this.heading) * speed * dt, Math.sin(this.heading) * speed * dt);

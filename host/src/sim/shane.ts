@@ -4,7 +4,21 @@ import type { ItemHit, NpcTarget } from './npc';
 import type { World } from './World';
 import { visionFor } from './view';
 
-const S = BALANCE.shane;
+/** What Shane Jeans (and anyone built like him) is tuned by. */
+export interface WandererCfg {
+  radius: number;
+  walk: number;
+  chase: number;
+  alertRadius: number;
+  flashAlertSec: number;
+  alertDecay: number;
+  chaseTime: number;
+  hunterBreakRadius: number;
+  loseRadius: number;
+  bottlesToShake: number;
+  fleeTime: number;
+  cooldown: number;
+}
 
 type Mode = 'idle' | 'walk' | 'chase' | 'flee';
 
@@ -15,6 +29,9 @@ type Mode = 'idle' | 'walk' | 'chase' | 'flee';
  * entirely, can't open doors or break barricades, and gives up after a while.
  */
 export class Shane implements NpcTarget {
+  protected readonly S: WandererCfg;
+  /** Who he is (feed lines). */
+  protected readonly who: string = 'Shane Jeans';
   readonly id: number;
   x = 0;
   y = 0;
@@ -25,24 +42,32 @@ export class Shane implements NpcTarget {
   target = 0;
   /** Seconds of flashlight each survivor has built up on him. */
   readonly meter = new Map<number, number>();
-  private modeT = 1;
-  private heading = 0;
-  private chaseT = 0;
-  private cooldownT = 0;
-  private fleeFrom = { x: 0, y: 0 };
-  private bottleHits = 0;
-  private stuckT = 0;
-  private path: number[] = [];
-  private pathT = 0;
-  private nav: NavGrid | null = null;
+  protected modeT = 1;
+  protected heading = 0;
+  protected chaseT = 0;
+  protected cooldownT = 0;
+  protected fleeFrom = { x: 0, y: 0 };
+  protected bottleHits = 0;
+  protected stuckT = 0;
+  protected path: number[] = [];
+  protected pathT = 0;
+  protected nav: NavGrid | null = null;
 
-  constructor(private readonly w: World) {
+  readonly hitRadius: number;
+
+  constructor(
+    protected readonly w: World,
+    cfg: WandererCfg = BALANCE.shane,
+  ) {
+    this.S = cfg;
+    this.hitRadius = cfg.radius;
     this.id = w.allocEntityId();
     this.spawn();
   }
 
   /** Anywhere open on the map, away from the spawns. */
   private spawn(): void {
+    const S = this.S;
     const w = this.w;
     const spawns = [w.map.survivorSpawns[0], w.map.hunterSpawns[0]];
     for (let i = 0; i < 400; i++) {
@@ -58,7 +83,6 @@ export class Shane implements NpcTarget {
     this.facing = this.heading;
   }
 
-  readonly hitRadius = S.radius;
   readonly solid = true;
 
   itemHit(_by: SimPlayer, kind: ItemHit): void {
@@ -82,6 +106,7 @@ export class Shane implements NpcTarget {
 
   /** A thrown bottle hit him: two in one chase shake him off. */
   bottleHit(): void {
+    const S = this.S;
     if (this.mode !== 'chase') return;
     this.bottleHits++;
     if (this.bottleHits >= S.bottlesToShake) this.shakeOff();
@@ -92,14 +117,15 @@ export class Shane implements NpcTarget {
     if (this.mode === 'chase') this.shakeOff();
   }
 
-  private shakeOff(): void {
+  protected shakeOff(): void {
     const t = this.w.players.get(this.target);
     this.fleeFrom = t ? { x: t.move.x, y: t.move.y } : { x: this.x, y: this.y };
     this.endChase('flee');
-    this.w.feed('Shane Jeans ran off');
+    this.w.feed(`${this.who} ran off`);
   }
 
-  private endChase(next: 'walk' | 'flee'): void {
+  protected endChase(next: 'walk' | 'flee'): void {
+    const S = this.S;
     this.target = 0;
     this.cooldownT = S.cooldown;
     this.path = [];
@@ -107,26 +133,40 @@ export class Shane implements NpcTarget {
     this.modeT = next === 'flee' ? S.fleeTime : this.w.rng.range(2, 5);
   }
 
-  private alert(p: SimPlayer): void {
-    const w = this.w;
+  protected alert(p: SimPlayer): void {
     this.mode = 'chase';
     this.target = p.id;
-    this.chaseT = S.chaseTime;
+    this.chaseT = this.S.chaseTime;
     this.bottleHits = 0;
     this.meter.clear();
     this.path = [];
     this.pathT = 0;
-    w.emit('all', { k: 'shane', alerted: true });
-    w.feed('Shane Jeans has been alerted');
+    this.announce(true);
   }
 
-  private eligible(p: SimPlayer): boolean {
+  /** Alerted (or calmed down): everyone is told. */
+  protected announce(alerted: boolean): void {
+    this.w.emit('all', { k: 'shane', alerted });
+    if (alerted) this.w.feed('Shane Jeans has been alerted');
+  }
+
+  /** One chase step toward `t`, `d` away: returns his speed. */
+  protected chaseStep(t: SimPlayer, d: number, dt: number): number {
+    const S = this.S;
+    this.heading = this.steer(t.move.x, t.move.y, dt);
+    // As close as he can get: he stops right beside them.
+    this.facing = Math.atan2(t.move.y - this.y, t.move.x - this.x);
+    return d > S.radius + t.radius + 6 ? S.chase : 0;
+  }
+
+  protected eligible(p: SimPlayer): boolean {
     return p.role === 'survivor' && (p.health === Health.Healthy || p.health === Health.Wounded || p.health === Health.Downed) && p.hideState === 0;
   }
 
   /** Close survivors alert him at once; a flashlight on him builds (and slowly loses) alert. */
   private watch(dt: number): void {
     const w = this.w;
+    const S = this.S;
     if (this.cooldownT > 0 || this.mode === 'chase' || this.mode === 'flee') {
       this.meter.clear();
       return;
@@ -152,6 +192,7 @@ export class Shane implements NpcTarget {
 
   update(dt: number): void {
     const w = this.w;
+    const S = this.S;
     this.cooldownT = Math.max(0, this.cooldownT - dt);
     this.watch(dt);
     let speed = 0;
@@ -161,13 +202,9 @@ export class Shane implements NpcTarget {
       const zachNear = w.order.some((h) => h.role === 'hunter' && h.health !== Health.Eliminated && Math.hypot(h.move.x - this.x, h.move.y - this.y) < S.hunterBreakRadius);
       if (!t || !this.eligible(t) || this.chaseT <= 0 || zachNear || Math.hypot(t.move.x - this.x, t.move.y - this.y) > S.loseRadius) {
         this.endChase('walk');
-        w.emit('all', { k: 'shane', alerted: false });
+        this.announce(false);
       } else {
-        const d = Math.hypot(t.move.x - this.x, t.move.y - this.y);
-        this.heading = this.steer(t.move.x, t.move.y, dt);
-        // As close as he can get: he stops right beside them.
-        speed = d > S.radius + t.radius + 6 ? S.chase : 0;
-        this.facing = Math.atan2(t.move.y - this.y, t.move.x - this.x);
+        speed = this.chaseStep(t, Math.hypot(t.move.x - this.x, t.move.y - this.y), dt);
       }
     } else if (this.mode === 'flee') {
       this.modeT -= dt;
@@ -197,6 +234,7 @@ export class Shane implements NpcTarget {
     }
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     // No door opening, no barricade breaking: closed doors and walls simply stop him.
@@ -212,8 +250,9 @@ export class Shane implements NpcTarget {
   }
 
   /** Straight at the target when he can see them, otherwise along a path around walls. */
-  private steer(tx: number, ty: number, dt: number): number {
+  protected steer(tx: number, ty: number, dt: number): number {
     const w = this.w;
+    const S = this.S;
     if (w.geo.hasLineOfSight(this.x, this.y, tx, ty) && this.stuckT < 0.3) {
       this.path = [];
       return Math.atan2(ty - this.y, tx - this.x);
@@ -229,6 +268,6 @@ export class Shane implements NpcTarget {
   }
 
   unstick(): void {
-    resolveOverlaps(this.w.geo, this, S.radius);
+    resolveOverlaps(this.w.geo, this, this.S.radius);
   }
 }

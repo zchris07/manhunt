@@ -173,6 +173,13 @@ export const ShaneFlag = {
   Fleeing: 2,
 } as const;
 
+/** Jaden Nguyen's state bits: ShaneFlag's, plus a muzzle flash right after a shot. */
+export const JadenFlag = {
+  Chasing: 1,
+  Fleeing: 2,
+  Firing: 4,
+} as const;
+
 /** Chris Zelley's state bits (EntityRecord.state for EntityKind.Chris). */
 export const ChrisFlag = {
   Dead: 1,
@@ -289,6 +296,8 @@ export interface WorldState {
   reveal: boolean;
   /** Zach only: direction (radians) to Shane Jeans while he's chasing someone, else null. */
   shaneDir: number | null;
+  /** Testing mode: every NPC on the map (k = NPC_NAMES index). */
+  npcs: { k: number; x: number; y: number }[];
 }
 
 export const GenFlag = {
@@ -337,6 +346,8 @@ export function encodeWorld(ws: WorldState): Uint8Array {
   for (const p of ws.radar) w.u16(Math.max(0, Math.round(p.x))).u16(Math.max(0, Math.round(p.y)));
   w.u8(ws.reveal ? 1 : 0);
   w.u16(ws.shaneDir === null ? 0xffff : Math.round(((((ws.shaneDir % TAU) + TAU) % TAU) / TAU) * 0xfffe));
+  w.u8(ws.npcs.length);
+  for (const n of ws.npcs) w.u8(n.k).u16(Math.max(0, Math.round(n.x))).u16(Math.max(0, Math.round(n.y)));
   return w.finish();
 }
 
@@ -371,6 +382,9 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
   const reveal = r.u8() === 1;
   const sd = r.u16();
   const shaneDir = sd === 0xffff ? null : (sd / 0xfffe) * TAU;
+  const npcs: WorldState['npcs'] = [];
+  const nn = r.u8();
+  for (let i = 0; i < nn; i++) npcs.push({ k: r.u8(), x: r.u16(), y: r.u16() });
   return {
     timeLeft,
     required,
@@ -392,6 +406,7 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
     radar,
     reveal,
     shaneDir,
+    npcs,
   };
 }
 

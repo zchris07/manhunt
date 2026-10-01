@@ -69,6 +69,71 @@ export const LOOT_TO_ITEM: Record<Exclude<LootKind, 'confit'>, ItemKind> = {
   trap: ItemKind.Trap,
 };
 
+/** Zach next to an NPC or an item gets its name (survivors see them in their prompts). */
+function nameNear(w: World, p: SimPlayer): void {
+  const { x, y } = p.move;
+  const npcs = [
+    w.sexton.alive ? w.sexton : null,
+    w.shane,
+    w.chris.solid ? w.chris : null,
+    w.marc,
+    w.plasma,
+    w.jaden,
+  ];
+  let best = -1;
+  let bd: number = R.npcName;
+  npcs.forEach((n, i) => {
+    if (!n) return;
+    const d = Math.hypot(n.x - x, n.y - y);
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  });
+  if (best >= 0) {
+    p.prompt = Prompt.NameNpc;
+    p.promptTarget = best;
+    return;
+  }
+  const di = nearestIndex(w.drops, x, y, R.pickup, () => true);
+  if (di >= 0) {
+    const d = w.drops[di];
+    p.prompt = Prompt.NameDrop;
+    p.promptTarget = d.kind | (d.golden ? 8 : 0);
+    return;
+  }
+  const li = nearestIndex(w.map.loot, x, y, R.pickup, (_l, i) => !w.lootTaken[i]);
+  if (li >= 0) {
+    p.prompt = Prompt.NameLoot;
+    p.promptTarget = li;
+  }
+}
+
+/** A survivor grabs a loot spawn. */
+function takeLoot(w: World, p: SimPlayer, li: number): void {
+  const item = w.map.loot[li];
+  if (!item || w.lootTaken[li] || !roomFor(p, item.item)) return;
+  w.lootTaken[li] = true;
+  if (w.testMode) {
+    w.emit([p.id], { k: 'item', text: 'Items are infinite' });
+    return;
+  }
+  if (item.item === 'confit') {
+    p.confit = 1;
+    w.emit([p.id], { k: 'item', text: 'Got duck confit' });
+    return;
+  }
+  const kind = LOOT_TO_ITEM[item.item];
+  if (kind === ItemKind.Shotgun) {
+    // Swaps out a golden pump.
+    giveShotgun(w, p, false, BALANCE.items.shotgun.shells);
+  } else {
+    p.inv[kind]++;
+    if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
+  }
+  w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_TEXT[item.item]}` });
+}
+
 /** Works out the E and Space prompts for every player. */
 export function computePrompts(w: World): void {
   for (const p of w.order) {
@@ -191,6 +256,8 @@ function hunterPrompts(w: World, p: SimPlayer): void {
     const di = nearbyDoor(w, x, y);
     if (di >= 0) set(w.doors[di] ? Prompt.CloseDoor : Prompt.OpenDoor, di);
   }
+  // Nothing to do here: he still sees who or what is next to him.
+  if (p.prompt === Prompt.None) nameNear(w, p);
 }
 
 /** Edge-triggered button handling for one input. */
@@ -276,7 +343,8 @@ function survivorInteract(w: World, p: SimPlayer): void {
   const S = BALANCE.survivor;
   switch (p.prompt) {
     case Prompt.Loot:
-      w.startAction(p, Action.Loot, S.pickupTime, p.promptTarget);
+      // Instant: no pickup animation.
+      takeLoot(w, p, p.promptTarget);
       break;
     case Prompt.Hide:
       w.hiding[p.promptTarget] = p.id;
@@ -396,34 +464,6 @@ export function updateInteractions(w: World, dt: number): void {
         }
         p.actionT = w.gate.progress * p.actionDur;
         continue;
-      case Action.Loot: {
-        p.actionT += dt;
-        if (p.actionT < p.actionDur) continue;
-        const li = p.actionTarget;
-        const item = w.map.loot[li];
-        p.action = Action.None;
-        if (w.lootTaken[li] || !roomFor(p, item.item)) continue;
-        w.lootTaken[li] = true;
-        if (w.testMode) {
-          w.emit([p.id], { k: 'item', text: 'Items are infinite' });
-          continue;
-        }
-        if (item.item === 'confit') {
-          p.confit = 1;
-          w.emit([p.id], { k: 'item', text: 'Got duck confit' });
-          continue;
-        }
-        const kind = LOOT_TO_ITEM[item.item];
-        if (kind === ItemKind.Shotgun) {
-          // Swaps out a golden pump.
-          giveShotgun(w, p, false, BALANCE.items.shotgun.shells);
-        } else {
-          p.inv[kind]++;
-          if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
-        }
-        w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_TEXT[item.item]}` });
-        continue;
-      }
       case Action.Plant: {
         p.actionT += dt;
         if (p.actionT < p.actionDur) continue;

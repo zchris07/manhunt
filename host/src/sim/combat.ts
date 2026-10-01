@@ -214,7 +214,7 @@ function lungeLanded(h: SimPlayer): void {
   h.move.slowMul = H.attack.hitSlowMul;
 }
 
-export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch';
+export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet';
 
 /**
  * Takes `amount` (a fraction of full health) off a survivor: they flinch, and at zero they're

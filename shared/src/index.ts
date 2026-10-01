@@ -1,5 +1,5 @@
 export const GAME_NAME = 'MANHUNT';
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 export * from './math';
 export * from './rng';

@@ -155,7 +155,7 @@ export class LobbyScreen {
     const s = v.settings;
     const pv = rolePreview(v);
     const allReady = v.players.filter((p) => p.connected).every((p) => p.ready);
-    const canStart = owner && allReady && (s.testMode || (pv.h >= 1 && pv.s >= 1));
+    const canStart = owner && (s.testMode || (allReady && pv.h >= 1 && pv.s >= 1));
     const rb = resolveBalance({ hunters: Math.max(1, pv.h), survivors: Math.max(1, pv.s), difficulty: s.difficulty, escapeFraction: s.escapeFraction });
     const settings = $(this.root, '#settings');
     const focused = document.activeElement?.id;

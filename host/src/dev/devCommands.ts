@@ -53,9 +53,10 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       s.unstick();
       break;
     }
-    case 'shane': {
-      // Bring Shane Jeans next to this player (close enough to alert him).
-      const sh = w.shane;
+    case 'shane':
+    case 'jaden': {
+      // Bring Shane Jeans or Jaden Nguyen next to this player (close enough to alert him).
+      const sh = cmd === 'jaden' ? w.jaden : w.shane;
       sh.x = p.move.x + (args[0] ?? 40);
       sh.y = p.move.y + (args[1] ?? 0);
       sh.unstick();

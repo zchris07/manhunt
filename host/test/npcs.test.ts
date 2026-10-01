@@ -141,26 +141,33 @@ describe('Shane Jeans', () => {
 });
 
 describe('JARVIS, Sexton, windows, the machete', () => {
-  it('JARVIS shows everything on screen to every player for 10 s', () => {
+  it('JARVIS shows everything on screen to survivors for 10 s, never to Zach', () => {
     const w = makeWorld({ survivors: 2 });
     parkSexton(w);
     parkShane(w);
     const d = new Driver(w);
     const h = w.players.get(1)!;
     const s = w.players.get(2)!;
+    const mate = w.players.get(3)!;
     const c = clearLane(w, 450);
     place(s, c.x, c.y);
     place(h, c.x + 300, c.y);
+    place(mate, c.x + 150, c.y);
     h.facing = 0;
     s.facing = Math.PI;
+    mate.facing = Math.PI / 2;
     expect(canSee(w, h, s.move.x, s.move.y)).toBe(false);
+    expect(canSee(w, mate, mate.move.x - 350, mate.move.y)).toBe(false);
     s.jarvis = 1;
     d.tap(s.id, Btn.Ability);
-    expect(canSee(w, h, s.move.x, s.move.y)).toBe(true);
-    expect(buildView(w, h).world.reveal).toBe(true);
-    d.run(secs(BALANCE.sexton.jarvisRadarSec) + 2);
-    expect(buildView(w, h).world.reveal).toBe(false);
+    expect(canSee(w, mate, mate.move.x - 350, mate.move.y)).toBe(true);
+    expect(buildView(w, mate).world.reveal).toBe(true);
     expect(canSee(w, h, s.move.x, s.move.y)).toBe(false);
+    expect(buildView(w, h).world.reveal).toBe(false);
+    d.run(secs(BALANCE.sexton.jarvisRadarSec) + 2);
+    expect(buildView(w, mate).world.reveal).toBe(false);
+    mate.facing = Math.PI / 2;
+    expect(canSee(w, mate, mate.move.x - 350, mate.move.y)).toBe(false);
   });
 
   it('Sexton never comes back once slain, even in testing mode', () => {
@@ -171,7 +178,7 @@ describe('JARVIS, Sexton, windows, the machete', () => {
     expect(w.sexton.alive).toBe(false);
   });
 
-  it('one swipe smashes a window; Zach climbs through slowly, survivors still cannot', () => {
+  it('one swipe smashes a window; then Zach and survivors climb through slowly', () => {
     const w = makeWorld();
     parkSexton(w);
     parkShane(w);
@@ -221,11 +228,11 @@ describe('JARVIS, Sexton, windows, the machete', () => {
     }
     expect((h.move.x - m.x) * n.x + (h.move.y - m.y) * n.y).toBeLessThan(0);
     expect(slowest).toBeLessThan(BALANCE.hunter.walk * 0.5);
-    // Survivors still can't get through a smashed window.
+    // Survivors vault through a smashed window too (slowly).
     place(h, 60, 60);
     place(s, m.x + n.x * 40, m.y + n.y * 40);
-    d.run(20, (p) => (p === s ? { moveX: -n.x, moveY: -n.y } : undefined));
-    expect((s.move.x - m.x) * n.x + (s.move.y - m.y) * n.y).toBeGreaterThan(0);
+    d.run(secs(4), (p) => (p === s ? { moveX: -n.x, moveY: -n.y } : undefined));
+    expect((s.move.x - m.x) * n.x + (s.move.y - m.y) * n.y).toBeLessThan(0);
   });
 
   it('holding the charge for 3 s swings by itself', () => {

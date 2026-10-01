@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, ChrisFlag, DEG, EF, EntityKind, GenFlag, Health, ItemKind, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -160,7 +160,7 @@ class PlayerSprite {
     this.root.addChild(this.shadow, this.aura, this.legs, this.downed, this.body, this.carried, this.fx, this.bar.g, this.label);
   }
 
-  set(p: RenderPlayer, time: number, dt: number, stakePos: { x: number; y: number } | null): void {
+  set(p: RenderPlayer, time: number, dt: number, stakePos: { x: number; y: number } | null, wading = false): void {
     const health = p.state & EF.HealthMask;
     const hunter = (p.state & EF.Hunter) !== 0;
     const r = hunter ? BALANCE.hunter.radius : BALANCE.survivor.radius;
@@ -176,14 +176,14 @@ class PlayerSprite {
     }
 
     this.shadow.clear();
-    if (!down) {
+    if (!down && !wading) {
       this.shadow.ellipse(5, 8, r + 5, r + 3).fill({ color: 0x000000, alpha: 0.18 });
       this.shadow.ellipse(4, 6, r + 1, r).fill({ color: 0x000000, alpha: 0.28 });
     }
 
     // Legs: two feet swinging along the direction of travel.
     const moving = this.walker.speed > 12 && !staked;
-    this.legs.visible = !down && !staked && !knocked;
+    this.legs.visible = !down && !staked && !knocked && !wading;
     if (this.legs.visible) {
       this.legs.rotation = moving ? this.walker.moveDir : p.facing;
       const stride = moving ? Math.min(1, this.walker.speed / (hunter ? 220 : 170)) * (hunter ? 10 : 8) : 0;
@@ -294,12 +294,12 @@ class PlayerSprite {
       this.fx.circle(ex + Math.sin(p.facing) * 3, ey - Math.cos(p.facing) * 3, 2).fill({ color: 0x9dff9a });
     }
 
-    // Everyone's health shows over their head.
-    const showBar = !staked && health !== Health.Carried;
+    // Survivors' health shows over their heads (Zach has no bar).
+    const showBar = !hunter && !staked && health !== Health.Carried;
     this.bar.g.visible = showBar;
     if (showBar) {
       this.bar.g.position.set(0, -r - 16);
-      this.bar.draw(p.hp / 255, dt, hunter ? 44 : 38);
+      this.bar.draw(p.hp / 255, dt, 38);
     }
     this.label.position.set(0, -r - 22);
   }
@@ -344,7 +344,8 @@ class PlayerSprite {
         // Charge meter: a dark arc filling around Zach's feet, flaring when full.
         const full = charge >= C.heavyAt / C.max;
         const R = 30;
-        g.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge).stroke({ width: 3, color: full ? 0xb01818 : 0x6a2020, alpha: full ? 0.6 + 0.3 * Math.sin(time * 20) : 0.6 });
+        // moveTo first: an arc on its own is joined to the last point by a stray line.
+        g.moveTo(0, -R).arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge).stroke({ width: 3, color: full ? 0xb01818 : 0x6a2020, alpha: full ? 0.6 + 0.3 * Math.sin(time * 20) : 0.6 });
       }
       void facing;
       return;
@@ -404,11 +405,12 @@ class PlayerSprite {
       g.closePath();
       g.fill({ color: heavy ? 0x5a0808 : 0xb8b0a0, alpha });
     }
-    g.arc(0, 0, R, Math.max(from, to - 0.5), to).stroke({ width: heavy ? 4 : 2.5, color: heavy ? 0x9a1010 : 0xe0dccc, alpha: smear * 0.7 });
+    const tail = Math.max(from, to - 0.5);
+    g.moveTo(Math.cos(tail) * R, Math.sin(tail) * R).arc(0, 0, R, tail, to).stroke({ width: heavy ? 4 : 2.5, color: heavy ? 0x9a1010 : 0xe0dccc, alpha: smear * 0.7 });
   }
 }
 
-type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma';
+type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden';
 
 interface Bubble {
   root: Container;
@@ -535,6 +537,9 @@ export class EntityLayer {
   private readonly markers = new Graphics();
   private readonly gens = new Graphics();
   private readonly effects = new Graphics();
+  /** Ripples around anyone wading in the lake. */
+  private readonly wakes = new Graphics();
+  private readonly wakeLast = new Map<number, { x: number; y: number; speed: number }>();
   /** Objectives (generators, the gate lever): hidden in the fog like everything here. */
   private readonly objectives = new Container();
   private readonly genSprites: Sprite[] = [];
@@ -546,6 +551,7 @@ export class EntityLayer {
   private tablets: TabletFlight[] = [];
   private shots: { x: number; y: number; p: number[]; gold: boolean; t: number }[] = [];
   private marc: NpcSprite | null = null;
+  private jaden: { npc: NpcSprite; gun: Graphics; mark: Text } | null = null;
   private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
   /** Sexton's Hemp Beam (redrawn every frame while it fires). */
   private readonly beam = new Graphics();
@@ -598,7 +604,7 @@ export class EntityLayer {
     lever.rect(gt.leverX - 3, gt.leverY - 18, 6, 12).fill({ color: 0x6a1a14 });
     this.objectives.addChild(lever);
     this.beam.blendMode = 'add';
-    this.root.addChild(this.objectives, this.ground, this.gens, this.markers, this.effects, this.beam);
+    this.root.addChild(this.objectives, this.ground, this.wakes, this.gens, this.markers, this.effects, this.beam);
   }
 
   /** A generator started (or not): swap its art and light its lamp. */
@@ -681,7 +687,7 @@ export class EntityLayer {
         this.root.addChild(s.root);
       }
       s.root.visible = true;
-      s.set(p, time, dt, stakeOf.get(p.id) ?? null);
+      s.set(p, time, dt, stakeOf.get(p.id) ?? null, this.inWater(p.x, p.y));
       this.positions.set(p.id, { x: p.x, y: p.y });
       seen.add(p.id);
     };
@@ -691,6 +697,7 @@ export class EntityLayer {
     let chrisSeen = false;
     let marcSeen = false;
     let plasmaSeen = false;
+    let jadenSeen = false;
     this.beam.clear();
     for (const e of ents) {
       if (e.kind === EntityKind.Player) {
@@ -708,6 +715,9 @@ export class EntityLayer {
       } else if (e.kind === EntityKind.Marc) {
         marcSeen = true;
         this.drawMarc(e, dt, time);
+      } else if (e.kind === EntityKind.Jaden) {
+        jadenSeen = true;
+        this.drawJaden(e, dt, time);
       } else if (e.kind === EntityKind.Plasma) {
         plasmaSeen = true;
         this.drawPlasma(e, dt, time);
@@ -724,8 +734,10 @@ export class EntityLayer {
     if (this.chris) this.chris.root.visible = chrisSeen;
     if (this.marc) this.marc.root.visible = marcSeen;
     if (this.plasma) this.plasma.man.root.visible = plasmaSeen;
+    if (this.jaden) this.jaden.npc.root.visible = jadenSeen;
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
+    this.drawWakes(ents, self, time, dt);
     for (const [id, c] of this.things) {
       if (!seen.has(id)) {
         c.destroy({ children: true });
@@ -736,7 +748,7 @@ export class EntityLayer {
     // Dialogue bubble pops in above whoever is speaking.
     if (this.bubble) {
       const b = this.bubble;
-      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : this.sexton;
+      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : this.sexton;
       if (time > b.until || !speaker) {
         b.root.destroy({ children: true });
         this.bubble = null;
@@ -800,7 +812,7 @@ export class EntityLayer {
       if (g.flags & GenFlag.Repaired || !(g.flags & GenFlag.Known) || g.progress <= 0.001) return;
       const d = this.map.generators[i];
       this.gens.circle(d.x, d.y - 46, 12).fill({ color: INK, alpha: 0.7 });
-      this.gens.arc(d.x, d.y - 46, 10, -Math.PI / 2, -Math.PI / 2 + g.progress * Math.PI * 2).stroke({ width: 4, color: g.flags & GenFlag.Regressing ? 0xa02a20 : 0xc8c0a0 });
+      this.gens.moveTo(d.x, d.y - 56).arc(d.x, d.y - 46, 10, -Math.PI / 2, -Math.PI / 2 + g.progress * Math.PI * 2).stroke({ width: 4, color: g.flags & GenFlag.Regressing ? 0xa02a20 : 0xc8c0a0 });
     });
     this.markers.clear();
     if (!this.viewerIsHunter) {
@@ -810,6 +822,54 @@ export class EntityLayer {
         this.markers.circle(h.x, h.y - 26, 5).fill({ color: 0x8aa070 }).stroke({ width: 1.5, color: INK });
       });
     }
+  }
+
+  private inWater(x: number, y: number): boolean {
+    return pointInPolygon(x, y, this.map.lake) && !pointInPolygon(x, y, this.map.dock);
+  }
+
+  /** Wading: the water laps at their waist, rings spread out, a wake trails behind when moving. */
+  private drawWakes(ents: InterpEntity[], self: RenderPlayer | null, time: number, dt: number): void {
+    const g = this.wakes;
+    g.clear();
+    const people: { id: number; x: number; y: number }[] = [];
+    for (const e of ents) {
+      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden) {
+        if (self && e.id === self.id) continue;
+        people.push(e);
+      }
+    }
+    if (self) people.push(self);
+    const live = new Set<number>();
+    for (const p of people) {
+      if (!this.inWater(p.x, p.y)) continue;
+      live.add(p.id);
+      const last = this.wakeLast.get(p.id);
+      const v = last && dt > 0 ? Math.hypot(p.x - last.x, p.y - last.y) / dt : 0;
+      const speed = last ? last.speed + (Math.min(300, v) - last.speed) * Math.min(1, dt * 8) : 0;
+      this.wakeLast.set(p.id, { x: p.x, y: p.y, speed });
+      const moving = Math.min(1, speed / 120);
+      // Water around the body hides the legs.
+      g.ellipse(p.x, p.y + 2, 19, 16).fill({ color: 0x1c3038, alpha: 0.55 });
+      // Spreading rings, quicker and more of them when moving.
+      const n = 3;
+      for (let i = 0; i < n; i++) {
+        const k = (time * (0.7 + moving * 0.9) + i / n + p.id * 0.13) % 1;
+        g.ellipse(p.x, p.y + 2, 18 + k * (22 + moving * 18), 15 + k * (18 + moving * 14)).stroke({ width: 1.5, color: 0xb8d0d8, alpha: (1 - k) * (0.35 + moving * 0.25) });
+      }
+      // A V-shaped wake behind them.
+      if (last && moving > 0.15) {
+        const a = Math.atan2(p.y - last.y, p.x - last.x);
+        for (const side of [-1, 1]) {
+          const bx = p.x - Math.cos(a) * 14;
+          const by = p.y - Math.sin(a) * 14;
+          const ex = p.x - Math.cos(a + side * 0.45) * (30 + moving * 26);
+          const ey = p.y - Math.sin(a + side * 0.45) * (30 + moving * 26);
+          g.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 2, color: 0xd0e4ea, alpha: 0.35 * moving });
+        }
+      }
+    }
+    for (const id of this.wakeLast.keys()) if (!live.has(id)) this.wakeLast.delete(id);
   }
 
   private drawSexton(e: InterpEntity, dt: number, time: number): void {
@@ -939,7 +999,7 @@ export class EntityLayer {
     if (st & ChrisFlag.Working) {
       const p = e.action / 255;
       c.mark.circle(0, -30, 11).fill({ color: INK, alpha: 0.7 });
-      c.mark.arc(0, -30, 9, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2).stroke({ width: 4, color: 0x5ad07a });
+      c.mark.moveTo(0, -39).arc(0, -30, 9, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2).stroke({ width: 4, color: 0x5ad07a });
     } else if (st & ChrisFlag.Rescuing) {
       const pulse = 1 + 0.2 * Math.sin(time * 10);
       const a = 3 * pulse;
@@ -1052,6 +1112,38 @@ export class EntityLayer {
   }
 
   /** Shane Jeans: double denim; a "!" over his head while he's chasing someone. */
+  /** Jaden Nguyen: a pistol in hand, a "!" while he's after someone, a flash when he fires. */
+  private drawJaden(e: InterpEntity, dt: number, time: number): void {
+    if (!this.jaden) {
+      const npc = new NpcSprite(this.assets, 'char.jaden', 23, this.root);
+      const gun = new Graphics();
+      const mark = new Text({ text: '!', style: { fontFamily: 'Oswald, Impact, sans-serif', fontSize: 22, fontWeight: '700', fill: 0xb3121b, stroke: { color: 0x000000, width: 3 } } });
+      mark.anchor.set(0.5, 1);
+      mark.position.set(0, -24);
+      npc.root.addChild(gun, mark);
+      this.jaden = { npc, gun, mark };
+    }
+    const { npc, gun, mark } = this.jaden;
+    npc.step(e, dt);
+    const chasing = (e.state & JadenFlag.Chasing) !== 0;
+    mark.visible = chasing;
+    if (chasing) mark.scale.set(1 + 0.15 * Math.sin(time * 10));
+    // The pistol: held at his side, raised and aimed while he's after someone.
+    gun.clear();
+    gun.rotation = e.facing;
+    const firing = (e.state & JadenFlag.Firing) !== 0;
+    const x0 = chasing ? 14 : 8;
+    const y0 = chasing ? 2 : 10;
+    const kick = firing ? -2 : 0;
+    gun.rect(x0 + kick, y0 - 2, 13, 4).fill({ color: 0x26262a }).stroke({ width: 1, color: INK });
+    gun.rect(x0 + kick, y0 - 2, 4, 6).fill({ color: 0x3a3a40 });
+    if (firing) {
+      const fx = x0 + 15;
+      gun.poly([fx, y0 - 5, fx + 12, y0, fx, y0 + 5, fx + 4, y0]).fill({ color: 0xffe08a, alpha: 0.95 });
+      gun.circle(fx + 3, y0, 4).fill({ color: 0xffffff, alpha: 0.9 });
+    }
+  }
+
   private drawShane(e: InterpEntity, dt: number, time: number): void {
     if (!this.shane) {
       const root = new Container();

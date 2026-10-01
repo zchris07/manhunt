@@ -135,6 +135,7 @@ export class Marc implements NpcTarget {
     }
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
     moveCircle(w.geo, this, M.radius, Math.cos(this.heading) * speed * dt, Math.sin(this.heading) * speed * dt);

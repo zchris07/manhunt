@@ -132,7 +132,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     const elapsed = s.kbDur - s.kbT;
     const step = Math.min(dt, s.kbT);
     const v = dashSpeed(s.kbPeak, elapsed + step / 2, s.kbDur);
-    moveCircle(geo, s, radius, Math.cos(s.kbAng) * v * step, Math.sin(s.kbAng) * v * step, ctx.role === 'hunter');
+    moveCircle(geo, s, radius, Math.cos(s.kbAng) * v * step, Math.sin(s.kbAng) * v * step, true);
     s.kbT = Math.max(0, s.kbT - dt);
   }
 
@@ -218,12 +218,16 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     // Energy drink: walking and running up to 15% faster, fading with the drink.
     if (boostK > 0 && (gait === Gait.Walk || gait === Gait.Run)) speed *= 1 + E.speedMul * boostK;
     if (s.slowT > 0) speed *= s.slowMul;
+    // Survivors vault through smashed windows too.
+    if (geo.inBrokenWindow(s.x, s.y, radius + 4)) speed *= sv.windowClimbMul;
   }
+  // Wading through the lake.
+  if (geo.inWater(s.x, s.y)) speed *= BALANCE.wadeMul;
 
   if (moving) {
     dx *= speed * dt;
     dy *= speed * dt;
-    moveCircle(geo, s, radius, dx, dy, role === 'hunter');
+    moveCircle(geo, s, radius, dx, dy, true);
   }
   return gait;
 }

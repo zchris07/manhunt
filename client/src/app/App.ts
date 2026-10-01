@@ -111,12 +111,18 @@ export class App {
     }
   }
 
-  /** Solo testing mode: an offline match where T switches between Zach and survivor. */
+  /**
+   * Testing mode: a room that starts straight away (T switches between Zach and survivor).
+   * Anyone with the code can join, with the host's permissions. Offline if no room opens.
+   */
   private async test(name: string): Promise<void> {
     storageSet('manhunt.name', name);
     this.showLanding('', 'Setting up testing mode...');
     try {
-      const s = await hostLocal(name);
+      const s = await hostGame(name).then(
+        (h) => Object.assign(h, { testing: true }),
+        () => hostLocal(name),
+      );
       this.bind(s);
     } catch (e) {
       this.showLanding(`Could not start testing mode: ${(e as Error).message ?? e}`);
@@ -152,10 +158,13 @@ export class App {
         history.replaceState(null, '', url);
       }),
       c.on('lobby', () => {
-        if (s.solo && c.lobby?.phase === 'lobby') {
-          // Testing mode on your own: skip the lobby.
+        if ((s.solo || s.testing) && c.lobby?.phase === 'lobby') {
+          // Testing mode: skip the lobby (a testing room only the first time).
           if (!c.lobby.settings.testMode) c.send({ t: 'settings', settings: { ...c.lobby.settings, testMode: true } });
-          else c.send({ t: 'start' });
+          else {
+            c.send({ t: 'start' });
+            s.testing = false;
+          }
           return;
         }
         if (c.state === 'lobby' && this.screen !== 'lobby') this.showLobby();
