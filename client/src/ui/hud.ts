@@ -199,7 +199,7 @@ export class Hud {
       this.editor = null;
       return;
     }
-    const ed = el('div', 'inv-editor', '<div class="inv-title">INVENTORY <span>drag items to rearrange · Tab to close</span></div><div class="inv-slots"></div>');
+    const ed = el('div', 'inv-editor', '<div class="inv-title">INVENTORY </div><div class="inv-slots"></div>');
     this.editor = ed;
     this.root.parentElement!.appendChild(ed);
     this.renderEditor(self);
@@ -321,7 +321,7 @@ export class Hud {
     const gate = world.gateOpen ? '<b class="ok">OPEN · escape through the yard</b>' : world.gatePowered ? `<b class="warn">POWERED</b> ${Math.round(world.gateProgress * 100)}%` : '<span class="dim">no power</span>';
     const known = world.gens.filter((g) => g.flags & GenFlag.Known && !(g.flags & GenFlag.Repaired) && g.progress > 0);
     const obj =
-      `<div class="obj-title">${test ? 'TESTING MODE <span class="dim">T switches role</span>' : hunter ? 'HUNT THEM DOWN' : 'START THE GENERATORS'}</div>` +
+      `<div class="obj-title">${test ? 'TESTING MODE' : hunter ? 'HUNT THEM DOWN' : 'START THE GENERATORS'}</div>` +
       `<div class="gens">${Array.from({ length: req }, (_, i) => `<i class="${i < done ? 'on' : ''}"></i>`).join('')}<span>${done}/${req}</span></div>` +
       `<div>Exit gate: ${gate}</div>` +
       `<div class="dim">Escaped ${world.escaped} · Sacrificed ${world.eliminated}${test ? '' : ` · ${fmtTime(world.timeLeft)}`}</div>` +
@@ -342,7 +342,7 @@ export class Hud {
     $(this.root, '#stambar').style.display = spectating ? 'none' : '';
     if (spectating) {
       const target = m.players.get(self.spectating);
-      status = `<div>Spectating <b>${esc(target?.name ?? '...')}</b></div><div class="dim">Click or ← → to switch</div>`;
+      status = `<div>Spectating <b>${esc(target?.name ?? '...')}</b></div>`;
     } else {
       const role = hunter ? 'hunter' : 'survivor';
       const cap = maxStamina(role, self.boostT);
@@ -372,9 +372,9 @@ export class Hud {
           }</div>` +
           (self.boostT > 0 ? `<div class="cyan">ENERGY DRINK ${Math.ceil(self.boostT)}s</div>` : '') +
           (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${self.goggleMeter.toFixed(1)}s`}</div>` : '') +
-          (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s. Wait for a teammate.</div>` : '') +
-          (self.health === Health.Carried ? `<div>Struggle: ${Math.round(self.wiggle * 100)}% <span class="dim">(hold move keys)</span></div>` : '') +
-          (self.hideState === 2 ? `<div>Breath ${Math.round(self.breath * 100)}% <span class="dim">(hold Space)</span></div>` : '');
+          (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s</div>` : '') +
+          (self.health === Health.Carried ? `<div>Struggle: ${Math.round(self.wiggle * 100)}%</div>` : '') +
+          (self.hideState === 2 ? `<div>Breath ${Math.round(self.breath * 100)}%</div>` : '');
       }
     }
 

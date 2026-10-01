@@ -87,7 +87,7 @@ export function updateObjectives(w: World, dt: number): void {
         w.geo.setDynamicActive(w.map.gate.dyn, false);
         for (const p of openers) w.cancelAction(p);
         w.emit('all', { k: 'gateOpen' });
-        w.feed('The gate is open. RUN.');
+        w.feed('The gate is open');
       }
     }
   }

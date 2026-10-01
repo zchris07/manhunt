@@ -74,8 +74,8 @@ export class Marc implements NpcTarget {
     }
     const line = hurt && confit ? "Let me patch you up. And here, take some duck confit." : hurt ? 'Hold still... there. Good as new.' : confit ? 'Here, take some duck confit. Trust me.' : "You're good, man. Stay safe out there.";
     this.say(line);
-    if (confit) w.emit([p.id], { k: 'item', text: 'Marc gave you duck confit. Press E on a downed or staked teammate to rescue them instantly.' });
-    if (hurt) w.emit([p.id], { k: 'item', text: 'Marc healed you to full health' });
+    if (confit) w.emit([p.id], { k: 'item', text: 'Got duck confit' });
+    if (hurt) w.emit([p.id], { k: 'item', text: 'Healed' });
   }
 
   /** Zach's machete (or anything of his): he protests and stands his ground. */

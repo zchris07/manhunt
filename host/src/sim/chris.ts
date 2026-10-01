@@ -378,7 +378,7 @@ export class Chris implements NpcTarget {
     this.ascendT = 0;
     this.moving = false;
     w.emit('all', { k: 'chris', say: 'My work here is done.' });
-    w.feed('Chris Zelley sprouted wings and flew to the heavens');
+    w.feed('Chris Zelley ascended');
   }
 
   /**

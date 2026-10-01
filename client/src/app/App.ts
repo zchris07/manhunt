@@ -48,11 +48,6 @@ export class App {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.screen === 'match') this.toggleSettings();
     });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && this.session?.isHost && this.screen === 'match') {
-        this.game?.hud.feed('You are hosting: keep this tab in the foreground so nobody lags.');
-      }
-    });
     this.pixi.ticker.add((t) => {
       if (this.game) this.game.frame(t.deltaMS, performance.now());
       else this.input.endFrame();

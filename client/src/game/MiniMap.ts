@@ -68,7 +68,7 @@ export class MiniMap {
     this.root.insertAdjacentHTML('beforeend', '<div class="mm-hint">M · map</div>');
     parent.appendChild(this.root);
 
-    this.fullWrap = el('div', 'fullmap', '<div class="fm-title">MAP <span>press M to close</span></div>');
+    this.fullWrap = el('div', 'fullmap', '<div class="fm-title">MAP</div>');
     this.full = el('canvas');
     this.fullWrap.appendChild(this.full);
     this.fullWrap.insertAdjacentHTML(

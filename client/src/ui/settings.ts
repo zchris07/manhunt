@@ -39,7 +39,7 @@ export function openSettings(parent: HTMLElement, h: SettingsHandlers): HTMLElem
     'div',
     'modal',
     `<div class="panel" style="width:min(640px,100%)">
-      <h2 style="margin-top:0">Settings <span class="note">(the game keeps running)</span></h2>
+      <h2 style="margin-top:0">Settings</h2>
       ${slider('master', 'Master volume')}
       ${slider('sfx', 'Soundcloud Burst')}
       ${slider('ambience', "Sexton's reel")}

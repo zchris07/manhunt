@@ -124,7 +124,7 @@ export class GameView {
     this.doorState = m.map.doors.map((d) => !m.map.dynamicSegments[d.dyn].active);
     this.repaired = m.map.generators.map(() => false);
     o.audio.stopAllLoops();
-    this.hud.center(this.roleIsHunter ? 'You are Zach Branch. Hunt them.' : m.role === 'spectator' ? 'Spectating' : 'Start every generator. Stay out of sight.', 4500);
+    this.hud.center(this.roleIsHunter ? 'Hunt them' : m.role === 'spectator' ? 'Spectating' : 'Start the generators', 4500);
 
     // Fixed 30 Hz input steps on their own timer, independent of the render frame rate.
     let next = performance.now();
@@ -279,7 +279,7 @@ export class GameView {
         } else this.shake = Math.max(this.shake, 6 * near(e.x, e.y, 300));
         break;
       case 'down':
-        if (e.victim === me) this.hud.center('You are down. Crawl, and wait for help.', 4000);
+        if (e.victim === me) this.hud.center('You are down', 4000);
         break;
       case 'stun':
         if (e.target === me) {
@@ -288,14 +288,14 @@ export class GameView {
         }
         break;
       case 'staked':
-        if (e.victim === me) this.hud.center(e.stage >= 2 ? 'Sacrificed.' : 'Staked. Your team has 60 seconds.', 4000);
+        if (e.victim === me) this.hud.center(e.stage >= 2 ? 'Sacrificed.' : 'Staked', 4000);
         else this.hud.feed(`${name(e.victim)} ${e.stage >= 2 ? 'was sacrificed' : 'is on a stake'}`);
         break;
       case 'eliminated':
-        if (e.victim === me) this.hud.center('You were sacrificed. Spectating.', 5000);
+        if (e.victim === me) this.hud.center('Sacrificed', 5000);
         break;
       case 'escaped':
-        if (e.victim === me) this.hud.center('You escaped the woods.', 5000);
+        if (e.victim === me) this.hud.center('Escaped', 5000);
         break;
       case 'gatePowered':
         this.hud.center('The exit gate has power', 4000);
@@ -346,7 +346,7 @@ export class GameView {
           this.minimap.revealAll();
           this.minimap.widenView(BALANCE.sexton.jarvisMinimapMul);
         } else this.hud.big('JARVIS ONLINE', 'jarvis');
-        this.hud.feed(`${name(e.by)} brought JARVIS online. Everything is visible for 10 s.`);
+        this.hud.feed(`${name(e.by)} used JARVIS`);
         a.announce('Jarvis online');
         break;
       case 'shane':

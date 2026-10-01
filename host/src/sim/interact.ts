@@ -244,7 +244,7 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         if (w.hempDrop) {
           p.hemp = Math.max(p.hemp, 1);
           w.hempDrop = null;
-          w.emit([p.id], { k: 'item', text: 'Hemp Battery acquired. Press Q to use it.' });
+          w.emit([p.id], { k: 'item', text: 'Got Hemp Battery' });
         }
         break;
       case Prompt.OpenDoor:
@@ -307,11 +307,11 @@ function survivorInteract(w: World, p: SimPlayer): void {
       if (q.health === Health.Downed) {
         restoreSurvivor(q, BALANCE.survivor.reviveHp);
         p.stats.revives++;
-        w.feed(`${p.name} fed ${q.name} duck confit. Back on their feet!`);
+        w.feed(`${p.name} revived ${q.name}`);
       } else if (q.health === Health.Staked) {
         releaseFromStake(w, q);
         p.stats.unstakes++;
-        w.feed(`${p.name} fed ${q.name} duck confit and cut them down`);
+        w.feed(`${p.name} cut ${q.name} down`);
       }
       break;
     }
@@ -405,12 +405,12 @@ export function updateInteractions(w: World, dt: number): void {
         if (w.lootTaken[li] || !roomFor(p, item.item)) continue;
         w.lootTaken[li] = true;
         if (w.testMode) {
-          w.emit([p.id], { k: 'item', text: 'Testing mode: your items are already infinite' });
+          w.emit([p.id], { k: 'item', text: 'Items are infinite' });
           continue;
         }
         if (item.item === 'confit') {
           p.confit = 1;
-          w.emit([p.id], { k: 'item', text: 'Duck confit! Press E on a downed or staked teammate to rescue them instantly.' });
+          w.emit([p.id], { k: 'item', text: 'Got duck confit' });
           continue;
         }
         const kind = LOOT_TO_ITEM[item.item];
@@ -484,10 +484,10 @@ export function updateInteractions(w: World, dt: number): void {
 }
 
 const ITEM_TEXT: Record<LootKind, string> = {
-  bottle: 'bottle (throw it at Zach)',
+  bottle: 'bottle',
   goggles: 'night vision goggles',
   confit: 'duck confit',
-  shotgun: 'shotgun (3 shells)',
+  shotgun: 'shotgun',
   energy: 'energy drink',
   trap: 'galaxy gas trap',
 };

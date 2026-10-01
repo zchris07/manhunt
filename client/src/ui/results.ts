@@ -39,7 +39,7 @@ export function renderResults(parent: HTMLElement, r: MatchResult, h: ResultsHan
       <div class="row" style="margin-top:16px;justify-content:space-between">
         <button id="leave">Leave</button>
         ${h.isHost ? '<button class="linklike" id="log">Download match log</button>' : ''}
-        ${h.isOwner ? '<button class="primary" id="rematch">Back to lobby</button>' : '<span class="note">Waiting for the host...</span>'}
+        ${h.isOwner ? '<button class="primary" id="rematch">Back to lobby</button>' : '<span class="note">Waiting for host.</span>'}
       </div>
     </div>`,
   );
