@@ -209,6 +209,8 @@ export const BALANCE = {
   xray: { range: BEAM_RANGE, brightness: 0.7, fadeIn: 0.75, fadeOut: 1 / 6 },
 
   sexton: {
+    /** Faint light of his own (client only). */
+    light: { radius: 110, intensity: 0.28 },
     radius: 15,
     walk: 70,
     flee: 200,
@@ -334,6 +336,8 @@ export const BALANCE = {
    * He never dies. Talk to him for a golden pump (once each).
    */
   plasma: {
+    /** Faint light of his own (client only). */
+    light: { radius: 110, intensity: 0.28 },
     radius: 15,
     beastRadius: 24,
     walk: 64,
@@ -360,6 +364,9 @@ export const BALANCE = {
    * same time a survivor would, then flies to the heavens (`ascendTime`), gone for good.
    * Zach kills him in `hp` hits; hit, he flees at `flee` (well below Sexton's) for `fleeTime`.
    */
+  /** Every NPC carries a faint light (client only). Shane, Jaden and Marc have their own, below. */
+  npcLight: { radius: 120, intensity: 0.3 },
+
   chris: {
     radius: 15,
     hp: 2,
@@ -371,9 +378,11 @@ export const BALANCE = {
     reach: 72,
     /** How far from the ambulance's sides he paces before he's activated. */
     pace: 42,
-    downedAfter: 15,
-    stakedAfter: 12,
+    downedAfter: 4,
+    stakedAfter: 4,
     ascendTime: 3,
+    /** Faint light of his own (client only). */
+    light: { radius: 110, intensity: 0.28 },
     ambulance: { length: 300, width: 150, lightRadius: 230, lightIntensity: 0.35 },
   },
 

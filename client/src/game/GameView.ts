@@ -599,7 +599,21 @@ export class GameView {
         lights.push({ key: `beam${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
       }
     }
-    // Chris Zelley's ambulance glows faintly on both sides (he himself carries no light).
+    // Sexton, Chris and Plasma carry a faint light too.
+    for (const e of ents) {
+      if (e.kind !== EntityKind.Sexton && e.kind !== EntityKind.Chris && e.kind !== EntityKind.Plasma) continue;
+      lights.push({ key: `npc${e.kind}`, x: e.x, y: e.y, radius: BALANCE.npcLight.radius, intensity: BALANCE.npcLight.intensity, static: false });
+    }
+    // Sexton, Chris and Plasma carry a faint light too.
+    for (const [key, kind, cfg] of [
+      ['sexton', EntityKind.Sexton, BALANCE.sexton.light],
+      ['chris', EntityKind.Chris, BALANCE.chris.light],
+      ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
+    ] as const) {
+      const n = ents.find((e) => e.kind === kind);
+      if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });
+    }
+    // Chris Zelley's ambulance glows faintly on both sides (he carries his own faint light too).
     const amb = map.ambulance;
     const AL = BALANCE.chris.ambulance;
     for (const side of [-1, 1]) {

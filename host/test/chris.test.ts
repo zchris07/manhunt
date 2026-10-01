@@ -88,6 +88,20 @@ describe('Chris Zelley and the ambulance', () => {
     expect(rec.state & ChrisFlag.Active).toBeTruthy();
   });
 
+  it('does not rescue a survivor Zach is carrying', () => {
+    const { w, d, h, a, b } = chrisWorld();
+    activate(w, d, a);
+    place(a, 5900, 3000);
+    const spot = farClearing(w);
+    place(b, spot.x, spot.y);
+    b.health = Health.Carried;
+    b.carriedBy = h.id;
+    h.carrying = b.id;
+    d.run(secs(C.downedAfter + 6));
+    expect(w.chris.mode === 'rescue' || w.chris.mode === 'work').toBe(false);
+    expect(b.health).toBe(Health.Carried);
+  });
+
   it('never activated, he ignores a survivor left downed', () => {
     const { w, d, b } = chrisWorld();
     const spot = farClearing(w);

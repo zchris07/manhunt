@@ -64,13 +64,12 @@ export class Overlays {
   }
 
   /**
-   * Scent as a red aurora: each person's points join into one smooth, unbroken ribbon of thin
-   * glowing wind that ripples, swells and thins unevenly, and fades out from its old end.
+   * Scent as wisps of smoke: each person's points join into one smooth trail of thin curling
+   * strands in a faint haze, thinning unevenly and fading out from its old end.
    */
   private drawAurora(now: number, view: { x: number; y: number; w: number; h: number }): void {
     const g = this.aurora;
     g.clear();
-    const t = now / 1000;
     const byWho = new Map<number, ScentMark[]>();
     for (const s of this.scent) {
       if (s.kind !== 0) continue;
@@ -122,25 +121,29 @@ export class Overlays {
           pts[i].nx = -(b.y - a.y) / l;
           pts[i].ny = (b.x - a.x) / l;
         }
-        // Two strands of wind, rippling at different rates, each a soft glow and a bright core.
-        for (const strand of [0, 1]) {
-          const phase = who * 1.7 + strand * 2.3;
-          const at = (p: (typeof pts)[number]): [number, number, number] => {
-            const wave = Math.sin(p.d * 0.018 + t * 1.6 + phase) * 6 + Math.sin(p.d * 0.047 - t * 2.3 + phase) * 3;
-            const width = 1.4 + 1.6 * (0.5 + 0.5 * Math.sin(p.d * 0.011 - t * 1.1 + phase)) + (strand ? -0.5 : 0);
-            return [p.x + p.nx * (wave + (strand ? 5 : 0)), p.y + p.ny * (wave + (strand ? 5 : 0)), width];
+        // Wisps of smoke: several thin strands that braid, drift apart and thin out in patches,
+        // wrapped in a soft haze. Shapes depend only on distance along the trail, so they hold still.
+        const STRANDS = 6;
+        for (let sIdx = 0; sIdx < STRANDS; sIdx++) {
+          const ph = who * 3.1 + sIdx * 1.93;
+          const spread = 5 + sIdx * 2.2;
+          const at = (p: (typeof pts)[number]): [number, number] => {
+            const swell = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.d * 0.0065 + ph * 1.7));
+            const off = swell * spread * Math.sin(p.d * (0.021 + sIdx * 0.004) + ph) + 3 * Math.sin(p.d * 0.057 + ph * 2.1);
+            return [p.x + p.nx * off, p.y + p.ny * off];
           };
           for (let i = 0; i < pts.length - 1; i++) {
             const p = pts[i];
             const q = pts[i + 1];
-            const alpha = Math.pow(Math.min(p.a, q.a), 1.2) * (strand ? 0.55 : 1);
-            if (alpha < 0.02) continue;
-            const [x1, y1, w1] = at(p);
+            // Each strand thins in and out so the trail looks broken into curling wisps.
+            const patch = Math.max(0, Math.sin(p.d * 0.012 + ph * 2.7) * 0.9 + Math.sin(p.d * 0.031 + ph) * 0.4);
+            const alpha = Math.pow(Math.min(p.a, q.a), 1.1) * patch;
+            if (alpha < 0.03) continue;
+            const [x1, y1] = at(p);
             const [x2, y2] = at(q);
-            const shimmer = 0.75 + 0.25 * Math.sin(p.d * 0.05 + t * 4 + phase);
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1 * 5, color: 0xb0101e, alpha: 0.09 * alpha, cap: 'round' });
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1 * 2.2, color: 0xe0202e, alpha: 0.22 * alpha * shimmer, cap: 'round' });
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: w1, color: 0xff6a6a, alpha: 0.55 * alpha * shimmer, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 9 + sIdx, color: 0xb8a8a8, alpha: 0.035 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 3.2, color: 0xd8c8c8, alpha: 0.1 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 1.1, color: 0xf2e6e4, alpha: 0.42 * alpha, cap: 'round' });
           }
         }
       }
@@ -178,7 +181,7 @@ export class Overlays {
       g.circle(a.x, a.y, 22 + pulse * 6).stroke({ width: 3, color: 0xff3a5a, alpha: 0.55 + pulse * 0.3 });
     }
 
-    // Scent: an aurora ribbon. Blood: red puffs that swell, drift and slowly fade away.
+    // Scent: smoke wisps. Blood: red puffs that swell, drift and slowly fade away.
     this.scent = this.scent.filter((s) => now - s.born < SCENT_LIFE);
     this.drawAurora(now, view);
     const blood = this.scent.filter((s) => s.kind === 1);
