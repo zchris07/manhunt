@@ -1,15 +1,15 @@
-import { BALANCE, EntityKind, Health, MarcFlag, moveCircle, overlapsCollider, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
+import { BALANCE, EntityKind, Health, ItemKind, MarcFlag, moveCircle, overlapsCollider, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 import { nearbyDoor } from './interact';
-import { restoreSurvivor } from './combat';
+import { addItem } from './inventory';
 import type { NpcTarget } from './npc';
 
 const M = BALANCE.marc;
 
 /**
  * Marc Cortez starts in the warehouse and wanders (through doors, out into the woods and
- * back). Talk to him and he heals you to full; the first time he also gives you duck confit.
+ * back). Talk to him and he hands you duck confit (once each).
  * Nothing hurts him: Zach's machete gets a complaint, a survivor's item a flinch. He never
  * runs; he just stands there for a moment.
  */
@@ -65,17 +65,13 @@ export class Marc implements NpcTarget {
     this.lastTalk.set(p.id, w.time);
     this.facing = Math.atan2(p.move.y - this.y, p.move.x - this.x);
     this.holdT = 2;
-    const hurt = p.hp < 0.999;
-    const confit = !this.confitGiven.has(p.id) && p.confit < 1;
-    if (hurt) restoreSurvivor(p, 1);
+    const confit = !this.confitGiven.has(p.id);
     if (confit) {
-      p.confit = 1;
       this.confitGiven.add(p.id);
+      addItem(w, p, ItemKind.Confit);
+      w.emit([p.id], { k: 'item', text: 'Got duck confit' });
     }
-    const line = hurt && confit ? "Let me patch you up. And here, take some duck confit." : hurt ? 'Hold still... there. Good as new.' : confit ? 'Here, take some duck confit. Trust me.' : "You're good, man. Stay safe out there.";
-    this.say(line);
-    if (confit) w.emit([p.id], { k: 'item', text: 'Got duck confit' });
-    if (hurt) w.emit([p.id], { k: 'item', text: 'Healed' });
+    this.say(confit ? 'Here, take some duck confit. Trust me.' : "That's all the confit I've got, man. Stay safe out there.");
   }
 
   /** Zach's machete (or anything of his): he protests and stands his ground. */

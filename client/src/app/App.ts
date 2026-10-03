@@ -147,6 +147,7 @@ export class App {
 
   private bind(s: Session): void {
     this.session = s;
+    this.inventory.onSwap = (from, to) => s.client.send({ t: 'moveSlot', from, to });
     this.leaving = false;
     const c = s.client;
     for (const f of this.unsub) f();
@@ -183,6 +184,7 @@ export class App {
   private onClosed(reason: string): void {
     if (this.leaving) return;
     const wasHost = this.session?.isHost;
+    const room = this.session?.client.room ?? '';
     this.session?.close();
     this.session = null;
     this.game?.destroy();
@@ -190,12 +192,26 @@ export class App {
     this.releaseWakeLock();
     this.clearUi();
     this.screen = 'message';
-    const hostLeft = /host (left|closed)|lost connection/i.test(reason);
-    renderMessage(this.ui, hostLeft ? 'The host left' : 'Disconnected', hostLeft ? 'The match is over. The host closed their game.' : reason || 'The connection closed.', {
-      label: 'Back',
-      onClick: () => this.showLanding(),
-    });
-    if (wasHost) this.showLanding();
+    if (wasHost) {
+      this.showLanding();
+      return;
+    }
+    const back = { label: 'Back', onClick: () => this.showLanding() };
+    if (/host left/i.test(reason)) {
+      renderMessage(this.ui, 'The host left', 'The match is over. The host closed their game.', back);
+      return;
+    }
+    // Our own connection dropped (or we can't tell): the host may well still be playing.
+    // Rejoining with our session token puts us back in our place with a fresh start.
+    const name = storageGet('manhunt.name') ?? '';
+    const canRejoin = !!room && name.length >= 2 && !/kick|full|version|mismatch/i.test(reason);
+    renderMessage(
+      this.ui,
+      'Connection lost',
+      canRejoin ? `${reason || 'The connection to the host dropped.'} The game may still be running: rejoin to pick up where you were.` : reason || 'The connection closed.',
+      canRejoin ? { label: 'Rejoin', onClick: () => void this.join(name, room) } : back,
+      canRejoin ? back : undefined,
+    );
   }
 
   leave(): void {

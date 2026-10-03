@@ -72,7 +72,12 @@ describe('input codec', () => {
 
 describe('snapshot codec', () => {
   it('round-trips a full snapshot and applies deltas', () => {
-    const self = { ...emptySelf(3), x: 1234.5, y: 99.25, stamina: 6.25, hp: 0.6, lungeCharges: 1, lungeRecharge: 4.5, inv: [0, 2, 1, 0, 0, 1], jarvis: 1, confit: 1 };
+    const self = { ...emptySelf(3), x: 1234.5, y: 99.25, stamina: 6.25, hp: 0.6, lungeCharges: 1, lungeRecharge: 4.5, jarvis: 1, downs: 2, fovMul: 1.1, bookT: 3.5, slots: [
+      { kind: ItemKind.Bottle, n: 300, golden: false, amt: 0 },
+      { kind: ItemKind.Goggles, n: 2, golden: false, amt: 12.3 },
+      { kind: ItemKind.Shotgun, n: 1, golden: true, amt: 4 },
+      ...emptySelf().slots.slice(3),
+    ] };
     const e1 = quantizeEntity(1, EntityKind.Player, 100, 200, 1, 0x1234, 3, 4, ItemKind.Bottle, 200);
     const e2 = quantizeEntity(2, EntityKind.Player, 300, 400, 2, 5, 0, 1);
     const wb = encodeWorld(world());
@@ -85,9 +90,14 @@ describe('snapshot codec', () => {
     expect(d1.self.hp).toBeCloseTo(0.6, 2);
     expect(d1.self.lungeCharges).toBe(1);
     expect(d1.self.lungeRecharge).toBeCloseTo(4.5, 2);
-    expect(d1.self.inv).toEqual([0, 2, 1, 0, 0, 1]);
+    expect(d1.self.slots[0]).toEqual({ kind: ItemKind.Bottle, n: 300, golden: false, amt: 0 });
+    expect(d1.self.slots[1].amt).toBeCloseTo(12.3, 1);
+    expect(d1.self.slots[2]).toEqual({ kind: ItemKind.Shotgun, n: 1, golden: true, amt: 4 });
+    expect(d1.self.slots[7].n).toBe(0);
     expect(d1.self.jarvis).toBe(1);
-    expect(d1.self.confit).toBe(1);
+    expect(d1.self.downs).toBe(2);
+    expect(d1.self.fovMul).toBeCloseTo(1.1, 3);
+    expect(d1.self.bookT).toBeCloseTo(3.5, 1);
     expect(d1.entities.size).toBe(2);
     expect(d1.entities.get(1)!.aux).toBe(ItemKind.Bottle);
     expect(d1.entities.get(1)!.hp).toBe(200);
@@ -130,7 +140,7 @@ describe('snapshot codec', () => {
 
 describe('message validation', () => {
   it('accepts valid and rejects invalid client messages', () => {
-    const settings = { hunters: 1, survivors: 4, seed: 'abc', difficulty: 1, escapeFraction: 0.5, testMode: false };
+    const settings = { hunters: 1, survivors: 4, seed: 'abc', testMode: false };
     expect(parseClientMessage({ t: 'hello', name: 'Ana', version: 1 })).not.toBeNull();
     expect(parseClientMessage({ t: 'hello', name: 5, version: 1 })).toBeNull();
     expect(parseClientMessage({ t: 'settings', settings: { ...settings, hunters: 0 } })).toBeNull();

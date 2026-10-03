@@ -1,11 +1,13 @@
-import { Health, generateMap, overlapsCollider, hashString, mapParamsFor, resolveBalance, type InputCmd, type MatchPlayerInfo } from '@manhunt/shared';
+import { Health, isWeapon, type ItemKind, generateMap, overlapsCollider, hashString, mapParamsFor, resolveBalance, type InputCmd, type MatchPlayerInfo } from '@manhunt/shared';
 import { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
+import { addItem, countOf, freshAmount, newInventory } from '../src/sim/inventory';
+export { countOf };
 
 export function makeWorld(opts: { hunters?: number; survivors?: number; seed?: string; lagMs?: number; testMode?: boolean } = {}): World {
   const H = opts.hunters ?? 1;
   const S = opts.survivors ?? 2;
-  const rb = resolveBalance({ hunters: H, survivors: S, difficulty: 1 });
+  const rb = resolveBalance({ hunters: H, survivors: S });
   const map = generateMap(mapParamsFor(hashString(opts.seed ?? 'rules'), rb));
   const players: MatchPlayerInfo[] = [];
   for (let i = 0; i < H; i++) players.push({ id: i + 1, name: `Zach${i + 1}`, role: 'hunter', tint: 0 });
@@ -89,4 +91,34 @@ export function parkShane(w: World): void {
 export function parkChris(w: World): void {
   w.chris.x = w.map.width - 60;
   w.chris.y = w.map.height - 60;
+}
+
+/** Gives a survivor `n` of an item. Returns the slot number (1-8) to hold it with (`item`). */
+export function give(w: World, p: SimPlayer, kind: ItemKind, n = 1, golden = false): number {
+  for (let i = 0; i < n; i++) addItem(w, p, kind, undefined, golden);
+  return slotOf(p, kind);
+}
+
+/** The slot number (1-8) holding `kind`, or 0. */
+export function slotOf(p: SimPlayer, kind: ItemKind): number {
+  return p.inv.findIndex((s) => s.kind === kind && s.n > 0) + 1;
+}
+
+/** Empties a survivor's inventory. */
+export function clearInv(p: SimPlayer): void {
+  p.inv = newInventory();
+}
+
+/** Puts `n` of `kind` (fresh) in slot number `kind`, so a test can hold it with `item: kind`. */
+export function setCount(p: SimPlayer, kind: ItemKind, n: number, golden = false): void {
+  const s = p.inv[kind - 1];
+  s.kind = n > 0 ? kind : 0;
+  s.n = n;
+  s.golden = n > 0 && golden;
+  s.amt = n > 0 && (kind === 2 || isWeapon(kind)) ? Array.from({ length: n }, () => freshAmount(kind, golden)) : [];
+}
+
+/** Runs ticks until `done()` (at most `maxTicks`): e.g. until an NPC's alert meter fills. */
+export function runUntil(d: Driver, done: () => boolean, maxTicks = 300): void {
+  for (let t = 0; t < maxTicks && !done(); t++) d.run(1);
 }

@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -23,7 +23,11 @@ const ITEM_TEX: Record<number, string> = {
   [ItemKind.Shotgun]: 'item.shotgun',
   [ItemKind.Energy]: 'item.energy',
   [ItemKind.Trap]: 'item.trap',
+  [ItemKind.Book]: 'item.book',
+  [ItemKind.Confit]: 'item.confit',
+  [ItemKind.Pistol]: 'item.pistol',
 };
+const itemTex = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'item.goldenPump' : ITEM_TEX[kind]);
 export const LOOT_TEX: Record<string, string> = {
   bottle: 'item.bottle',
   goggles: 'item.goggles',
@@ -31,6 +35,7 @@ export const LOOT_TEX: Record<string, string> = {
   shotgun: 'item.shotgun',
   energy: 'item.energy',
   trap: 'item.trap',
+  book: 'item.book',
 };
 
 /** Walk cycle: legs swing under the body in the direction of travel. */
@@ -210,10 +215,10 @@ class PlayerSprite {
     }
 
     // Held item (survivors).
-    const item = hunter ? 0 : p.aux & 7;
-    this.held.visible = !down && !staked && item > 0 && item !== ItemKind.Goggles;
+    const item = hunter ? 0 : p.aux & 15;
+    this.held.visible = !down && !staked && item > 0 && item !== ItemKind.Goggles && !!ITEM_TEX[item];
     if (this.held.visible) {
-      this.held.texture = this.assets.getTexture(item === ItemKind.Shotgun && p.aux & 8 ? 'item.goldenPump' : ITEM_TEX[item]);
+      this.held.texture = this.assets.getTexture(itemTex(item, (p.aux & GOLDEN_BIT) !== 0));
       const big = item === ItemKind.Shotgun;
       this.held.position.set(big ? 24 : 21, big ? 3 : 7);
       this.held.scale.set(big ? 0.62 : 0.48);
@@ -294,12 +299,12 @@ class PlayerSprite {
       this.fx.circle(ex + Math.sin(p.facing) * 3, ey - Math.cos(p.facing) * 3, 2).fill({ color: 0x9dff9a });
     }
 
-    // Survivors' health shows over their heads (Zach has no bar).
-    const showBar = !hunter && !staked && health !== Health.Carried;
+    // Everyone's health shows over their heads (Zach's is red); not while he's down.
+    const showBar = hunter ? !down : !staked && health !== Health.Carried;
     this.bar.g.visible = showBar;
     if (showBar) {
       this.bar.g.position.set(0, -r - 16);
-      this.bar.draw(p.hp / 255, dt, 38);
+      this.bar.draw(p.hp / 255, dt, hunter ? 46 : 38);
     }
     this.label.position.set(0, -r - 22);
   }
@@ -410,7 +415,7 @@ class PlayerSprite {
   }
 }
 
-type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden';
+type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden' | 'waz';
 
 interface Bubble {
   root: Container;
@@ -420,14 +425,6 @@ interface Bubble {
 }
 
 /** A walking NPC: legs that step along with his movement and a body turned to face. */
-/** An NPC's name, hovering below them. */
-function npcTag(name: string, y = 26): Text {
-  const t = new Text({ text: name.toUpperCase(), style: { fontFamily: '"Special Elite", "Courier New", monospace', fontSize: 10, fill: 0xd8d2c0, letterSpacing: 1, stroke: { color: INK, width: 3 } } });
-  t.anchor.set(0.5, 0);
-  t.position.set(0, y);
-  return t;
-}
-
 class NpcSprite {
   readonly root = new Container();
   readonly legs = new Container();
@@ -437,7 +434,7 @@ class NpcSprite {
   readonly fx = new Graphics();
   readonly walker = new Walker();
 
-  constructor(assets: AssetManager, bodyId: string, legVariant: number, parent: Container, name: string, tagY = 26) {
+  constructor(assets: AssetManager, bodyId: string, legVariant: number, parent: Container) {
     this.legA = new Sprite(assets.getTexture('char.legs', legVariant));
     this.legB = new Sprite(assets.getTexture('char.legs', legVariant));
     const [ax, ay] = assets.anchorOf('char.legs');
@@ -446,7 +443,7 @@ class NpcSprite {
     this.body = new Sprite(assets.getTexture(bodyId));
     this.body.anchor.set(30 / 64, 0.5);
     const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
-    this.root.addChild(shadow, this.legs, this.body, this.fx, npcTag(name, tagY));
+    this.root.addChild(shadow, this.legs, this.body, this.fx);
     parent.addChild(this.root);
   }
 
@@ -560,6 +557,9 @@ export class EntityLayer {
   private shots: { x: number; y: number; p: number[]; gold: boolean; t: number }[] = [];
   private marc: NpcSprite | null = null;
   private jaden: { npc: NpcSprite; gun: Graphics; mark: Text } | null = null;
+  private waz: NpcSprite | null = null;
+  /** Shane's and Jaden's alert meters over their heads (above the vision mask: everyone sees them build). */
+  private readonly meters = new Graphics();
   private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
   /** Sexton's Hemp Beam (redrawn every frame while it fires). */
   private readonly beam = new Graphics();
@@ -613,6 +613,7 @@ export class EntityLayer {
     this.objectives.addChild(lever);
     this.beam.blendMode = 'add';
     this.root.addChild(this.objectives, this.ground, this.wakes, this.gens, this.markers, this.effects, this.beam);
+    this.overlay.addChild(this.meters);
   }
 
   /** A generator started (or not): swap its art and light its lamp. */
@@ -706,6 +707,7 @@ export class EntityLayer {
     let marcSeen = false;
     let plasmaSeen = false;
     let jadenSeen = false;
+    let wazSeen = false;
     this.beam.clear();
     for (const e of ents) {
       if (e.kind === EntityKind.Player) {
@@ -729,6 +731,9 @@ export class EntityLayer {
       } else if (e.kind === EntityKind.Plasma) {
         plasmaSeen = true;
         this.drawPlasma(e, dt, time);
+      } else if (e.kind === EntityKind.Waz) {
+        wazSeen = true;
+        this.drawWaz(e, dt, time);
       } else if (e.kind === EntityKind.Beam) {
         this.drawBeam(e, time);
       } else {
@@ -743,6 +748,7 @@ export class EntityLayer {
     if (this.marc) this.marc.root.visible = marcSeen;
     if (this.plasma) this.plasma.man.root.visible = plasmaSeen;
     if (this.jaden) this.jaden.npc.root.visible = jadenSeen;
+    if (this.waz) this.waz.root.visible = wazSeen;
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
     this.drawWakes(ents, self, time, dt);
@@ -757,7 +763,7 @@ export class EntityLayer {
     // Dialogue bubble pops in above whoever is speaking.
     if (this.bubble) {
       const b = this.bubble;
-      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : this.sexton;
+      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : b.who === 'waz' ? this.waz : this.sexton;
       if (time > b.until || !speaker) {
         b.root.destroy({ children: true });
         this.bubble = null;
@@ -844,11 +850,26 @@ export class EntityLayer {
       [EntityKind.Marc]: 3,
       [EntityKind.Plasma]: 4,
       [EntityKind.Jaden]: 5,
+      [EntityKind.Waz]: 6,
     };
     const live = new Set<number>();
+    const mg = this.meters;
+    mg.clear();
     for (const e of ents) {
       const n = kinds[e.kind];
       if (n === undefined) continue;
+      if (e.kind === EntityKind.Jaden && e.state & JadenFlag.Dead) continue;
+      // Alert meter: fills as a survivor crowds him or keeps a light on him.
+      if ((e.kind === EntityKind.Shane || e.kind === EntityKind.Jaden) && e.extra > 0 && (e.state & ShaneFlag.Chasing) === 0) {
+        const f = e.extra / 255;
+        const w = 34;
+        const x0 = e.x - w / 2;
+        const y0 = e.y - 34;
+        const col = f < 0.5 ? 0xe8c84a : f < 0.8 ? 0xf08a2a : 0xe0282a;
+        mg.roundRect(x0 - 1.5, y0 - 1.5, w + 3, 8, 3).fill({ color: INK, alpha: 0.75 });
+        mg.roundRect(x0, y0, w * f, 5, 2).fill({ color: col });
+        mg.moveTo(e.x, y0 - 4).lineTo(e.x - 4, y0 - 11).lineTo(e.x + 4, y0 - 11).closePath().fill({ color: col, alpha: 0.4 + 0.6 * f });
+      }
       live.add(e.id);
       let t = this.tags.get(e.id);
       if (!t) {
@@ -859,7 +880,8 @@ export class EntityLayer {
       }
       const ascending = e.kind === EntityKind.Chris && (e.state & ChrisFlag.Ascending) !== 0;
       t.visible = !ascending;
-      t.position.set(e.x, e.y + 24);
+      const beast = e.kind === EntityKind.Plasma && (e.state & (PlasmaFlag.Raging | PlasmaFlag.Reverting)) !== 0;
+      t.position.set(e.x, e.y + (beast ? 34 : 24));
     }
     for (const [id, t] of this.tags) {
       if (live.has(id)) continue;
@@ -878,7 +900,7 @@ export class EntityLayer {
     g.clear();
     const people: { id: number; x: number; y: number }[] = [];
     for (const e of ents) {
-      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden) {
+      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden || e.kind === EntityKind.Waz) {
         if (self && e.id === self.id) continue;
         people.push(e);
       }
@@ -932,7 +954,7 @@ export class EntityLayer {
       const dead = new Sprite(this.assets.getTexture('char.sextonDead'));
       dead.anchor.set(0.5);
       const fx = new Graphics();
-      root.addChild(legs, body, dead, fx, npcTag('Sexton Science'));
+      root.addChild(legs, body, dead, fx);
       this.root.addChild(root);
       this.sexton = { root, body, dead, walker: new Walker(), legs, legA, legB, fx };
     }
@@ -993,7 +1015,7 @@ export class EntityLayer {
       const wings = new Graphics();
       const mark = new Graphics();
       const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
-      root.addChild(halo, shadow, wings, legs, body, dead, mark, npcTag('Chris Zelley'));
+      root.addChild(halo, shadow, wings, legs, body, dead, mark);
       this.root.addChild(root);
       this.chris = { root, body, dead, walker: new Walker(), legs, legA, legB, wings, halo, mark };
     }
@@ -1058,7 +1080,7 @@ export class EntityLayer {
 
   /** Marc Cortez: a plain guy in a flannel who flinches when hit. */
   private drawMarc(e: InterpEntity, dt: number, time: number): void {
-    this.marc ??= new NpcSprite(this.assets, 'char.marc', 21, this.root, 'Marc Cortez');
+    this.marc ??= new NpcSprite(this.assets, 'char.marc', 21, this.root);
     const m = this.marc;
     m.step(e, dt);
     m.fx.clear();
@@ -1073,7 +1095,7 @@ export class EntityLayer {
    */
   private drawPlasma(e: InterpEntity, dt: number, time: number): void {
     if (!this.plasma) {
-      const man = new NpcSprite(this.assets, 'char.plasma', 22, this.root, 'Plasma.TTV', 32);
+      const man = new NpcSprite(this.assets, 'char.plasma', 22, this.root);
       const beast = new Sprite(this.assets.getTexture('char.plasmaBeast'));
       beast.anchor.set(0.45, 0.5);
       const aura = new Graphics();
@@ -1159,7 +1181,7 @@ export class EntityLayer {
   /** Jaden Nguyen: a pistol in hand, a "!" while he's after someone, a flash when he fires. */
   private drawJaden(e: InterpEntity, dt: number, time: number): void {
     if (!this.jaden) {
-      const npc = new NpcSprite(this.assets, 'char.jaden', 23, this.root, 'Jaden Nguyen');
+      const npc = new NpcSprite(this.assets, 'char.jaden', 23, this.root);
       const gun = new Graphics();
       const mark = new Text({ text: '!', style: { fontFamily: 'Oswald, Impact, sans-serif', fontSize: 22, fontWeight: '700', fill: 0xb3121b, stroke: { color: 0x000000, width: 3 } } });
       mark.anchor.set(0.5, 1);
@@ -1168,7 +1190,18 @@ export class EntityLayer {
       this.jaden = { npc, gun, mark };
     }
     const { npc, gun, mark } = this.jaden;
+    const dead = (e.state & JadenFlag.Dead) !== 0;
     npc.step(e, dt);
+    npc.fx.clear();
+    // Dead: lying on his back, greyed, the pistol gone.
+    npc.legs.visible = !dead;
+    npc.body.tint = dead ? 0x8a8a8a : 0xffffff;
+    npc.body.rotation = dead ? e.facing + Math.PI / 2 : e.facing;
+    npc.body.scale.set(dead ? 0.95 : 1, dead ? 1.1 : 1);
+    gun.visible = !dead;
+    mark.visible = false;
+    if (dead) return;
+    if (e.state & JadenFlag.Stunned) npc.stars(time, 18);
     const chasing = (e.state & JadenFlag.Chasing) !== 0;
     mark.visible = chasing;
     if (chasing) mark.scale.set(1 + 0.15 * Math.sin(time * 10));
@@ -1188,6 +1221,25 @@ export class EntityLayer {
     }
   }
 
+  /** Waz: wanders; flinches and bolts when Zach hits him; looks you over when you talk to him. */
+  private drawWaz(e: InterpEntity, dt: number, time: number): void {
+    this.waz ??= new NpcSprite(this.assets, 'char.waz', 24, this.root);
+    const n = this.waz;
+    n.step(e, dt, (e.state & WazFlag.Fleeing) !== 0 ? 46 : 34, (e.state & WazFlag.Fleeing) !== 0 ? 220 : 150);
+    n.fx.clear();
+    const hurt = (e.state & WazFlag.Hurt) !== 0;
+    n.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff7a6a : 0xffffff;
+    n.body.position.set(hurt ? Math.sin(time * 60) * 2 : 0, 0);
+    if (e.state & WazFlag.Talking) {
+      // Taking a looksie: a little magnifying glass held up.
+      const a = e.facing;
+      const gx = Math.cos(a) * 20;
+      const gy = Math.sin(a) * 20;
+      n.fx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10).lineTo(gx, gy).stroke({ width: 2.5, color: 0x5a3a20 });
+      n.fx.circle(gx + Math.cos(a) * 5, gy + Math.sin(a) * 5, 6).fill({ color: 0xbfe8ff, alpha: 0.5 + 0.2 * Math.sin(time * 8) }).stroke({ width: 2, color: INK });
+    }
+  }
+
   private drawShane(e: InterpEntity, dt: number, time: number): void {
     if (!this.shane) {
       const root = new Container();
@@ -1203,7 +1255,7 @@ export class EntityLayer {
       mark.anchor.set(0.5, 1);
       mark.position.set(0, -24);
       const shadow = new Graphics().ellipse(4, 6, 16, 15).fill({ color: 0x000000, alpha: 0.28 });
-      root.addChild(shadow, legs, body, mark, npcTag('Shane Jeans'));
+      root.addChild(shadow, legs, body, mark);
       this.root.addChild(root);
       this.shane = { root, body, walker: new Walker(), legs, legA, legB, mark };
     }
@@ -1227,7 +1279,8 @@ export class EntityLayer {
     if (!c) {
       c = new Container();
       if (e.kind === EntityKind.Bottle) {
-        const s = new Sprite(this.assets.getTexture('item.bottle'));
+        // state 1: The Grapes of Wrath rather than a bottle.
+        const s = new Sprite(this.assets.getTexture(e.state & 1 ? 'item.book' : 'item.bottle'));
         s.anchor.set(0.5);
         s.scale.set(0.6);
         c.addChild(s);
@@ -1252,10 +1305,10 @@ export class EntityLayer {
         const glow = new Sprite(this.assets.getTexture('fx.glow'));
         glow.anchor.set(0.5);
         glow.scale.set(0.55);
-        glow.tint = e.extra & 8 ? 0xffd86a : 0xb09a60;
+        const golden = (e.extra & GOLDEN_BIT) !== 0;
+        glow.tint = golden ? 0xffd86a : 0xb09a60;
         glow.blendMode = 'add';
-        const kind = e.extra & 7;
-        const s = new Sprite(this.assets.getTexture(kind === ItemKind.Shotgun && e.extra & 8 ? 'item.goldenPump' : ITEM_TEX[kind]));
+        const s = new Sprite(this.assets.getTexture(itemTex(e.extra & 15, golden)));
         s.anchor.set(0.5);
         s.scale.set(0.8);
         c.addChild(glow, s);

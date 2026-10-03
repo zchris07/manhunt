@@ -7,9 +7,9 @@ import {
   GenFlag,
   Health,
   SextonFlag,
+  GOLDEN_BIT,
   emptySelf,
   inCone,
-  ItemKind,
   quantizeEntity,
   type EntityRecord,
   type SelfState,
@@ -18,6 +18,7 @@ import {
 } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
+import { selected } from './inventory';
 
 export interface PlayerView {
   self: SelfState;
@@ -32,13 +33,17 @@ export interface Vision {
   xray: boolean;
 }
 
-/** The vision a player has right now (mirrors what the client draws into its mask). */
+/**
+ * The vision a player has right now (mirrors what the client draws into its mask). Waz's
+ * field-of-view change (`fovMul`) widens or narrows the cone and the circle around you.
+ */
 export function visionFor(w: World, v: SimPlayer): Vision {
   const x = v.move.x;
   const y = v.move.y;
+  const fov = v.fovMul;
   if (v.role === 'hunter') {
     const hv = BALANCE.hunter.vision;
-    return { cone: { x, y, dir: v.facing, halfAngle: hv.coneHalfAngleDeg * DEG, range: hv.range }, prox: hv.proximity, xray: v.move.hempT > 0 };
+    return { cone: { x, y, dir: v.facing, halfAngle: hv.coneHalfAngleDeg * DEG * fov, range: hv.range }, prox: hv.proximity * fov, xray: v.move.hempT > 0 };
   }
   if (v.hideState === 2 && v.hideSpot >= 0) {
     const spot = w.map.hidingSpots[v.hideSpot];
@@ -48,7 +53,7 @@ export function visionFor(w: World, v: SimPlayer): Vision {
   const sv = BALANCE.survivor.vision;
   const k = v.health === Health.Downed ? BALANCE.survivor.downedVisionMul : 1;
   const wide = v.gogglesOn ? BALANCE.items.goggles.coneMul : 1;
-  return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG * wide, range: sv.range * k }, prox: sv.proximity, xray: v.gogglesOn };
+  return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG * wide * fov, range: sv.range * k }, prox: sv.proximity * fov, xray: v.gogglesOn };
 }
 
 /**
@@ -67,7 +72,7 @@ export function canSee(w: World, v: SimPlayer, x: number, y: number): boolean {
 }
 
 function entityState(p: SimPlayer): number {
-  // Zach knocked out by Plasma shows as down.
+  // Zach down shows as down.
   let s = (p.role === 'hunter' && p.knockT > 0 ? Health.Downed : p.health) & EF.HealthMask;
   if (p.role === 'hunter') s |= EF.Hunter;
   s |= (p.gait & 3) << EF.GaitShift;
@@ -87,13 +92,13 @@ function entityState(p: SimPlayer): number {
 
 function playerRecord(p: SimPlayer): EntityRecord {
   const extra = p.role === 'hunter' ? p.carrying : p.health === Health.Staked ? Math.round((p.stakeT / BALANCE.objectives.stakeStageTime) * 255) : 0;
-  // aux: a survivor's item in hand, or how far Zach has charged his swing (0-255).
-  // A survivor's item in hand (bit 3: it's the golden pump), or Zach's swing charge (0-254;
-  // 255 = he's holding the golden pump).
+  // A survivor's item in hand (GOLDEN_BIT: it's the golden pump), or Zach's swing charge
+  // (0-254; 255 = he's holding the golden pump).
+  const held = p.role === 'survivor' ? selected(p) : null;
   const aux =
     p.role === 'survivor'
-      ? p.selItem && p.inv[p.selItem] > 0
-        ? p.selItem | (p.selItem === ItemKind.Shotgun && p.golden ? 8 : 0)
+      ? held
+        ? held.kind | (held.golden ? GOLDEN_BIT : 0)
         : 0
       : p.pump > 0
         ? 255
@@ -149,13 +154,10 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.attackCd = p.attackCd;
   s.burstCd = p.burstCd;
   s.hemp = p.hemp;
-  s.inv = p.inv.slice();
-  s.goggleMeter = p.goggles[0] ?? 0;
+  s.slots = p.inv.map((sl) => ({ kind: sl.kind, n: sl.n, golden: sl.golden, amt: sl.amt[0] ?? 0 }));
   s.gogglesOn = p.gogglesOn ? 1 : 0;
   s.chargeT = p.chargeT;
-  s.shells = p.shells[0] ?? 0;
   s.reloadT = p.reloadT;
-  s.confit = p.confit;
   s.jarvis = p.jarvis;
   s.jarvisT = p.jarvisT;
   s.scareT = p.scareT;
@@ -164,8 +166,10 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.noise = Math.min(1, p.noise / BALANCE.survivor.noise.run);
   s.spectating = watching && v ? v.id : 0;
   s.hp = p.hp;
-  s.golden = p.golden ? 1 : 0;
   s.pump = p.pump;
+  s.downs = p.downs;
+  s.bookT = p.bookT;
+  s.fovMul = p.fovMul;
   return s;
 }
 
@@ -197,7 +201,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     for (const b of w.bottles) {
       if (Math.hypot(b.x - v.move.x, b.y - v.move.y) > 900) continue;
-      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), 0, 0, Math.min(255, Math.round(b.travelled / 4))));
+      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), b.book ? 1 : 0, 0, Math.min(255, Math.round(b.travelled / 4))));
     }
     for (const t of w.traps) {
       if (Math.hypot(t.x - v.move.x, t.y - v.move.y) > R) continue;
@@ -230,9 +234,9 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
       entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));
     }
-    for (const n of [w.marc, w.plasma]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= npcR) entities.push(n.record());
+    for (const n of [w.marc, w.plasma, ...(w.waz.alive ? [w.waz] : [])]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= npcR) entities.push(n.record());
     for (const d of w.drops) {
-      if (Math.hypot(d.x - v.move.x, d.y - v.move.y) <= R) entities.push(quantizeEntity(d.id, EntityKind.Drop, d.x, d.y, 0, 0, 0, d.kind | (d.golden ? 8 : 0)));
+      if (Math.hypot(d.x - v.move.x, d.y - v.move.y) <= R) entities.push(quantizeEntity(d.id, EntityKind.Drop, d.x, d.y, 0, 0, 0, d.kind | (d.golden ? GOLDEN_BIT : 0)));
     }
     const cz = w.chris;
     if (!cz.gone && Math.hypot(cz.x - v.move.x, cz.y - v.move.y) <= npcR) entities.push(cz.record());
@@ -286,7 +290,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     shaneDir: v && v.role === 'hunter' && w.shane.chasing ? Math.atan2(w.shane.y - v.move.y, w.shane.x - v.move.x) : null,
     // Testing mode: where every NPC is (the map shows them all), in NPC_NAMES order.
     npcs: w.testMode
-      ? [w.sexton.alive ? w.sexton : null, w.shane, w.chris.gone ? null : w.chris, w.marc, w.plasma, w.jaden].flatMap((n, k) => (n ? [{ k, x: n.x, y: n.y }] : []))
+      ? [w.sexton.alive ? w.sexton : null, w.shane, w.chris.gone ? null : w.chris, w.marc, w.plasma, w.jaden.alive ? w.jaden : null, w.waz.alive ? w.waz : null].flatMap((n, k) => (n ? [{ k, x: n.x, y: n.y }] : []))
       : [],
   };
   return { self: selfState(w, peerPlayer, v), entities, world };

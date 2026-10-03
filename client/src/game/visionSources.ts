@@ -8,8 +8,10 @@ export interface ViewerInfo {
   hunter: boolean;
   downed: boolean;
   hidden: HidingSpotDef | null;
-  /** Night vision goggles widen the flashlight cone. */
+  /** Night vision goggles (and Waz) widen the flashlight cone. */
   coneMul: number;
+  /** Waz widens (or narrows) the circle you always see around you. */
+  proxMul: number;
   /** See-through light fading in (0..1), or 0 when off. */
   xray: number;
 }
@@ -71,7 +73,8 @@ export class VisionSources {
       const range = Math.min(cfg.range * k, viewRadius * 1.05);
       const half = cfg.coneHalfAngleDeg * DEG * v.coneMul;
       own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: v.facing, halfAngle: half, range }, []), ox: v.x, oy: v.y, range });
-      own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: cfg.proximity }, []), ox: v.x, oy: v.y, range: cfg.proximity, intensity: 0.9 });
+      const prox = cfg.proximity * v.proxMul;
+      own.push({ poly: this.vis.compute({ x: v.x, y: v.y, dir: 0, halfAngle: Math.PI, range: prox }, []), ox: v.x, oy: v.y, range: prox, intensity: 0.9 });
       if (v.xray > 0) {
         // Light that ignores walls; it grows out of the torch while it fades in.
         const ease = 1 - (1 - v.xray) * (1 - v.xray);

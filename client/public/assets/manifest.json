@@ -27,6 +27,7 @@
     "char.jaden": { "procedural": "jaden" },
     "char.plasma": { "procedural": "plasma" },
     "char.plasmaBeast": { "procedural": "plasmaBeast" },
+    "char.waz": { "procedural": "waz" },
     "obj.generator": { "procedural": "generator", "variants": 2 },
     "obj.locker": { "procedural": "locker" },
     "obj.wardrobe": { "procedural": "wardrobe" },
@@ -42,6 +43,8 @@
     "item.goggles": { "procedural": "itemGoggles" },
     "item.shotgun": { "procedural": "itemShotgun" },
     "item.energy": { "procedural": "itemEnergy" },
+    "item.book": { "procedural": "itemBook" },
+    "item.pistol": { "procedural": "itemPistol" },
     "item.trap": { "procedural": "itemTrap" },
     "item.goldenPump": { "procedural": "itemGoldenPump" },
     "item.confit": { "procedural": "itemConfit" },
@@ -56,9 +59,15 @@
   "sounds": {
     "burst": { "file": "audio/gmajor.mp3", "duration": 2.6, "random": true },
     "sexton.reel": { "file": "audio/reel.mp3" },
-    "shane.steps": { "procedural": "pitterPatter" }
+    "shane.steps": { "procedural": "pitterPatter" },
+    "boom": { "file": "audio/vine-boom.mp3" }
   },
   "images": {
-    "ui.scare": { "file": "images/scare.webp" }
+    "ui.scare": { "file": "images/scare.webp" },
+    "ui.book.0": { "file": "images/book-1.png" },
+    "ui.book.1": { "file": "images/book-2.png" },
+    "ui.book.2": { "file": "images/book-3.jpg" },
+    "ui.book.3": { "file": "images/book-4.webp" },
+    "ui.wazSlain": { "file": "images/waz-slain.jpg" }
   }
 }

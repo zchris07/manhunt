@@ -1,8 +1,9 @@
-import { Action, BALANCE, BarricadeState, Btn, Health, ItemKind, Prompt, pointSegDist2, resolveOverlaps, type InputCmd, type LootKind } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, GOLDEN_BIT, Health, ItemKind, Prompt, pointSegDist2, resolveOverlaps, type InputCmd, type LootKind } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, dropItem, fireZachPump, giveShotgun, pickUpDrop, plantTrap, useItem } from './items';
+import { dropBarricade, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
+import { addItem } from './inventory';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
 
 const R = BALANCE.reach;
@@ -53,20 +54,14 @@ export function nearbyDoor(w: World, x: number, y: number, reach: number = R.doo
   return best;
 }
 
-/** How many of a loot kind a survivor may still pick up. */
-export function roomFor(p: SimPlayer, item: LootKind): boolean {
-  if (item === 'confit') return p.confit < 1;
-  const kind = LOOT_TO_ITEM[item];
-  if (kind === ItemKind.Shotgun && p.golden) return true;
-  return p.inv[kind] < BALANCE.items.maxStack;
-}
-
-export const LOOT_TO_ITEM: Record<Exclude<LootKind, 'confit'>, ItemKind> = {
+export const LOOT_TO_ITEM: Record<LootKind, ItemKind> = {
   bottle: ItemKind.Bottle,
   goggles: ItemKind.Goggles,
   shotgun: ItemKind.Shotgun,
   energy: ItemKind.Energy,
   trap: ItemKind.Trap,
+  confit: ItemKind.Confit,
+  book: ItemKind.Book,
 };
 
 /** Zach next to an NPC or an item gets its name (survivors see them in their prompts). */
@@ -78,7 +73,8 @@ function nameNear(w: World, p: SimPlayer): void {
     w.chris.solid ? w.chris : null,
     w.marc,
     w.plasma,
-    w.jaden,
+    w.jaden.alive ? w.jaden : null,
+    w.waz.solid ? w.waz : null,
   ];
   let best = -1;
   let bd: number = R.npcName;
@@ -99,7 +95,7 @@ function nameNear(w: World, p: SimPlayer): void {
   if (di >= 0) {
     const d = w.drops[di];
     p.prompt = Prompt.NameDrop;
-    p.promptTarget = d.kind | (d.golden ? 8 : 0);
+    p.promptTarget = d.kind | (d.golden ? GOLDEN_BIT : 0);
     return;
   }
   const li = nearestIndex(w.map.loot, x, y, R.pickup, (_l, i) => !w.lootTaken[i]);
@@ -109,28 +105,16 @@ function nameNear(w: World, p: SimPlayer): void {
   }
 }
 
-/** A survivor grabs a loot spawn. */
+/** A survivor grabs a loot spawn (a full inventory drops the last slot to make room). */
 function takeLoot(w: World, p: SimPlayer, li: number): void {
   const item = w.map.loot[li];
-  if (!item || w.lootTaken[li] || !roomFor(p, item.item)) return;
+  if (!item || w.lootTaken[li]) return;
   w.lootTaken[li] = true;
   if (w.testMode) {
     w.emit([p.id], { k: 'item', text: 'Items are infinite' });
     return;
   }
-  if (item.item === 'confit') {
-    p.confit = 1;
-    w.emit([p.id], { k: 'item', text: 'Got duck confit' });
-    return;
-  }
-  const kind = LOOT_TO_ITEM[item.item];
-  if (kind === ItemKind.Shotgun) {
-    // Swaps out a golden pump.
-    giveShotgun(w, p, false, BALANCE.items.shotgun.shells);
-  } else {
-    p.inv[kind]++;
-    if (kind === ItemKind.Goggles) p.goggles.push(BALANCE.items.goggles.meter);
-  }
+  addItem(w, p, LOOT_TO_ITEM[item.item]);
   w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_TEXT[item.item]}` });
 }
 
@@ -179,8 +163,8 @@ function survivorPrompts(w: World, p: SimPlayer): void {
     }
   }
   if (mate) {
-    if (mate.health === Health.Staked) set(p.confit > 0 ? Prompt.ConfitUnstake : Prompt.Unstake, mate.id);
-    else if (mate.health === Health.Downed) set(p.confit > 0 ? Prompt.ConfitRevive : Prompt.Revive, mate.id);
+    if (mate.health === Health.Staked) set(Prompt.Unstake, mate.id);
+    else if (mate.health === Health.Downed) set(Prompt.Revive, mate.id);
     else set(Prompt.Heal, mate.id);
   }
 
@@ -188,16 +172,17 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   if (p.prompt === Prompt.None && w.chris.canTalk(p)) set(Prompt.TalkChris, 0);
   if (p.prompt === Prompt.None && w.marc.canTalk(p)) set(Prompt.TalkMarc, 0);
   if (p.prompt === Prompt.None && w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
+  if (p.prompt === Prompt.None && w.waz.canTalk(p)) set(Prompt.TalkWaz, 0);
   if (p.prompt === Prompt.None) {
     // Something a teammate dropped.
-    const di = nearestIndex(w.drops, x, y, R.pickup, (d) => d.kind === ItemKind.Shotgun || p.inv[d.kind] < BALANCE.items.maxStack);
+    const di = nearestIndex(w.drops, x, y, R.pickup, () => true);
     if (di >= 0) set(Prompt.PickDrop, w.drops[di].id);
   }
   if (p.prompt === Prompt.None) {
     const li = nearestIndex(w.map.loot, x, y, R.loot, (_l, i) => !w.lootTaken[i]);
-    if (li >= 0) set(roomFor(p, w.map.loot[li].item) ? Prompt.Loot : Prompt.InventoryFull, li);
+    if (li >= 0) set(Prompt.Loot, li);
   }
-  if (p.prompt === Prompt.None || p.prompt === Prompt.InventoryFull) {
+  if (p.prompt === Prompt.None) {
     const gi = nearestIndex(w.map.generators, x, y, R.generator, (_g, i) => !w.gens[i].repaired);
     if (gi >= 0 && !w.gate.powered) set(Prompt.Repair, gi);
   }
@@ -367,22 +352,6 @@ function survivorInteract(w: World, p: SimPlayer): void {
     case Prompt.Unstake:
       w.startAction(p, Action.Unstake, S.unstakeTime, p.promptTarget);
       break;
-    case Prompt.ConfitRevive:
-    case Prompt.ConfitUnstake: {
-      const q = w.players.get(p.promptTarget);
-      if (!q) break;
-      if (!w.testMode) p.confit = 0;
-      if (q.health === Health.Downed) {
-        restoreSurvivor(q, BALANCE.survivor.reviveHp);
-        p.stats.revives++;
-        w.feed(`${p.name} revived ${q.name}`);
-      } else if (q.health === Health.Staked) {
-        releaseFromStake(w, q);
-        p.stats.unstakes++;
-        w.feed(`${p.name} cut ${q.name} down`);
-      }
-      break;
-    }
     case Prompt.OpenGate:
       w.startAction(p, Action.OpenGate, BALANCE.objectives.gateOpenTime, 0);
       break;
@@ -400,6 +369,9 @@ function survivorInteract(w: World, p: SimPlayer): void {
       break;
     case Prompt.TalkPlasma:
       w.plasma.talk(p);
+      break;
+    case Prompt.TalkWaz:
+      w.waz.talk(p);
       break;
     case Prompt.PickDrop:
       pickUpDrop(w, p, p.promptTarget);
@@ -528,8 +500,9 @@ const ITEM_TEXT: Record<LootKind, string> = {
   goggles: 'night vision goggles',
   confit: 'duck confit',
   shotgun: 'shotgun',
-  energy: 'energy drink',
+  energy: 'Doctor Pepper',
   trap: 'galaxy gas trap',
+  book: 'The Grapes of Wrath',
 };
 
 export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {

@@ -69,7 +69,7 @@ export const idle = (buttons = 0, aim = 0, item = 0): Omit<InputCmd, 'seq'> => (
 /** Readies everyone and starts a match with the given hunter count. */
 export function startMatch(h: Harness, hunters = 1, seed = 'test-seed', testMode = false): void {
   const owner = h.clients.find((c) => c.isOwner)!;
-  owner.send({ t: 'settings', settings: { hunters, survivors: 9, seed, difficulty: 1, escapeFraction: 0.5, testMode } });
+  owner.send({ t: 'settings', settings: { hunters, survivors: 9, seed, testMode } });
   for (const c of h.clients) if (c !== owner) c.send({ t: 'ready', ready: true });
   h.run(500);
   owner.send({ t: 'start' });

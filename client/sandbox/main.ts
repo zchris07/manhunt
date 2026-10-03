@@ -82,7 +82,7 @@ function arenaScene(assets: AssetManager): Scene {
 
 function mapScene(assets: AssetManager, seed: number): Scene {
   const t0 = performance.now();
-  const data = generateMap(mapParamsFor(seed, resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 })));
+  const data = generateMap(mapParamsFor(seed, resolveBalance({ hunters: 1, survivors: 4 })));
   const genMs = performance.now() - t0;
   const world = new MapWorld(data);
   const mr = new MapRenderer(data, assets);

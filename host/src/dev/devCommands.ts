@@ -1,4 +1,5 @@
-import { BALANCE, Health, ItemKind, resolveOverlaps } from '@manhunt/shared';
+import { Health, ITEM_KIND_MAX, ItemKind, resolveOverlaps } from '@manhunt/shared';
+import { addItem } from '../sim/inventory';
 import type { World } from '../sim/World';
 
 /** DEV-ONLY: test hooks for end-to-end tests and debugging (host must run with dev: true). */
@@ -29,15 +30,13 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
     case 'give': {
       // args: [ItemKind, count]
       const kind = args[0] as ItemKind;
-      if (kind < ItemKind.Bottle || kind > ItemKind.Trap) break;
-      const n = Math.max(0, Math.min(BALANCE.items.maxStack, args[1] ?? 1));
-      p.inv[kind] = n;
-      if (kind === ItemKind.Goggles) p.goggles = Array.from({ length: n }, () => BALANCE.items.goggles.meter);
-      if (kind === ItemKind.Shotgun) p.shells = Array.from({ length: n }, () => BALANCE.items.shotgun.shells);
+      if (kind < ItemKind.Bottle || kind > ITEM_KIND_MAX) break;
+      const n = Math.max(0, Math.min(20, args[1] ?? 1));
+      for (let i = 0; i < n; i++) addItem(w, p, kind);
       break;
     }
     case 'confit':
-      p.confit = 1;
+      addItem(w, p, ItemKind.Confit);
       break;
     case 'jarvis':
       p.jarvis = 1;
@@ -63,9 +62,10 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       break;
     }
     case 'marc':
-    case 'plasma': {
-      // Bring Marc Cortez or Plasma.TTV next to this player.
-      const n = cmd === 'marc' ? w.marc : w.plasma;
+    case 'plasma':
+    case 'waz': {
+      // Bring Marc Cortez, Plasma.TTV or Waz next to this player.
+      const n = cmd === 'marc' ? w.marc : cmd === 'waz' ? w.waz : w.plasma;
       n.x = p.move.x + (args[0] ?? 60);
       n.y = p.move.y + (args[1] ?? 0);
       n.unstick();

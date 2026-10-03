@@ -14,7 +14,7 @@ describe('GameHost over an in-memory transport (Node)', () => {
     expect(c.lobby!.players.map((p) => p.name)).toEqual(['Ana', 'Ben', 'Ana 2']);
 
     // Non-owners cannot change settings.
-    b.send({ t: 'settings', settings: { hunters: 2, survivors: 9, seed: 'x', difficulty: 1, escapeFraction: 0.5, testMode: false } });
+    b.send({ t: 'settings', settings: { hunters: 2, survivors: 9, seed: 'x', testMode: false } });
     h.run(100);
     expect(a.lobby!.settings.hunters).toBe(1);
 

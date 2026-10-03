@@ -98,6 +98,9 @@ function resolveAttack(w: World, h: SimPlayer): void {
   } else if (inSwipe(h, w.plasma.x, w.plasma.y, w.plasma.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.plasma.x, w.plasma.y)) {
     w.plasma.slashHit(h);
     hit = true;
+  } else if (w.waz.solid && inSwipe(h, w.waz.x, w.waz.y, BALANCE.waz.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.waz.x, w.waz.y)) {
+    w.waz.hit(h);
+    hit = true;
   } else {
     // Two swings break a dropped barricade.
     w.map.barricades.forEach((b, i) => {
@@ -201,6 +204,12 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
   if (pointSegDist2(pl.x, pl.y, fromX, fromY, h.move.x, h.move.y) <= (reach + pl.radius) ** 2) {
     pl.slashHit(h);
     lungeLanded(h);
+    return;
+  }
+  const wz = w.waz;
+  if (wz.solid && pointSegDist2(wz.x, wz.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.waz.radius) ** 2) {
+    wz.hit(h);
+    lungeLanded(h);
   }
 }
 
@@ -215,6 +224,32 @@ function lungeLanded(h: SimPlayer): void {
 }
 
 export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet';
+
+/**
+ * Takes `amount` hp (out of his 100) off Zach. At zero he goes down for a while; Plasma's
+ * punches put him down without the lasting slowdown. Gas burns quietly (no flinch).
+ */
+export function hurtHunter(w: World, h: SimPlayer, amount: number, by: SimPlayer | null, kind: HitKind | 'gas'): void {
+  if (h.role !== 'hunter' || h.health === Health.Eliminated || h.knockT > 0 || amount <= 0) return;
+  h.hp = Math.max(0, h.hp - amount / H.health.max);
+  if (kind !== 'gas') w.emit('all', { k: 'hit', victim: h.id, by: by?.id ?? 0, x: Math.round(h.move.x), y: Math.round(h.move.y), w: kind });
+  if (h.hp > 1e-4) return;
+  downHunter(w, h, kind !== 'punch');
+  w.feed(kind === 'punch' ? `Plasma.TTV knocked ${h.name} out` : by ? `${by.name} put ${h.name} down` : `${h.name} went down`);
+}
+
+/** Zach is down: everything he was doing stops, and he drops whoever he carried. */
+export function downHunter(w: World, h: SimPlayer, counts: boolean): void {
+  h.hp = 0;
+  h.knockT = H.health.downTime;
+  h.chargeT = -1;
+  h.attackWindup = 0;
+  h.move.lungeT = 0;
+  if (h.action !== Action.None) w.cancelAction(h);
+  if (h.carrying) dropCarried(w, h);
+  if (counts) h.downs++;
+  w.emit('all', { k: 'stun', target: h.id, kind: 'down' });
+}
 
 /**
  * Takes `amount` (a fraction of full health) off a survivor: they flinch, and at zero they're
@@ -310,13 +345,15 @@ export function updateCombat(w: World, dt: number): void {
 
     if (p.role === 'hunter') {
       p.reloadT = Math.max(0, p.reloadT - dt);
-      // Knocked out by Plasma: back up after a few seconds, at full health.
+      // Down: back up after a while at half health. Up: the bar slowly fills again.
       if (p.knockT > 0) {
         p.knockT = Math.max(0, p.knockT - dt);
         if (p.knockT === 0) {
-          p.hp = 1;
+          p.hp = H.health.recoverFraction;
           w.feed(`${p.name} got back up`);
         }
+      } else if (p.health !== Health.Eliminated) {
+        p.hp = Math.min(1, p.hp + dt / H.health.regenTime);
       }
       if (p.chargeT >= 0) {
         const C = H.attack.charge;

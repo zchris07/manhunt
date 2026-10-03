@@ -2,32 +2,40 @@ import {
   ACTION_LABELS,
   Action,
   BALANCE,
+  GOLDEN_BIT,
   GenFlag,
   Health,
-  ITEM_NAMES,
+  INV_SLOTS,
   ItemKind,
   NPC_NAMES,
   PROMPT_LABELS,
   Prompt,
-  SLOT_ITEMS,
+  isWeapon,
+  hunterHealthMul,
   maxStamina,
+  slotName,
   type SelfState,
+  type SlotState,
   type WorldState,
 } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { GameClient } from '../net/GameClient';
-import { $, el, esc, storageGet, storageSet } from './dom';
+import { $, el, esc } from './dom';
 
 const HEALTH_LABEL = ['Healthy', 'Wounded', 'Downed', 'Carried', 'On a stake', 'Escaped', 'Eliminated'];
 const HEALTH_CLASS = ['hp-healthy', 'hp-wounded', 'hp-downed', 'hp-carried', 'hp-staked', 'hp-gone', 'hp-gone'];
-const ITEM_ICON: Record<number, string> = {
+export const ITEM_ICON: Record<number, string> = {
   [ItemKind.Bottle]: 'item.bottle',
   [ItemKind.Goggles]: 'item.goggles',
   [ItemKind.Shotgun]: 'item.shotgun',
   [ItemKind.Energy]: 'item.energy',
   [ItemKind.Trap]: 'item.trap',
+  [ItemKind.Book]: 'item.book',
+  [ItemKind.Confit]: 'item.confit',
+  [ItemKind.Pistol]: 'item.pistol',
 };
-const SLOT_KEY = 'manhunt.slots';
+const slotIcon = (s: SlotState): string => (s.kind === ItemKind.Shotgun && s.golden ? 'item.goldenPump' : (ITEM_ICON[s.kind] ?? ''));
+const EMPTY_SLOT: SlotState = { kind: 0, n: 0, golden: false, amt: 0 };
 
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -35,44 +43,35 @@ function fmtTime(s: number): string {
 }
 
 /**
- * The survivor's inventory as they arranged it: one slot per item kind (a stack of up to 2
- * sits in one slot). Order is personal (saved locally); the host only needs the selected kind.
+ * The survivor's eight inventory slots live on the host; this tracks which one is in hand
+ * and sends reorders (drag and drop) to the host.
  */
 export class Inventory {
-  order: ItemKind[];
   selected = 0;
+  /** Sends a slot swap to the host. */
+  onSwap: (from: number, to: number) => void = () => {};
 
-  constructor() {
-    let saved: ItemKind[] | null = null;
-    try {
-      saved = JSON.parse(storageGet(SLOT_KEY) ?? 'null') as ItemKind[] | null;
-    } catch {
-      saved = null;
-    }
-    const valid = saved && saved.length === SLOT_ITEMS.length && SLOT_ITEMS.every((k) => saved!.includes(k));
-    this.order = valid ? saved!.slice() : SLOT_ITEMS.slice();
+  /** What the host is told is in hand: the slot number (1-8), or 0 if that slot is empty. */
+  held(slots: readonly SlotState[]): number {
+    return (slots[this.selected]?.n ?? 0) > 0 ? this.selected + 1 : 0;
   }
 
-  kindAt(slot: number): ItemKind {
-    return this.order[slot] ?? ItemKind.None;
-  }
-
-  /** The item kind in hand (none if that slot is empty). */
-  held(inv: readonly number[]): ItemKind {
-    const k = this.kindAt(this.selected);
-    return (inv[k] ?? 0) > 0 ? k : ItemKind.None;
+  /** The slot in hand, if it holds anything. */
+  heldSlot(slots: readonly SlotState[]): SlotState | null {
+    const s = slots[this.selected];
+    return s && s.n > 0 ? s : null;
   }
 
   select(slot: number): void {
-    if (slot >= 0 && slot < this.order.length) this.selected = slot;
+    if (slot >= 0 && slot < INV_SLOTS) this.selected = slot;
   }
 
   /** Mouse wheel: next (or previous) slot that holds something. */
-  scroll(dir: number, inv: readonly number[]): void {
-    const n = this.order.length;
+  scroll(dir: number, slots: readonly SlotState[]): void {
+    const n = INV_SLOTS;
     for (let i = 1; i <= n; i++) {
       const s = (((this.selected + dir * i) % n) + n) % n;
-      if ((inv[this.kindAt(s)] ?? 0) > 0) {
+      if ((slots[s]?.n ?? 0) > 0) {
         this.selected = s;
         return;
       }
@@ -80,12 +79,12 @@ export class Inventory {
     this.selected = (((this.selected + dir) % n) + n) % n;
   }
 
+  /** Swaps two slots; what was in hand stays in hand. */
   swap(a: number, b: number): void {
     if (a === b) return;
-    const heldKind = this.kindAt(this.selected);
-    [this.order[a], this.order[b]] = [this.order[b], this.order[a]];
-    this.selected = this.order.indexOf(heldKind);
-    storageSet(SLOT_KEY, JSON.stringify(this.order));
+    if (this.selected === a) this.selected = b;
+    else if (this.selected === b) this.selected = a;
+    this.onSwap(a, b);
   }
 }
 
@@ -99,6 +98,8 @@ interface SlotEls {
   count: HTMLElement;
   meter: HTMLElement;
   cd: HTMLElement;
+  /** What the slot shows right now (kind and golden), to update name and icon on change. */
+  shows: string;
 }
 
 /** HUD: objective, minimap slot, roster, hotbar, prompts, big messages and a feed. */
@@ -111,6 +112,9 @@ export class Hud {
   private hotbarRole = '';
   private readonly scare: HTMLElement;
   private scareTimer = 0;
+  /** A picture flashed over the screen (book hit, slaying Waz). */
+  private readonly flash: HTMLElement;
+  private flashTimer = 0;
   private editor: HTMLElement | null = null;
 
   constructor(
@@ -138,6 +142,28 @@ export class Hud {
     const url = assets.imageUrl('ui.scare');
     if (url) this.scare.innerHTML = `<img alt="" src="${esc(url)}">`;
     parent.appendChild(this.scare);
+    this.flash = el('div', 'scare flash', '<img alt="">');
+    parent.appendChild(this.flash);
+  }
+
+  /** Covers the screen with a manifest image for `ms`, fading in and out over `fadeMs`. */
+  flashImage(imageId: string, ms: number, fadeMs: number, cls = ''): void {
+    const url = this.assets.imageUrl(imageId);
+    if (!url) return;
+    const f = this.flash;
+    f.className = `scare flash ${cls}`;
+    f.querySelector('img')!.src = url;
+    clearTimeout(this.flashTimer);
+    f.style.transition = 'none';
+    f.style.opacity = '0';
+    f.classList.add('on');
+    void f.offsetWidth;
+    f.style.transition = `opacity ${fadeMs}ms ease-in-out`;
+    f.style.opacity = '1';
+    this.flashTimer = window.setTimeout(() => {
+      f.style.opacity = '0';
+      this.flashTimer = window.setTimeout(() => f.classList.remove('on'), fadeMs);
+    }, Math.max(0, ms - fadeMs));
   }
 
   feed(text: string): void {
@@ -211,17 +237,20 @@ export class Hud {
     if (!ed) return;
     const wrap = $(ed, '.inv-slots');
     wrap.innerHTML = '';
-    const inv = self?.inv ?? [0, 0, 0, 0, 0, 0];
-    this.inventory.order.forEach((kind, i) => {
+    for (let i = 0; i < INV_SLOTS; i++) {
+      const sl = self?.slots[i] ?? EMPTY_SLOT;
+      const full = sl.n > 0;
       const s = el(
         'div',
-        `inv-slot ${i === this.inventory.selected ? 'sel' : ''} ${inv[kind] > 0 ? '' : 'empty'}`,
-        `<b>${i + 1}</b><img draggable="false" src="${this.assets.iconUrl(ITEM_ICON[kind])}"><span>${esc(ITEM_NAMES[kind])}</span><em>${inv[kind] > 0 ? `×${inv[kind]}` : 'none yet'}</em>`,
+        `inv-slot ${i === this.inventory.selected ? 'sel' : ''} ${full ? '' : 'empty'}`,
+        full
+          ? `<b>${i + 1}</b><img draggable="false" src="${this.assets.iconUrl(slotIcon(sl))}"><span>${esc(slotName(sl.kind, sl.golden))}</span><em>${isWeapon(sl.kind) ? `${sl.amt} left` : `×${sl.n}`}</em>`
+          : `<b>${i + 1}</b><span>Empty</span><em></em>`,
       );
       s.dataset.slot = String(i);
       s.addEventListener('pointerdown', (e) => this.beginDrag(e, i, self));
       wrap.appendChild(s);
-    });
+    }
   }
 
   private beginDrag(e: PointerEvent, from: number, self: SelfState | null): void {
@@ -242,8 +271,12 @@ export class Hud {
       window.removeEventListener('pointerup', up);
       ghost.remove();
       const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('.inv-slot');
-      if (over?.dataset.slot !== undefined) this.inventory.swap(from, Number(over.dataset.slot));
-      this.hotbarRole = '';
+      if (over?.dataset.slot !== undefined) {
+        const to = Number(over.dataset.slot);
+        this.inventory.swap(from, to);
+        // Show the swap at once; the host's next snapshot confirms it.
+        if (self) [self.slots[from], self.slots[to]] = [self.slots[to], self.slots[from]];
+      }
       this.renderEditor(self);
     };
     move(e);
@@ -253,7 +286,7 @@ export class Hud {
 
   /** Builds the hotbar's fixed DOM for a role; values are updated in place each frame. */
   private buildHotbar(role: 'survivor' | 'hunter' | 'none', test: boolean): void {
-    const key = `${role}:${this.inventory.order.join(',')}:${test}`;
+    const key = `${role}:${test}`;
     if (key === this.hotbarRole) return;
     this.hotbarRole = key;
     const hb = $(this.root, '#hotbar');
@@ -278,28 +311,28 @@ export class Hud {
         count: root.querySelector('.count')!,
         meter: root.querySelector('.meter')!,
         cd: root.querySelector('.cd')!,
+        shows: '',
       };
       this.slots.push(s);
       return s;
     };
     if (role === 'survivor') {
-      this.inventory.order.forEach((kind, i) => {
-        const s = slot(String(i + 1), ITEM_NAMES[kind], ITEM_ICON[kind], 'item');
+      for (let i = 0; i < INV_SLOTS; i++) {
+        const s = slot(String(i + 1), '', '', 'item');
         // Click a slot to take that item in hand.
         s.root.addEventListener('pointerdown', (e) => {
           e.preventDefault();
           e.stopPropagation();
           this.inventory.select(i);
         });
-      });
-      hb.appendChild(el('div', 'sep'));
-      // JARVIS and duck confit show here but can't be taken in hand (or dropped).
-      for (const s of [slot('Q', 'JARVIS', 'item.tablet', 'ability'), slot('E', 'Duck Confit', 'item.confit', 'confit')]) {
-        s.root.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        });
       }
+      hb.appendChild(el('div', 'sep'));
+      // JARVIS shows here but can't be taken in hand (or dropped).
+      const j = slot('Q', 'JARVIS', 'item.tablet', 'ability');
+      j.root.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
     } else if (role === 'hunter') {
       const machete = slot('LMB', 'Machete Swipe', 'char.machete', 'ability');
       machete.icon.classList.add('rot');
@@ -358,9 +391,14 @@ export class Hud {
       const span = bar.querySelector('span')!;
       if (span.textContent !== label) span.textContent = label;
       if (hunter) {
+        const Hh = BALANCE.hunter.health;
+        const slow = Math.round((1 - hunterHealthMul(self.hp, self.downs)) * 100);
         status =
           `<div class="who hunter">ZACH BRANCH${self.carrying ? ` <span>carrying ${esc(m.players.get(self.carrying)?.name ?? '')}</span>` : ''}</div>` +
-          (self.health === Health.Downed ? `<div class="warn">KNOCKED OUT by Plasma.TTV</div>` : '') +
+          `<div class="zach-hp"><div style="width:${(self.hp * 100).toFixed(1)}%"></div><span>${Math.ceil(self.hp * Hh.max)} / ${Hh.max}</span></div>` +
+          (slow > 0 && self.health !== Health.Downed ? `<div class="dim">${slow}% slower${self.downs ? ` (${Math.min(Hh.downPenaltyMax * 100, self.downs * Hh.downPenalty * 100)}% for good)` : ''}</div>` : '') +
+          (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
+          (self.bookT > 0 ? `<div class="warn">THE GRAPES OF WRATH ${self.bookT.toFixed(1)}s</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempT.toFixed(1)}s`}</div>` : '') +
@@ -371,8 +409,8 @@ export class Hud {
           `<div class="who ${HEALTH_CLASS[self.health]}">${HEALTH_LABEL[self.health].toUpperCase()}${self.hideState === 2 ? ' <span>hidden</span>' : ''}${
             self.health === Health.Healthy || self.health === Health.Wounded ? ` <span>${Math.round(self.hp * 100)}%</span>` : ''
           }</div>` +
-          (self.boostT > 0 ? `<div class="cyan">ENERGY DRINK ${Math.ceil(self.boostT)}s</div>` : '') +
-          (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${self.goggleMeter.toFixed(1)}s`}</div>` : '') +
+          (self.boostT > 0 ? `<div class="red">DOCTOR PEPPER ${Math.ceil(self.boostT)}s</div>` : '') +
+          (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${(this.inventory.heldSlot(self.slots)?.amt ?? 0).toFixed(1)}s`}</div>` : '') +
           (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s</div>` : '') +
           (self.health === Health.Carried ? `<div>Struggle: ${Math.round(self.wiggle * 100)}%</div>` : '') +
           (self.hideState === 2 ? `<div>Breath ${Math.round(self.breath * 100)}%</div>` : '');
@@ -420,32 +458,41 @@ export class Hud {
       s.cd.style.transform = `scaleY(${Math.max(0, Math.min(1, o.cd ?? 0))})`;
     };
     if (role === 'survivor') {
-      const inv = self.inv;
-      this.inventory.order.forEach((kind, i) => {
-        const n = inv[kind] ?? 0;
+      const I = BALANCE.items;
+      for (let i = 0; i < INV_SLOTS; i++) {
+        const sl = self.slots[i] ?? EMPTY_SLOT;
+        const n = sl.n;
         const s = this.slots[i];
+        if (!s) continue;
+        const shows = n > 0 ? `${sl.kind}:${sl.golden}` : '';
+        if (s.shows !== shows) {
+          s.shows = shows;
+          s.name.textContent = n > 0 ? slotName(sl.kind, sl.golden) : '';
+          const icon = n > 0 ? slotIcon(sl) : '';
+          if (icon) s.icon.src = this.assets.iconUrl(icon);
+          else s.icon.removeAttribute('src');
+          s.root.classList.toggle('gold', n > 0 && sl.golden);
+        }
         let meter: number | null = null;
         let cd = 0;
-        if (kind === ItemKind.Goggles && n > 0) meter = test ? 1 : self.goggleMeter / BALANCE.items.goggles.meter;
-        const golden = kind === ItemKind.Shotgun && self.golden === 1;
-        if (kind === ItemKind.Shotgun && n > 0) {
-          meter = test ? 1 : self.shells / (golden ? BALANCE.items.golden.shells : BALANCE.items.shotgun.shells);
-          cd = self.reloadT / (golden ? BALANCE.items.golden.reload : BALANCE.items.shotgun.reload);
+        let count = n > 1 ? `×${n}` : '';
+        if (n > 0 && sl.kind === ItemKind.Goggles) meter = test ? 1 : sl.amt / I.goggles.meter;
+        if (n > 0 && sl.kind === ItemKind.Shotgun) {
+          meter = test ? 1 : sl.amt / (sl.golden ? I.golden.shells : I.shotgun.shells);
+          count = test ? '∞' : `${sl.amt}`;
+          if (i === this.inventory.selected) cd = self.reloadT / (sl.golden ? I.golden.reload : I.shotgun.reload);
         }
-        if (kind === ItemKind.Shotgun && s) {
-          const name = golden ? 'Golden Pump' : ITEM_NAMES[kind];
-          if (s.name.textContent !== name) {
-            s.name.textContent = name;
-            s.icon.src = this.assets.iconUrl(golden ? 'item.goldenPump' : ITEM_ICON[kind]);
-          }
-          s.root.classList.toggle('gold', golden);
+        if (n > 0 && sl.kind === ItemKind.Pistol) {
+          meter = test ? 1 : sl.amt / I.pistol.shots;
+          count = test ? '∞' : `${sl.amt}`;
+          if (i === this.inventory.selected) cd = self.reloadT / I.pistol.reload;
         }
-        set(s, { on: n > 0, sel: i === this.inventory.selected, count: n > 0 ? (test ? '∞' : `×${n}`) : '', meter, cd, active: kind === ItemKind.Goggles && self.gogglesOn === 1 });
+        if (test && n > 0 && !isWeapon(sl.kind)) count = '∞';
+        set(s, { on: n > 0, sel: i === this.inventory.selected, count, meter, cd, active: sl.kind === ItemKind.Goggles && i === this.inventory.selected && self.gogglesOn === 1 });
         this.sizeSlot(s, n > 0);
-      });
+      }
       const j = self.jarvis;
-      set(this.slots[5], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : '', active: self.jarvisT > 0, hidden: j === 0 });
-      set(this.slots[6], { on: self.confit > 0, count: test ? '∞' : '', hidden: self.confit <= 0 });
+      set(this.slots[INV_SLOTS], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : '', active: self.jarvisT > 0, hidden: j === 0 });
     } else if (role === 'hunter') {
       const H = BALANCE.hunter;
       const charge = self.chargeT >= 0 ? self.chargeT / H.attack.charge.max : null;
@@ -491,7 +538,7 @@ export class Hud {
     let text = label;
     if (p === Prompt.NameNpc) return esc(NPC_NAMES[target] ?? '');
     if (p === Prompt.NameLoot) return esc(cap(LOOT_NAMES[m.map.loot[target]?.item] ?? ''));
-    if (p === Prompt.NameDrop) return esc((target & 8) !== 0 ? 'Golden pump' : (ITEM_NAMES[target & 7] ?? ''));
+    if (p === Prompt.NameDrop) return esc(slotName(target & 15, (target & GOLDEN_BIT) !== 0));
     if (p === Prompt.Loot && m.map.loot[target]) text = `Press E to pick up the ${LOOT_NAMES[m.map.loot[target].item] ?? m.map.loot[target].item}`;
     if ((p === Prompt.Heal || p === Prompt.Revive || p === Prompt.Unstake || p === Prompt.PickUp) && m.players.get(target)) {
       text = `${label} ${m.players.get(target)!.name}`;
@@ -504,8 +551,10 @@ export class Hud {
     clearTimeout(this.centerTimer);
     clearTimeout(this.bigTimer);
     clearTimeout(this.scareTimer);
+    clearTimeout(this.flashTimer);
     this.editor?.remove();
     this.scare.remove();
+    this.flash.remove();
     this.root.remove();
   }
 }
@@ -517,8 +566,9 @@ const LOOT_NAMES: Record<string, string> = {
   goggles: 'night vision goggles',
   confit: 'duck confit',
   shotgun: 'shotgun',
-  energy: 'energy drink',
+  energy: 'Doctor Pepper',
   trap: 'galaxy gas trap',
+  book: 'The Grapes of Wrath',
 };
 
 /** Skill check: a needle sweeps a circle; press Space inside the zone. */

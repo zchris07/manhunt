@@ -1,7 +1,9 @@
-import { BALANCE, DEG, EntityKind, Health, JadenFlag, quantizeEntity, rayCircle, type EntityRecord } from '@manhunt/shared';
+import { BALANCE, DEG, EntityKind, Health, ItemKind, JadenFlag, quantizeEntity, rayCircle, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
+import type { ItemHit } from './npc';
 import { hurtSurvivor } from './combat';
+import { placeDrop } from './items';
 import { Shane } from './shane';
 
 const J = BALANCE.jaden;
@@ -9,33 +11,72 @@ const G = J.pistol;
 
 /**
  * Jaden Nguyen: wanders and is alerted exactly like Shane Jeans, but he has a pistol. Once
- * alerted he hangs back at a few metres and shoots the survivor who set him off, until
- * they've lost half their health to him, then calms down and wanders off. Bottles, shotgun
- * blasts and galaxy gas shake him off like Shane. Unkillable.
+ * alerted he hangs back at a few metres and shoots the survivor who set him off, until they
+ * get out of range or have lost half the health they had when he started. Any survivor item
+ * stuns him for a moment; three of them kill him, and he drops his pistol.
  */
 export class Jaden extends Shane {
   protected override readonly who = 'Jaden Nguyen';
+  alive = true;
+  stunT = 0;
   private fireCd = 0;
   /** Seconds since his last shot (muzzle flash). */
   private shotAge = 9;
-  /** Health his current target has lost to him this chase. */
+  /** Health his current target has lost to him this chase, and what they had to start. */
   private dealt = 0;
+  private startHp = 1;
+  private hits = 0;
 
   constructor(w: World) {
     super(w, J);
   }
 
+  override get solid(): boolean {
+    return this.alive;
+  }
+
+  override get alertLevel(): number {
+    return this.alive ? super.alertLevel : 0;
+  }
+
   override record(): EntityRecord {
     let st = 0;
+    if (!this.alive) st |= JadenFlag.Dead;
     if (this.mode === 'chase') st |= JadenFlag.Chasing;
     if (this.mode === 'flee') st |= JadenFlag.Fleeing;
     if (this.shotAge < 0.15) st |= JadenFlag.Firing;
-    return quantizeEntity(this.id, EntityKind.Jaden, this.x, this.y, this.facing, st, this.moving ? 1 : 0, 0, 0, 0);
+    if (this.stunT > 0) st |= JadenFlag.Stunned;
+    return quantizeEntity(this.id, EntityKind.Jaden, this.x, this.y, this.facing, st, this.moving ? 1 : 0, Math.round(this.alertLevel * 255), 0, 0);
+  }
+
+  /** Anything thrown or fired at him stuns him; three survivor hits and he's dead. */
+  override itemHit(by: SimPlayer, _kind: ItemHit): void {
+    if (!this.alive) return;
+    this.stunT = Math.max(this.stunT, J.stun);
+    this.moving = false;
+    if (by.role !== 'survivor') return;
+    this.hits++;
+    if (this.hits >= J.hp) this.die(by);
+  }
+
+  override gassed(): void {
+    if (this.alive) this.stunT = Math.max(this.stunT, J.stun);
+  }
+
+  private die(by: SimPlayer): void {
+    const w = this.w;
+    this.alive = false;
+    this.moving = false;
+    if (this.mode === 'chase') this.endChase('walk');
+    this.meter.clear();
+    placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Pistol, golden: false, amount: BALANCE.items.pistol.shots }, this.x + Math.cos(this.facing) * 22, this.y + Math.sin(this.facing) * 22);
+    w.feed(`${by.name} took Jaden Nguyen down. His pistol is on the ground`);
   }
 
   protected override alert(p: SimPlayer): void {
     super.alert(p);
     this.dealt = 0;
+    this.startHp = p.hp;
     this.fireCd = 0.6;
   }
 
@@ -51,8 +92,14 @@ export class Jaden extends Shane {
   }
 
   override update(dt: number): void {
+    if (!this.alive) return;
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.shotAge += dt;
+    if (this.stunT > 0) {
+      this.stunT = Math.max(0, this.stunT - dt);
+      this.moving = false;
+      return;
+    }
     super.update(dt);
   }
 
@@ -96,7 +143,7 @@ export class Jaden extends Shane {
     hurtSurvivor(w, hit, G.damage, null, 'bullet');
     if (hit !== t) return;
     this.dealt += before - hit.hp;
-    if (this.dealt >= G.stopAfter - 1e-6 || t.health === Health.Downed) {
+    if (this.dealt >= this.startHp * G.stopAfter - 1e-6 || t.health === Health.Downed) {
       w.feed(`Jaden Nguyen let ${t.name} go`);
       this.endChase('walk');
     }

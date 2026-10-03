@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, Btn, EntityKind, ItemKind, overlapsCollider } from '@manhunt/shared';
-import { Driver, clearLane, makeWorld, parkSexton, parkShane, place } from './worldHelpers';
+import { clearLane, Driver, makeWorld, parkSexton, parkShane, place, runUntil, setCount } from './worldHelpers';
 import { buildView, canSee } from '../src/sim/view';
 import type { World } from '../src/sim/World';
 
@@ -33,7 +33,11 @@ describe('Shane Jeans', () => {
     const { w, d, c } = shaneWorld();
     const s = w.players.get(2)!;
     place(s, c.x - S.alertRadius + 10, c.y);
-    d.run(1);
+    // Standing that close fills his alert meter within a few seconds.
+    d.run(secs(1));
+    expect(w.shane.chasing).toBe(false);
+    expect(w.shane.alertLevel).toBeGreaterThan(0.1);
+    runUntil(d, () => w.shane.chasing, secs(S.proxAlertSec * 2 + 1));
     expect(w.shane.chasing).toBe(true);
     expect(w.shane.target).toBe(s.id);
     expect(w.events.some((e) => e.e.k === 'shane' && e.e.alerted)).toBe(true);
@@ -44,19 +48,22 @@ describe('Shane Jeans', () => {
     expect(Math.hypot(w.shane.x - s.move.x, w.shane.y - s.move.y)).toBeLessThan(80);
   });
 
-  it('a flashlight on him builds alert over 2 s, even on and off, and it slowly decays', () => {
+  it('a flashlight on him fills his alert meter, even on and off, and it slowly drains', () => {
     const { w, d, c } = shaneWorld();
     const s = w.players.get(2)!;
     place(s, c.x - 350, c.y);
     const on = { aim: 0 };
     const off = { aim: Math.PI };
-    d.run(secs(1.2), (p) => (p === s ? on : undefined));
+    d.run(secs(S.flashAlertSec * 0.7), (p) => (p === s ? on : undefined));
     expect(w.shane.chasing).toBe(false);
+    expect(w.shane.alertLevel).toBeCloseTo(0.7, 1);
+    // Survivors see it: the meter rides along in his snapshot record.
+    expect(w.shane.record().extra).toBeGreaterThan(150);
     d.run(secs(0.5), (p) => (p === s ? off : undefined));
     const kept = w.shane.meter.get(s.id)!;
-    expect(kept).toBeGreaterThan(0.9);
-    expect(kept).toBeLessThan(1.2);
-    d.run(secs(1), (p) => (p === s ? on : undefined));
+    expect(kept).toBeGreaterThan(0.55);
+    expect(kept).toBeLessThan(0.65);
+    d.run(secs(S.flashAlertSec * 0.4), (p) => (p === s ? on : undefined));
     expect(w.shane.chasing).toBe(true);
   });
 
@@ -70,7 +77,7 @@ describe('Shane Jeans', () => {
     expect(w.shane.chasing).toBe(false);
     place(h, 60, 60);
     place(s, w.shane.x - 40, w.shane.y);
-    d.run(1);
+    runUntil(d, () => w.shane.chasing);
     expect(w.shane.chasing).toBe(true);
     // Zach sees only a direction to him, never a position; survivors don't get it.
     expect(buildView(w, h).world.shaneDir).not.toBeNull();
@@ -90,14 +97,14 @@ describe('Shane Jeans', () => {
     const { w, d, c } = shaneWorld();
     const s = w.players.get(2)!;
     place(s, c.x - 40, c.y);
-    d.run(1);
+    runUntil(d, () => w.shane.chasing);
     expect(w.shane.chasing).toBe(true);
     d.run(secs(S.chaseTime) + 2);
     expect(w.shane.chasing).toBe(false);
     const b = shaneWorld();
     const s2 = b.w.players.get(2)!;
     place(s2, b.c.x - 40, b.c.y);
-    b.d.run(1);
+    runUntil(b.d, () => b.w.shane.chasing);
     place(s2, b.c.x - S.loseRadius - 200, b.c.y);
     b.d.run(1);
     expect(b.w.shane.chasing).toBe(false);
@@ -107,13 +114,12 @@ describe('Shane Jeans', () => {
     const { w, d, c } = shaneWorld();
     const s = w.players.get(2)!;
     place(s, c.x - 60, c.y);
-    d.run(1);
+    runUntil(d, () => w.shane.chasing);
     expect(w.shane.chasing).toBe(true);
     place(s, c.x - 200, c.y);
     w.shane.x = c.x;
     w.shane.y = c.y;
-    s.inv[ItemKind.Bottle] = 2;
-    s.selItem = ItemKind.Bottle;
+    setCount(s, ItemKind.Bottle, 2);
     const throwAt = (): void => {
       d.tap(s.id, Btn.Primary, { item: ItemKind.Bottle, aim: Math.atan2(w.shane.y - s.move.y, w.shane.x - s.move.x), aimDist: Math.hypot(w.shane.x - s.move.x, w.shane.y - s.move.y) });
       d.run(10);
@@ -129,12 +135,11 @@ describe('Shane Jeans', () => {
     const b = shaneWorld();
     const s2 = b.w.players.get(2)!;
     place(s2, b.c.x - 60, b.c.y);
-    b.d.run(1);
+    runUntil(b.d, () => b.w.shane.chasing);
     place(s2, b.c.x - 200, b.c.y);
     b.w.shane.x = b.c.x;
     b.w.shane.y = b.c.y;
-    s2.inv[ItemKind.Shotgun] = 1;
-    s2.shells = [3];
+    setCount(s2, ItemKind.Shotgun, 1);
     b.d.tap(s2.id, Btn.Primary, { item: ItemKind.Shotgun, aim: 0 });
     expect(b.w.shane.mode).toBe('flee');
   });

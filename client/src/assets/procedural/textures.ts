@@ -641,6 +641,7 @@ const MARC_LOOK: Look = { skin: '#c68a5e', hair: '#1e1612', style: 'short', shir
 const PLASMA_LOOK: Look = { skin: '#e8c0a0', hair: '#2a1e1a', style: 'curly', shirt: '#2a2a30', pants: '#26262c', shoes: '#e8e8ec', jacket: '#1c1c22' };
 /** Jaden Nguyen: backwards cap, olive bomber over a white tee. */
 const JADEN_LOOK: Look = { skin: '#d8b08a', hair: '#121010', style: 'cap', hat: '#1e1e22', shirt: '#eeeeee', pants: '#2a2a30', shoes: '#e8e8e8', jacket: '#4e5a36' };
+const WAZ_LOOK: Look = { skin: '#8a5a38', hair: '#0e0c0c', style: 'short', shirt: '#2f8a3a', pants: '#2e3442', shoes: '#1c1c1e' };
 const SEXTON_LOOK: Look = { skin: '#f4cfae', hair: '#f5d86a', style: 'short', shirt: '#2f86f0', pants: '#cdb57c', shoes: '#5a3a22' };
 
 /** A leg + shoe, pointing +x from the hip (used in pairs for the walk cycle). */
@@ -820,7 +821,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant === 23 ? JADEN_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant === 23 ? JADEN_LOOK : variant === 24 ? WAZ_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -1015,6 +1016,13 @@ export const chrisDead: CanvasGen = () => corpse(CHRIS_LOOK);
 export const jaden: CanvasGen = () => {
   const [c, ctx] = canvas(64);
   person(ctx, JADEN_LOOK, 30, 32, 1);
+  return c;
+};
+
+/** Waz: brown skin, black hair, a green shirt. */
+export const waz: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, WAZ_LOOK, 30, 32, 1);
   return c;
 };
 
@@ -1467,24 +1475,79 @@ export const itemShotgun = itemCanvas((ctx) => {
   ctx.restore();
 }, 44);
 
+/** Doctor Pepper: a deep red can with a white oval and a dark red "23" swoosh. */
 export const itemEnergy = itemCanvas((ctx) => {
   roundRect(ctx, 12, 6, 16, 28, 4);
-  fillInk(ctx, '#20d0ff');
-  ctx.fillStyle = '#e8e8f0';
+  fillInk(ctx, '#a3122a');
+  ctx.fillStyle = '#d8d8e0';
   ctx.fillRect(13, 6, 14, 3);
   ctx.fillRect(13, 31, 14, 2);
-  // Lightning bolt.
+  // The white oval label.
+  ellipse(ctx, 20, 19, 6, 7.5);
+  fillInk(ctx, '#f4f0ea', 1);
+  ctx.strokeStyle = '#6a0a18';
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.moveTo(22, 11);
-  ctx.lineTo(16, 21);
-  ctx.lineTo(20, 21);
-  ctx.lineTo(17, 30);
-  ctx.lineTo(25, 18);
-  ctx.lineTo(21, 18);
+  ctx.moveTo(16.5, 21);
+  ctx.quadraticCurveTo(20, 14, 23.5, 17);
+  ctx.stroke();
+  ctx.fillStyle = '#6a0a18';
+  ctx.fillRect(17, 22, 6, 1.6);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillRect(14, 10, 2.5, 18);
+});
+
+/** The Grapes of Wrath: a worn hardback, grape-purple cover and a gold title band. */
+export const itemBook = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(20, 20);
+  ctx.rotate(-0.2);
+  roundRect(ctx, -12, -15, 24, 30, 2);
+  fillInk(ctx, '#f0e8d0', 1.4);
+  roundRect(ctx, -13, -16, 24, 30, 2);
+  fillInk(ctx, '#5a2a6a');
+  ctx.fillStyle = '#3e1a4a';
+  ctx.fillRect(-13, -16, 4, 30);
+  ctx.fillStyle = '#d8b04a';
+  ctx.fillRect(-7, -9, 16, 3);
+  ctx.fillRect(-7, -4, 12, 1.5);
+  // A small bunch of grapes.
+  ctx.fillStyle = '#9a5ab8';
+  for (const [x, y] of [
+    [1, 4],
+    [5, 4],
+    [3, 7],
+    [-1, 7],
+    [1, 10],
+  ]) {
+    circle(ctx, x, y, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+});
+
+/** Jaden's pistol: a compact black handgun. */
+export const itemPistol = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(20, 20);
+  ctx.rotate(-0.3);
+  roundRect(ctx, -12, -6, 26, 7, 1.5);
+  fillInk(ctx, '#2a2a2e');
+  ctx.beginPath();
+  ctx.moveTo(-10, 0);
+  ctx.lineTo(-3, 0);
+  ctx.lineTo(-5, 12);
+  ctx.lineTo(-12, 12);
   ctx.closePath();
-  fillInk(ctx, '#ffe63a', 1);
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.fillRect(14, 10, 3, 18);
+  fillInk(ctx, '#1c1c20');
+  ctx.strokeStyle = '#0a0a0a';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(-1, 3, 3, 0, Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(-10, -5, 20, 1.5);
+  ctx.restore();
 });
 
 /**
@@ -1718,6 +1781,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   chrisDead,
   marc,
   jaden,
+  waz,
   plasma,
   plasmaBeast,
   generator,
@@ -1735,6 +1799,8 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemGoggles,
   itemShotgun,
   itemEnergy,
+  itemBook,
+  itemPistol,
   itemTrap,
   itemGoldenPump,
   itemConfit,

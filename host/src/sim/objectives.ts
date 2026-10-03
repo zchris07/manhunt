@@ -139,16 +139,16 @@ export function checkWin(w: World): void {
   const hunters = w.order.filter((p) => p.role === 'hunter');
   const escaped = survivors.filter((p) => p.health === Health.Escaped).length;
   const eliminated = survivors.filter((p) => p.health === Health.Eliminated).length;
-  const remaining = survivors.length - escaped - eliminated;
+  // The night goes on while anyone is still on their feet (or hiding).
+  const standing = survivors.filter((p) => p.health === Health.Healthy || p.health === Health.Wounded).length;
   const need = Math.min(w.balance.escapeNeeded, survivors.length);
+  const verdict = (): MatchResult['winner'] => (escaped >= need ? 'survivors' : 'hunters');
   let winner: MatchResult['winner'] | null = null;
   let reason = '';
-  if (escaped >= need) {
-    winner = 'survivors';
-    reason = `${escaped} of ${survivors.length} survivors escaped`;
-  } else if (escaped + remaining < need) {
-    winner = 'hunters';
-    reason = `Only ${escaped} escaped; ${need} needed`;
+  if (survivors.length > 0 && standing === 0) {
+    winner = verdict();
+    const down = survivors.length - escaped - eliminated;
+    reason = `${escaped} escaped, ${eliminated} eliminated${down ? `, ${down} left incapacitated` : ''}`;
   } else if (w.time >= w.balance.timeLimit) {
     winner = 'hunters';
     reason = 'Time ran out';

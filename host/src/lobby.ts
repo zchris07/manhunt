@@ -1,4 +1,4 @@
-import { BALANCE, Rng, type AssignedRole, type LobbyPlayerInfo, type LobbySettings, type RolePref } from '@manhunt/shared';
+import { Rng, type AssignedRole, type LobbyPlayerInfo, type LobbySettings, type RolePref } from '@manhunt/shared';
 
 export interface LobbyPlayer {
   id: number;
@@ -17,8 +17,6 @@ export const DEFAULT_SETTINGS: LobbySettings = {
   hunters: 1,
   survivors: 9,
   seed: '',
-  difficulty: 1,
-  escapeFraction: BALANCE.world.escapeFraction,
   testMode: false,
 };
 
@@ -72,8 +70,6 @@ export class Lobby {
       hunters: Math.max(1, Math.min(9, Math.round(s.hunters))),
       survivors: Math.max(1, Math.min(9, Math.round(s.survivors))),
       seed: s.seed.slice(0, 32),
-      difficulty: Math.max(0.5, Math.min(1.5, s.difficulty)),
-      escapeFraction: Math.max(0.1, Math.min(1, s.escapeFraction)),
       testMode: s.testMode === true,
     };
   }

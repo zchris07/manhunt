@@ -54,7 +54,40 @@ function pitterPatter(ctx: BaseAudioContext): AudioBuffer {
   return buf;
 }
 
-const SOUND_GENERATORS: Record<string, (ctx: BaseAudioContext) => AudioBuffer> = { pitterPatter };
+/**
+ * The vine "boom": a deep sine that drops in pitch, a sub thump and a burst of low noise,
+ * with a long boomy tail and a touch of saturation. A placeholder for the real clip (swap the
+ * manifest entry for a file).
+ */
+function vineBoom(ctx: BaseAudioContext): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * 1.6);
+  const buf = ctx.createBuffer(1, len, rate);
+  const d = buf.getChannelData(0);
+  let seed = 11;
+  const rnd = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  let phase = 0;
+  let sub = 0;
+  let lp = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / rate;
+    const f = 42 + 120 * Math.exp(-t / 0.06);
+    phase += (2 * Math.PI * f) / rate;
+    sub += (2 * Math.PI * 38) / rate;
+    lp += ((rnd() * 2 - 1) - lp) * 0.04;
+    const body = Math.sin(phase) * Math.exp(-t / 0.55);
+    const low = Math.sin(sub) * Math.exp(-t / 0.9) * 0.5;
+    const hit = lp * Math.exp(-t / 0.05) * 2.2;
+    const attack = Math.min(1, t / 0.004);
+    d[i] = Math.tanh((body + low + hit) * 1.8 * attack) * 0.9;
+  }
+  return buf;
+}
+
+const SOUND_GENERATORS: Record<string, (ctx: BaseAudioContext) => AudioBuffer> = { pitterPatter, vineBoom };
 
 /**
  * The game's sounds: the custom audio files in assets/manifest.json (a short fading GMajor
@@ -96,7 +129,7 @@ export class AudioEngine {
       } else {
         l.setOrientation(0, 0, -1, 0, 1, 0);
       }
-      for (const id of ['burst', 'sexton.reel']) this.getSound(id);
+      for (const id of ['burst', 'sexton.reel', 'boom']) this.getSound(id);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -196,6 +229,22 @@ export class AudioEngine {
     src.onended = () => {
       if (this.clip?.src === src) this.clip = null;
     };
+    return true;
+  }
+
+  /** Plays a whole sound once, on its own (it doesn't cut off or wait for other sounds). */
+  oneShot(id: string, volume = 1): boolean {
+    const ctx = this.ctx;
+    if (!ctx || volume <= 0) return false;
+    const b = this.getSound(id);
+    if (!b) return false;
+    const src = ctx.createBufferSource();
+    src.buffer = b;
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    src.connect(gain).connect(this.clipBus);
+    src.start();
+    this.clips++;
     return true;
   }
 

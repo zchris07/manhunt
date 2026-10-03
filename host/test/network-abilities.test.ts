@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BarricadeState, Btn, Health, ItemKind, type GameEvent } from '@manhunt/shared';
 import { createHarness, idle, move, startMatch, type Harness } from './harness';
-import { clearLane } from './worldHelpers';
+import { clearLane, setCount } from './worldHelpers';
 import type { GameClient } from '../../client/src/net/GameClient';
 
 // Each hiding / item / ability mechanic driven purely by client inputs over a transport.
@@ -70,12 +70,12 @@ describe('mechanics over the network', () => {
     const c = clearLane(h.host.world!, 350);
     place(h, surv, c.x, c.y);
     place(h, hunter, c.x + 200, c.y);
-    sp(h, surv).inv[ItemKind.Bottle] = 2;
+    setCount(sp(h, surv), ItemKind.Bottle, 2);
     h.run(100, () => surv.pushInput(idle()));
     tap(h, surv, Btn.Primary, { aim: 0, aimDist: 300, item: ItemKind.Bottle });
     h.run(300, () => surv.pushInput(idle()));
     expect(hunter.self!.stunT).toBeGreaterThan(0);
-    expect(surv.self!.inv[ItemKind.Bottle]).toBe(1);
+    expect(surv.self!.slots[ItemKind.Bottle - 1].n).toBe(1);
     expect(events(hunter).some((e) => e.k === 'stun' && e.kind === 'bottle')).toBe(true);
   });
 
@@ -132,7 +132,7 @@ describe('mechanics over the network', () => {
 
   it('testing mode: T-switch over the network swaps roles in place', async () => {
     const { h, surv } = await duel(true);
-    expect(surv.self!.inv[ItemKind.Shotgun]).toBe(2);
+    expect(surv.self!.slots.some((sl) => sl.kind === ItemKind.Shotgun)).toBe(true);
     let role = '';
     surv.on('role', (r) => {
       role = r as string;

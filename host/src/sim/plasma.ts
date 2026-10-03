@@ -1,9 +1,9 @@
-import { Action, BALANCE, EntityKind, Health, PlasmaFlag, moveCircle, overlapsCollider, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
+import { BALANCE, EntityKind, Health, ItemKind, PlasmaFlag, moveCircle, overlapsCollider, quantizeEntity, resolveOverlaps, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 import { nearbyDoor } from './interact';
-import { dropCarried, hurtSurvivor } from './combat';
-import { giveShotgun } from './items';
+import { hurtHunter, hurtSurvivor } from './combat';
+import { addItem } from './inventory';
 import { Chaser } from './nav';
 import type { ItemHit, NpcTarget } from './npc';
 
@@ -14,8 +14,8 @@ type Mode = 'idle' | 'walk' | 'transform' | 'rage' | 'revert';
 /**
  * Plasma.TTV: looks like a regular guy wandering around. Attack him and GAMER RAGE: over 2 s
  * he turns into a hulking beast, then chases whoever hit him and punches until they're down
- * (Zach is knocked out for 6 s), then turns back and walks off. Losing him for 10 s calms him
- * too. Items and the machete stun him (gas blinds and slows him); nothing kills him. Talk to
+ * (Zach goes down, without the lasting slowdown), then turns back and walks off. Losing him
+ * for 10 s calms him too, and 10 s after transforming he turns back on his own. Items and the machete stun him (gas blinds and slows him); nothing kills him. Talk to
  * him (either side) and he says "ggs" and hands you a golden pump, once each.
  */
 export class Plasma implements NpcTarget {
@@ -39,6 +39,8 @@ export class Plasma implements NpcTarget {
   private heading = 0;
   private stuckT = 0;
   private escapeT = 0;
+  /** Seconds since he transformed (he turns back after `rageTime`). */
+  private rageT = 0;
   private punchCd = 0;
   private readonly chaser: Chaser;
 
@@ -96,7 +98,7 @@ export class Plasma implements NpcTarget {
       p.chargeT = -1;
       w.emit([p.id], { k: 'item', text: 'Got golden pump' });
     } else {
-      giveShotgun(w, p, true, BALANCE.items.golden.shells);
+      addItem(w, p, ItemKind.Shotgun, undefined, true);
       w.emit([p.id], { k: 'item', text: 'Got golden pump' });
     }
   }
@@ -125,6 +127,7 @@ export class Plasma implements NpcTarget {
     this.modeT = P.transformTime;
     this.target = by.id;
     this.escapeT = 0;
+    this.rageT = 0;
     this.moving = false;
     this.facing = Math.atan2(by.move.y - this.y, by.move.x - this.x);
     this.chaser.reset();
@@ -179,6 +182,13 @@ export class Plasma implements NpcTarget {
       return;
     }
     let speed = 0;
+    if (this.raging) {
+      this.rageT += dt;
+      if (this.rageT >= P.rageTime) {
+        this.calmDown();
+        return;
+      }
+    }
     switch (this.mode) {
       case 'transform':
         // In place, over two seconds.
@@ -281,19 +291,8 @@ export class Plasma implements NpcTarget {
       }
       return;
     }
-    // Zach: punched until he's knocked out cold for a few seconds.
-    t.hp = Math.max(0, t.hp - P.zachPunchDamage);
-    w.emit('all', { k: 'hit', victim: t.id, by: 0, x: Math.round(t.move.x), y: Math.round(t.move.y), w: 'punch' });
-    if (t.hp > 0.001) return;
-    t.hp = 0;
-    t.knockT = P.zachKnockTime;
-    t.chargeT = -1;
-    t.attackWindup = 0;
-    t.move.lungeT = 0;
-    if (t.action !== Action.None) w.cancelAction(t);
-    if (t.carrying) dropCarried(w, t);
-    w.emit('all', { k: 'stun', target: t.id, kind: 'plasma' });
-    w.feed(`Plasma.TTV knocked ${t.name} out`);
-    this.calmDown();
+    // Zach: punched until he goes down.
+    hurtHunter(w, t, P.zachPunchDamage, null, 'punch');
+    if (t.knockT > 0) this.calmDown();
   }
 }

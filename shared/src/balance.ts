@@ -24,7 +24,10 @@ export const BALANCE = {
     size: 6000,
     warehouseSize: 1200,
     matchTimeLimit: 15 * 60,
-    /** Survivor team wins if at least this fraction of survivors escape. */
+    /**
+     * The match runs until every survivor has escaped, is incapacitated (downed, carried or
+     * staked) or is eliminated. The survivors win if at least this fraction escaped.
+     */
     escapeFraction: 0.5,
     /** Fraction of the woods' tree positions that are kept (25% fewer trees). */
     treeKeep: 0.75,
@@ -134,7 +137,15 @@ export const BALANCE = {
       /** How loud the release snippet is for Zach. */
       zachVolume: 0.25,
     },
-    /** Scent trail (always on): survivors running or bleeding leave red scent. */
+    /**
+     * Zach's health: `max` hp. At 0 he's down for `downTime` s, then up again at
+     * `recoverFraction`. While up he regenerates the whole bar in `regenTime` s. Every
+     * `speedStep` of the bar lost takes `speedPerStep` off his walk and sprint, and every time
+     * he's put down (not counting Plasma) takes `downPenalty` more, permanently, up to
+     * `downPenaltyMax`.
+     */
+    health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 90, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
+    /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /** Hemp Battery (Q, dropped by Sexton Science). */
     hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
@@ -170,12 +181,15 @@ export const BALANCE = {
   },
 
   items: {
-    /** Each item kind stacks to this many; a stack takes one inventory slot. */
-    maxStack: 2,
     /** Items spread over the whole map. */
-    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 },
-    /** Bottles fly on until they hit a wall, Zach or an NPC. */
-    bottle: { speed: 760, stun: 1.4, hitRadius: 10, damage: 0.2 },
+    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8, book: 4 },
+    /** Bottles fly on until they hit a wall, Zach or an NPC. `zachDamage` is in Zach's hp. */
+    bottle: { speed: 760, stun: 1.4, hitRadius: 10, damage: 0.2, zachDamage: 5 },
+    /**
+     * The Grapes of Wrath: thrown like a bottle. On Zach it covers his screen with a picture
+     * for `blindTime` s and slows him to `slowMul` for as long.
+     */
+    book: { speed: 700, stun: 0, hitRadius: 12, damage: 0.2, zachDamage: 5, blindTime: 4, slowMul: 0.5, images: 4 },
     /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
     goggles: { meter: 15, coneMul: 1.2 },
     /**
@@ -183,7 +197,9 @@ export const BALANCE = {
      * something solid or someone (windows shatter and let it through). Each pellet takes
      * `pelletDamage` of a survivor's health; any pellet on Zach stuns him and blasts him back.
      */
-    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 0.8, kbPeak: 520, kbDuration: 0.3 },
+    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 0.8, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
+    /** Jaden's pistol, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
+    pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10 },
     /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
     golden: { shells: 5, reload: 1 },
     /**
@@ -192,12 +208,12 @@ export const BALANCE = {
      */
     zachPump: { shots: 10, reload: 1, pelletDamage: 0.09, stun: 0.1, kbPeak: 380, kbDuration: 0.2 },
     /**
-     * Energy drink: fills the (extended) sprint meter at once; for 20 s it refills 1.5x faster,
+     * Doctor Pepper: fills the (extended) sprint meter at once; for 20 s it refills 1.5x faster,
      * holds 2 s more, and walking and running are up to 15% faster, all fading over the 20 s.
      */
     energy: { duration: 20, refillMul: 1.5, bonusSec: 2, speedMul: 0.15 },
     /** Galaxy gas trap: triggers within 5 Zach-widths, gas covers 10 Zach-widths. */
-    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5 },
+    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5, zachDps: 2 },
     /** After a stun ends Zach can't be stunned again for this long (no chain-stuns). */
     stunImmunity: 2.5,
     barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
@@ -255,9 +271,10 @@ export const BALANCE = {
   },
 
   /**
-   * Shane Jeans: an unkillable wanderer. A survivor who comes within `alertRadius`, or keeps
-   * a flashlight on him for `flashAlertSec` in total (the meter drains at `alertDecay` per
-   * second when he's out of the beam), alerts him. He then chases that survivor at Sexton's
+   * Shane Jeans: an unkillable wanderer. Each survivor builds an alert meter on him, which
+   * every survivor can see over his head: standing within `alertRadius` fills it in
+   * `proxAlertSec` (faster the closer they are), a flashlight on him in `flashAlertSec`; it
+   * drains at `alertDecay` a second otherwise. Full, he's alerted. He then chases that survivor at Sexton's
    * flee speed (Zach sees an arrow toward him) until `chaseTime` passes, Zach comes within
    * `hunterBreakRadius` of him, the survivor gets farther than `loseRadius`, or he is hit by
    * `bottlesToShake` bottles or one shotgun blast (then he runs off for `fleeTime`). After a
@@ -267,9 +284,10 @@ export const BALANCE = {
     radius: 15,
     walk: 65,
     chase: 200,
-    alertRadius: 80,
-    flashAlertSec: 2,
-    alertDecay: 0.3,
+    alertRadius: 130,
+    proxAlertSec: 2,
+    flashAlertSec: 3.5,
+    alertDecay: 0.2,
     chaseTime: 20,
     hunterBreakRadius: 260,
     loseRadius: 1100,
@@ -285,19 +303,23 @@ export const BALANCE = {
   /**
    * Jaden Nguyen: wanders and gets alerted just like Shane Jeans (crowd him or keep a light on
    * him), but he carries a pistol: he keeps his distance and shoots the survivor who set him
-   * off until they've lost `stopAfter` of their health (or he loses them), then wanders off.
-   * Bottles, shotgun blasts and gas shake him off the same way. Nothing kills him.
+   * off until they get farther than `loseRadius` or have lost `stopAfter` of the health they
+   * had when he started, whichever comes first. Any survivor item or attack stuns him for
+   * `stun` s; `hp` of them kill him, and he drops his pistol.
    */
   jaden: {
     radius: 15,
     walk: 62,
     chase: 175,
-    alertRadius: 80,
-    flashAlertSec: 2,
-    alertDecay: 0.3,
+    alertRadius: 130,
+    proxAlertSec: 2,
+    flashAlertSec: 3.5,
+    alertDecay: 0.2,
     chaseTime: 20,
     hunterBreakRadius: 260,
-    loseRadius: 1100,
+    loseRadius: 600,
+    stun: 1.2,
+    hp: 3,
     bottlesToShake: 2,
     fleeTime: 4,
     cooldown: 12,
@@ -310,15 +332,15 @@ export const BALANCE = {
       cooldown: 0.9,
       damage: 0.125,
       spreadDeg: 5,
-      /** He stops once his target has lost this much health to him. */
+      /** He stops once his target has lost this fraction of the health they had when he started. */
       stopAfter: 0.5,
     },
   },
 
   /**
-   * Marc Cortez wanders the warehouse (and beyond: he opens doors). Talk to him and he heals you
-   * to full; the first time he also hands you duck confit. Nothing kills him: slashed he
-   * protests, hit by a survivor he flinches. A very faint light.
+   * Marc Cortez wanders the warehouse (and beyond: he opens doors). Talk to him and he hands
+   * you duck confit (once each). Nothing kills him: slashed he protests, hit by a survivor he
+   * flinches. A very faint light.
    */
   marc: {
     radius: 15,
@@ -331,8 +353,9 @@ export const BALANCE = {
   /**
    * Plasma.TTV: an ordinary guy. Hit him (survivor item or Zach's machete) and GAMER RAGE:
    * he transforms over `transformTime` s, then chases his attacker and punches them until
-   * they're down (Zach is knocked out for `zachKnockTime` s), then turns back. Losing him for
-   * `escapeTime` s also calms him. Stuns: bottle, shotgun, machete; gas blinds and slows him.
+   * they're down (Zach goes down like any other time, but it costs him no speed), then turns
+   * back. Losing him for `escapeTime` s also calms him, and he always turns back `rageTime` s
+   * after transforming if he hasn't put anyone down. Stuns: bottle, shotgun, machete; gas blinds and slows him.
    * He never dies. Talk to him for a golden pump (once each).
    */
   plasma: {
@@ -346,9 +369,9 @@ export const BALANCE = {
     punchRange: 34,
     punchCooldown: 0.85,
     punchDamage: 0.25,
-    zachPunchDamage: 0.2,
-    zachKnockTime: 6,
+    zachPunchDamage: 20,
     escapeTime: 10,
+    rageTime: 10,
     loseRadius: 900,
     bottleStun: 0.1,
     shotStun: 0.3,
@@ -364,6 +387,25 @@ export const BALANCE = {
    * same time a survivor would, then flies to the heavens (`ascendTime`), gone for good.
    * Zach kills him in `hp` hits; hit, he flees at `flee` (well below Sexton's) for `fleeTime`.
    */
+  /**
+   * Waz wanders. A survivor who talks to him hears "lemme take a looksie" and sees `fovBonus`
+   * more of the map for good (once each). Zach slays him in `hp` hits (he runs off like Sexton
+   * in between) and gains the same; a survivor slays him in one hit and sees `fovPenalty` less.
+   * Whoever slays him gets a picture flashed across their screen for `slainFlash` s.
+   */
+  waz: {
+    radius: 15,
+    walk: 60,
+    flee: 200,
+    fleeTime: 6,
+    hp: 3,
+    reach: 72,
+    fovBonus: 0.1,
+    fovPenalty: 0.1,
+    slainFlash: 1.6,
+    line: 'lemme take a looksie',
+  },
+
   /** Every NPC carries a faint light (client only). Shane, Jaden and Marc have their own, below. */
   npcLight: { radius: 120, intensity: 0.3 },
 
@@ -430,6 +472,8 @@ export const BALANCE = {
 
   trails: {
     scentEvery: 0.12,
+    /** Walking leaves scent too, but it fades out this many seconds sooner than a runner's. */
+    walkHeadStart: 4,
     bloodEvery: 0.4,
     maxAgeSec: 10,
   },
@@ -453,16 +497,12 @@ export const BALANCE = {
     hunterSpeedClamp: [0.95, 1.08] as readonly [number, number],
     stunClamp: [0.75, 1.3] as readonly [number, number],
     requiredGenClamp: [3, 7] as readonly [number, number],
-    difficultyRange: [0.5, 1.5] as readonly [number, number],
   },
 } as const;
 
 export interface LobbyShape {
   hunters: number;
   survivors: number;
-  /** Lobby owner's difficulty scaler: >1 is harder for survivors. */
-  difficulty: number;
-  escapeFraction?: number;
 }
 
 /** Match-specific numbers derived from the lobby shape by the auto-balance formula. */
@@ -471,7 +511,6 @@ export interface ResolvedBalance {
   survivors: number;
   pressure: number;
   scale: number;
-  difficulty: number;
   /** Every generator on the map must be started; this is how many there are. */
   requiredGenerators: number;
   totalGenerators: number;
@@ -498,23 +537,20 @@ export function resolveBalance(shape: LobbyShape): ResolvedBalance {
   const S = Math.max(1, Math.floor(shape.survivors));
   const H = Math.max(1, Math.floor(shape.hunters));
   const sc = BALANCE.scaling;
-  const d = clampRange(shape.difficulty, sc.difficultyRange);
   const pressure = S / H;
   const scale = Math.min(sc.maxScale, Math.max(sc.minScale, Math.sqrt(pressure / sc.p0)));
 
   const required = clampRange(Math.ceil(S / Math.sqrt(H)) + 1, sc.requiredGenClamp);
-  const repairTime = BALANCE.objectives.repairTime * clampRange(scale, sc.repairTimeClamp) * d;
-  const hunterSpeedMul = clampRange(1 + sc.hunterSpeedSlope * (scale - 1), sc.hunterSpeedClamp) * (1 + 0.05 * (d - 1));
-  const stunMul = clampRange(1 / scale, sc.stunClamp) / d;
-  const fraction = shape.escapeFraction ?? BALANCE.world.escapeFraction;
-  const escapeNeeded = Math.max(1, Math.ceil(S * fraction - 1e-9));
+  const repairTime = BALANCE.objectives.repairTime * clampRange(scale, sc.repairTimeClamp);
+  const hunterSpeedMul = clampRange(1 + sc.hunterSpeedSlope * (scale - 1), sc.hunterSpeedClamp);
+  const stunMul = clampRange(1 / scale, sc.stunClamp);
+  const escapeNeeded = Math.max(1, Math.ceil(S * BALANCE.world.escapeFraction - 1e-9));
 
   return {
     hunters: H,
     survivors: S,
     pressure,
     scale,
-    difficulty: d,
     requiredGenerators: required,
     totalGenerators: required,
     repairTime,
@@ -527,6 +563,16 @@ export function resolveBalance(shape: LobbyShape): ResolvedBalance {
 }
 
 export const TICK_DT = 1 / BALANCE.net.tickHz;
+
+/**
+ * Zach's speed multiplier from his health: 10% slower for every 25% of the bar gone, and 5%
+ * slower for good per time he's been put down (at most 20%).
+ */
+export function hunterHealthMul(hp: number, downs: number): number {
+  const Hh = BALANCE.hunter.health;
+  const steps = Math.floor((1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep + 1e-6);
+  return Math.max(0.1, 1 - steps * Hh.speedPerStep - Math.min(Hh.downPenaltyMax, downs * Hh.downPenalty));
+}
 
 /**
  * Soundcloud Burst lens curvature at lateral offset `s` from its centre line: the wave is a

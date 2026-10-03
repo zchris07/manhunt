@@ -111,7 +111,7 @@ export function showModal(root: HTMLElement, html: string, onClose?: () => void)
   return m;
 }
 
-export function renderMessage(root: HTMLElement, title: string, text: string, button?: { label: string; onClick(): void }): void {
+export function renderMessage(root: HTMLElement, title: string, text: string, button?: { label: string; onClick(): void }, second?: { label: string; onClick(): void }): void {
   root.innerHTML = '';
   const s = el(
     'div',
@@ -120,8 +120,10 @@ export function renderMessage(root: HTMLElement, title: string, text: string, bu
       <h2 class="banner" style="font-size:36px">${esc(title)}</h2>
       <p class="note">${esc(text)}</p>
       ${button ? `<button class="primary" id="msgbtn">${esc(button.label)}</button>` : ''}
+      ${second ? `<button id="msgbtn2">${esc(second.label)}</button>` : ''}
     </div>`,
   );
   root.appendChild(s);
   if (button) $(s, '#msgbtn').addEventListener('click', button.onClick);
+  if (second) $(s, '#msgbtn2').addEventListener('click', second.onClick);
 }

@@ -4,12 +4,13 @@ import {
   BarricadeState,
   Gait,
   Health,
+  INV_SLOTS,
   ItemKind,
   MapWorld,
   MoveMode,
   Rng,
-  SLOT_ITEMS,
   TICK_DT,
+  hunterHealthMul,
   newMoveState,
   resolveOverlaps,
   stepMovement,
@@ -33,6 +34,8 @@ import { Jaden } from './jaden';
 import { Chris } from './chris';
 import { Marc } from './marc';
 import { Plasma } from './plasma';
+import { Waz } from './waz';
+import { addItem, emptySlot } from './inventory';
 import type { NpcTarget } from './npc';
 
 export interface GenState {
@@ -50,6 +53,8 @@ export interface ThrownBottle {
   dy: number;
   travelled: number;
   owner: number;
+  /** The Grapes of Wrath rather than a bottle. */
+  book: boolean;
 }
 
 /** An item a survivor dropped (G) for a teammate. `amount`: goggle meter or shells left. */
@@ -158,6 +163,7 @@ export class World {
   readonly chris: Chris;
   readonly marc: Marc;
   readonly plasma: Plasma;
+  readonly waz: Waz;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -204,6 +210,8 @@ export class World {
     this.chris = new Chris(this);
     this.marc = new Marc(this);
     this.plasma = new Plasma(this);
+    // Last, so the NPCs above keep their seeded spawn points.
+    this.waz = new Waz(this);
   }
 
   get geo() {
@@ -221,10 +229,10 @@ export class World {
   /** Testing mode: every item and ability, never used up. */
   fillTestKit(p: SimPlayer): void {
     if (p.role === 'survivor') {
-      for (const k of SLOT_ITEMS) p.inv[k] = BALANCE.items.maxStack;
-      p.goggles = [BALANCE.items.goggles.meter, BALANCE.items.goggles.meter];
-      p.shells = [BALANCE.items.shotgun.shells, BALANCE.items.shotgun.shells];
-      p.confit = 1;
+      p.inv = Array.from({ length: INV_SLOTS }, emptySlot);
+      for (const k of [ItemKind.Bottle, ItemKind.Book, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Pistol, ItemKind.Energy, ItemKind.Trap, ItemKind.Confit]) addItem(this, p, k);
+      p.inv[0].n = 9;
+      p.inv[1].n = 9;
       p.jarvis = 3;
     } else if (p.role === 'hunter') {
       p.hemp = 2;
@@ -374,6 +382,7 @@ export class World {
     this.chris.update(dt);
     this.marc.update(dt);
     this.plasma.update(dt);
+    this.waz.update(dt);
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -407,7 +416,7 @@ export class World {
       p.facing = cmd.aim;
       p.aimDist = cmd.aimDist;
     }
-    if (p.role === 'survivor') p.selItem = cmd.item >= ItemKind.Bottle && cmd.item <= ItemKind.Trap ? cmd.item : 0;
+    if (p.role === 'survivor') p.selSlot = cmd.item >= 1 && cmd.item <= INV_SLOTS ? cmd.item - 1 : -1;
     handlePresses(this, p, cmd, pressed);
 
     // Moving cancels survivor interactions.
@@ -419,7 +428,7 @@ export class World {
     const role = p.role === 'hunter' ? 'hunter' : 'survivor';
     const fromX = p.move.x;
     const fromY = p.move.y;
-    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul, carrying: p.carrying > 0 }, this.geo, TICK_DT);
+    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) : 1), carrying: p.carrying > 0 }, this.geo, TICK_DT);
     p.gait = p.move.mode === MoveMode.Locked ? Gait.Idle : gait;
     if (p.role === 'hunter') {
       const lunging = p.move.lungeT > 0 || (p.wasLunging && Math.hypot(p.move.x - fromX, p.move.y - fromY) > 0);
@@ -479,11 +488,12 @@ export class World {
     this.chris.unstick();
     this.marc.unstick();
     this.plasma.unstick();
+    this.waz.unstick();
   }
 
   /** NPCs that bottles and pellets can hit right now. */
   npcTargets(): NpcTarget[] {
-    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma].filter((n) => n.solid);
+    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma, this.waz].filter((n) => n.solid);
   }
 
   allocEntityId(): number {
@@ -501,11 +511,14 @@ export class World {
     if (!p) return;
     p.connected = connected;
     p.disconnectedAt = connected ? 0 : this.time;
-    if (!connected) {
-      p.inputs.length = 0;
-      p.lastCmd = { ...p.lastCmd, buttons: 0, moveX: 0, moveY: 0 };
-      p.prevButtons = 0;
-    }
+    // Either way the input stream starts over: a rejoining client counts from sequence 0
+    // again, so anything remembered from the old connection would drop its inputs.
+    p.inputs.length = 0;
+    p.lastSeq = 0;
+    p.lastCmd = { ...p.lastCmd, buttons: 0, moveX: 0, moveY: 0 };
+    p.prevButtons = 0;
+    p.move.prevButtons = 0;
+    p.inputBudget = 40;
   }
 
   /** Grace period expired: survivors are eliminated, hunters leave the match. */

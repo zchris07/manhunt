@@ -22,6 +22,7 @@ import {
   mapHash,
   quantizeInput,
   stepMovement,
+  hunterHealthMul,
   type ClientMessage,
   type DecodedSnapshot,
   type EntityRecord,
@@ -266,9 +267,12 @@ export class GameClient {
       console.warn('[net] map checksum mismatch, requesting map from host');
       this.pendingStart = m;
       this.mapChunks = [];
+      // Events from now on belong to this match (keep them while the map downloads).
+      this.events.length = 0;
       this.send({ t: 'mapReq' });
       return;
     }
+    this.events.length = 0;
     this.finishStart(m, map);
   }
 
@@ -292,7 +296,6 @@ export class GameClient {
     this.history.clear();
     this.buffer.length = 0;
     this.clockOffset = null;
-    this.events.length = 0;
     this.state = 'match';
     this.emit('start', this.match);
   }
@@ -347,7 +350,9 @@ export class GameClient {
 
   private moveCtx(): MoveContext {
     const m = this.match!;
-    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul, carrying: (this.self?.carrying ?? 0) > 0 };
+    const s = this.self;
+    const healthMul = m.role === 'hunter' && s ? hunterHealthMul(s.hp, s.downs) : 1;
+    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul * healthMul, carrying: (s?.carrying ?? 0) > 0 };
   }
 
   private reconcile(snap: DecodedSnapshot): void {
@@ -358,6 +363,8 @@ export class GameClient {
       this.pending.length = 0;
       return;
     }
+    // The host counts our inputs; never fall behind its count (or it would drop them all).
+    if (snap.lastSeq > this.seq) this.seq = snap.lastSeq;
     while (this.pending.length && this.pending[0].seq <= snap.lastSeq) this.pending.shift();
     const base: MoveState = {
       x: s.x,
