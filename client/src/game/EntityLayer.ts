@@ -26,6 +26,8 @@ const ITEM_TEX: Record<number, string> = {
   [ItemKind.Book]: 'item.book',
   [ItemKind.Confit]: 'item.confit',
   [ItemKind.Pistol]: 'item.pistol',
+  [ItemKind.BeastBar]: 'item.beastBar',
+  [ItemKind.Shield]: 'item.shield',
 };
 const itemTex = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'item.goldenPump' : ITEM_TEX[kind]);
 export const LOOT_TEX: Record<string, string> = {
@@ -36,6 +38,8 @@ export const LOOT_TEX: Record<string, string> = {
   energy: 'item.energy',
   trap: 'item.trap',
   book: 'item.book',
+  beastbar: 'item.beastBar',
+  shield: 'item.shield',
 };
 
 /** Walk cycle: legs swing under the body in the direction of travel. */
@@ -76,7 +80,8 @@ class Walker {
 class HealthBar {
   readonly g = new Graphics();
   private trail = -1;
-  draw(frac: number, dt: number, w = 38): void {
+  /** `shield`: a mini-shield bar (0-1), drawn in blue just above the health bar. */
+  draw(frac: number, dt: number, w = 38, shield = 0): void {
     const g = this.g;
     g.clear();
     const h = 5;
@@ -90,6 +95,14 @@ class HealthBar {
     if (f > 0.005) g.rect(-w / 2, -h / 2, w * f, h).fill({ color });
     // Thirds: one machete swipe each.
     for (const t of [1 / 3, 2 / 3]) g.rect(-w / 2 + w * t - 0.5, -h / 2, 1, h).fill({ color: INK, alpha: 0.55 });
+    const sh = Math.max(0, Math.min(1, shield));
+    if (sh > 0.005) {
+      const y = -h / 2 - 5;
+      g.rect(-w / 2 - 1, y - 1, w + 2, 5).fill({ color: INK, alpha: 0.8 });
+      g.rect(-w / 2, y, w * sh, 3).fill({ color: 0x3aa8ff });
+      // Quarters: one mini shield each.
+      for (const t of [0.25, 0.5, 0.75]) g.rect(-w / 2 + w * t - 0.5, y, 1, 3).fill({ color: INK, alpha: 0.5 });
+    }
   }
 }
 
@@ -304,7 +317,7 @@ class PlayerSprite {
     this.bar.g.visible = showBar;
     if (showBar) {
       this.bar.g.position.set(0, -r - 16);
-      this.bar.draw(p.hp / 255, dt, hunter ? 46 : 38);
+      this.bar.draw(p.hp / 255, dt, hunter ? 46 : 38, hunter ? 0 : p.extra / 255);
     }
     this.label.position.set(0, -r - 22);
   }

@@ -45,6 +45,8 @@
     "item.energy": { "procedural": "itemEnergy" },
     "item.book": { "procedural": "itemBook" },
     "item.pistol": { "procedural": "itemPistol" },
+    "item.beastBar": { "procedural": "itemBeastBar" },
+    "item.shield": { "procedural": "itemShield" },
     "item.trap": { "procedural": "itemTrap" },
     "item.goldenPump": { "procedural": "itemGoldenPump" },
     "item.confit": { "procedural": "itemConfit" },

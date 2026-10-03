@@ -77,6 +77,8 @@ export interface SelfState {
   bookT: number;
   /** Field of view multiplier (Waz). */
   fovMul: number;
+  /** Survivor: mini-shield bar, 0 to 1 (a full extra bar). */
+  shield: number;
 }
 
 /**
@@ -153,6 +155,7 @@ export function emptySelf(id = 0): SelfState {
     downs: 0,
     bookT: 0,
     fovMul: 1,
+    shield: 0,
   };
 }
 
@@ -243,8 +246,9 @@ export const PlasmaFlag = {
 
 /**
  * A quantised entity as sent on the wire. x/y are in 1/8 units, facing in 1/256 turns.
- * `aux` holds a survivor's held item (low 3 bits) or Zach's swing charge (0-255), and
- * `hp` the health bar over their head (0-255 of full health).
+ * `aux` holds a survivor's held item (low 4 bits, GOLDEN_BIT) or Zach's swing charge
+ * (0-255), and `hp` the health bar over their head (0-255 of full health). A survivor's
+ * `extra` is their stake timer while staked, otherwise their mini-shield bar (0-255).
  */
 export interface EntityRecord {
   id: number;
@@ -455,7 +459,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(s.gogglesOn).u16(ms(s.chargeT + 1)).u16(ms(s.reloadT));
   w.u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
-  w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000));
+  w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -526,6 +530,7 @@ function readSelf(r: ByteReader): SelfState {
   s.downs = r.u8();
   s.bookT = r.u16() / 10;
   s.fovMul = r.u16() / 1000;
+  s.shield = r.u8() / 255;
   return s;
 }
 

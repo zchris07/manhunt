@@ -19,9 +19,10 @@ function interruptHunter(w: World, h: SimPlayer): void {
  * Stuns Zach (he can never be killed). After each stun he is immune for a short while so
  * survivors cannot chain-stun him. Returns false if he is immune.
  */
-export function stunHunter(w: World, h: SimPlayer, seconds: number, kind: string, by?: SimPlayer): boolean {
+export function stunHunter(w: World, h: SimPlayer, seconds: number, kind: string, by?: SimPlayer, exact = false): boolean {
   if (h.role !== 'hunter' || h.immuneT > 0 || h.health === Health.Eliminated) return false;
-  const dur = seconds * w.balance.stunMul;
+  // `exact`: this long whatever the lobby's stun scaling.
+  const dur = seconds * (exact ? 1 : w.balance.stunMul);
   h.stunT = Math.max(h.stunT, dur);
   h.immuneT = dur + I.stunImmunity;
   interruptHunter(w, h);
@@ -111,11 +112,38 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       w.emit([p.id], { k: 'item', text: 'Duck confit: healed to full' });
       break;
     }
+    case ItemKind.BeastBar: {
+      if (p.hp >= 0.999) {
+        w.emit([p.id], { k: 'item', text: 'Already at full health' });
+        return;
+      }
+      restoreSurvivor(p, p.hp + I.beastBar.heal);
+      consumeSlot(w, s);
+      w.emit([p.id], { k: 'item', text: 'Mr Beast bar: +20% health' });
+      break;
+    }
+    case ItemKind.Shield:
+      if (p.shield >= I.shield.max - 1e-6) {
+        w.emit([p.id], { k: 'item', text: 'Shield is full' });
+        return;
+      }
+      // Drinking takes a moment; moving cancels it.
+      w.startAction(p, Action.Drink, I.shield.drinkTime, 0);
+      break;
     case ItemKind.Trap:
       // Planting takes a moment; moving cancels it.
       w.startAction(p, Action.Plant, I.trap.plantTime, 0);
       break;
   }
+}
+
+/** The drink finished: a quarter bar of shield (up to a full extra bar). */
+export function drinkShield(w: World, p: SimPlayer): void {
+  const s = p.inv.find((x) => x.kind === ItemKind.Shield && x.n > 0);
+  if (!s || p.role !== 'survivor') return;
+  p.shield = Math.min(I.shield.max, p.shield + I.shield.amount);
+  consumeSlot(w, s);
+  w.emit([p.id], { k: 'item', text: `Shield ${Math.round(p.shield * 100)}%` });
 }
 
 /** The plant finished: the trap goes down. */
@@ -447,14 +475,15 @@ export function updateItems(w: World, dt: number): void {
   }
 }
 
-/** The Grapes of Wrath hits Zach: a picture over his screen, and he's slowed, for a while. */
-function bookHit(w: World, h: SimPlayer, by: SimPlayer | undefined): void {
+/**
+ * The Grapes of Wrath hits Zach: a picture flashes over his screen (0.8 s) with the vine boom,
+ * and he's stunned for 3 s (his stun immunity still applies).
+ */
+export function bookHit(w: World, h: SimPlayer, by: SimPlayer | undefined): void {
   const B = I.book;
-  h.bookT = B.blindTime;
-  h.move.slowT = Math.max(h.move.slowT, B.blindTime);
-  h.move.slowMul = Math.min(h.move.slowMul, B.slowMul);
+  h.bookT = I.flashTime;
+  stunHunter(w, h, B.stun, 'book', by, true);
   w.emit([h.id], { k: 'book', img: w.rng.int(0, B.images - 1) });
   w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'boom', x: Math.round(h.move.x), y: Math.round(h.move.y) });
-  if (by) by.stats.stuns++;
   w.feed(`${by?.name ?? 'Someone'} threw The Grapes of Wrath at ${h.name}`);
 }

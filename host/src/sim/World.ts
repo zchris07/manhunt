@@ -230,7 +230,7 @@ export class World {
   fillTestKit(p: SimPlayer): void {
     if (p.role === 'survivor') {
       p.inv = Array.from({ length: INV_SLOTS }, emptySlot);
-      for (const k of [ItemKind.Bottle, ItemKind.Book, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Pistol, ItemKind.Energy, ItemKind.Trap, ItemKind.Confit]) addItem(this, p, k);
+      for (const k of [ItemKind.Bottle, ItemKind.Book, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Pistol, ItemKind.Shield, ItemKind.BeastBar, ItemKind.Trap]) addItem(this, p, k);
       p.inv[0].n = 9;
       p.inv[1].n = 9;
       p.jarvis = 3;

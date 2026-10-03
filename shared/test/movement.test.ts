@@ -27,8 +27,8 @@ describe('movement and sprint meters', () => {
     const z = newMoveState(1000, 1000, 'hunter');
     const walk = run(z, ZACH, 1, { moveX: 1 });
     const sprint = run(z, ZACH, 1, { moveX: 1, buttons: Btn.Run });
-    expect(walk).toBeCloseTo(BALANCE.survivor.walk * 0.9, 0);
-    expect(sprint).toBeCloseTo(BALANCE.survivor.run * 1.2, 0);
+    expect(walk).toBeCloseTo(BALANCE.survivor.walk * 0.9 * 0.95, 0);
+    expect(sprint).toBeCloseTo(BALANCE.survivor.run * 1.2 * 0.95, 0);
   });
 
   it('the survivor meter empties after 8 s, locks for 1.5 s, and refills over 10 s', () => {
@@ -47,12 +47,14 @@ describe('movement and sprint meters', () => {
     expect(s.stamina).toBeCloseTo(BALANCE.survivor.stamina.max, 1);
   });
 
-  it("Zach's meter is 6 s and refills in 6 s", () => {
+  it("Zach's meter is 6 s and refills in 10 s", () => {
     const z = newMoveState(1000, 1000, 'hunter');
     expect(z.stamina).toBe(6);
     run(z, ZACH, 6.1, { moveX: 1, buttons: Btn.Run });
     expect(z.stamina).toBe(0);
     run(z, ZACH, 1.5 + 6, {});
+    expect(z.stamina).toBeLessThan(5);
+    run(z, ZACH, 4, {});
     expect(z.stamina).toBeCloseTo(6, 1);
   });
 

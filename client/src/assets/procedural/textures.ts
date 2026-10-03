@@ -1526,7 +1526,70 @@ export const itemBook = itemCanvas((ctx) => {
   ctx.restore();
 });
 
-/** Jaden's pistol: a compact black handgun. */
+/** Mr Beast bar: a chocolate bar half out of its bright blue wrapper. */
+export const itemBeastBar = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(20, 20);
+  ctx.rotate(-0.35);
+  // Chocolate, in squares.
+  roundRect(ctx, -16, -8, 18, 16, 1.5);
+  fillInk(ctx, '#5a3218');
+  ctx.strokeStyle = '#3a1e0c';
+  ctx.lineWidth = 1;
+  for (const x of [-10, -4]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -8);
+    ctx.lineTo(x, 8);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(-16, 0);
+  ctx.lineTo(2, 0);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,220,180,0.25)';
+  ctx.fillRect(-15, -7, 16, 2);
+  // Wrapper.
+  roundRect(ctx, 0, -9, 17, 18, 2);
+  fillInk(ctx, '#2a8cff');
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 6px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BEAST', 8.5, 2);
+  ctx.fillStyle = '#ffd23a';
+  ctx.fillRect(1, 5, 15, 2);
+  ctx.restore();
+});
+
+/** Mini shield: a small round flask of glowing blue liquid with a stopper, Fortnite style. */
+export const itemShield = itemCanvas((ctx) => {
+  // Glow.
+  const g = ctx.createRadialGradient(20, 24, 2, 20, 24, 16);
+  g.addColorStop(0, 'rgba(90,190,255,0.55)');
+  g.addColorStop(1, 'rgba(90,190,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 40, 40);
+  // Neck and stopper.
+  roundRect(ctx, 17, 8, 6, 8, 1.5);
+  fillInk(ctx, '#d8eefc', 1.2);
+  roundRect(ctx, 16, 5, 8, 5, 1.5);
+  fillInk(ctx, '#9a6a3a', 1.2);
+  // Round flask.
+  circle(ctx, 20, 25, 10);
+  fillInk(ctx, '#bfe4ff', 1.4);
+  ctx.save();
+  circle(ctx, 20, 25, 9);
+  ctx.clip();
+  ctx.fillStyle = '#2e9cff';
+  ctx.fillRect(9, 23, 22, 14);
+  ctx.fillStyle = '#7fd0ff';
+  ctx.fillRect(9, 23, 22, 2);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ellipse(ctx, 16, 21, 2, 3.5, -0.4);
+  ctx.fill();
+});
+
+/** Jaden's P250: a compact black handgun. */
 export const itemPistol = itemCanvas((ctx) => {
   ctx.save();
   ctx.translate(20, 20);
@@ -1801,6 +1864,8 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemEnergy,
   itemBook,
   itemPistol,
+  itemBeastBar,
+  itemShield,
   itemTrap,
   itemGoldenPump,
   itemConfit,

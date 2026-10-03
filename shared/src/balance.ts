@@ -85,10 +85,13 @@ export const BALANCE = {
 
   hunter: {
     radius: HUNTER_RADIUS,
-    /** Zach walks 10% slower than a survivor walks and sprints 20% faster than they do. */
-    walk: SURVIVOR_WALK * 0.9,
-    sprint: SURVIVOR_RUN * 1.2,
-    stamina: { max: 6, refill: 6 },
+    /**
+   * Zach walks 10% slower than a survivor walks and sprints 20% faster than they do, both then
+   * cut by 5%. A 6 s sprint meter that takes 10 s to refill.
+   */
+    walk: SURVIVOR_WALK * 0.9 * 0.95,
+    sprint: SURVIVOR_RUN * 1.2 * 0.95,
+    stamina: { max: 6, refill: 10 },
     carrySpeedMul: 0.9,
     vision: { coneHalfAngleDeg: 65, range: BEAM_RANGE, proximity: 125 },
     attack: {
@@ -144,7 +147,7 @@ export const BALANCE = {
      * he's put down (not counting Plasma) takes `downPenalty` more, permanently, up to
      * `downPenaltyMax`.
      */
-    health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 90, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
+    health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 240, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
     /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /** Hemp Battery (Q, dropped by Sexton Science). */
@@ -182,14 +185,25 @@ export const BALANCE = {
 
   items: {
     /** Items spread over the whole map. */
-    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8, book: 4 },
+    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 },
+    /** Set out in a row beside Chris Zelley's ambulance (on top of `counts`). */
+    ambulanceKit: ['shield', 'shield', 'beastbar', 'beastbar', 'confit'] as readonly ('shield' | 'beastbar' | 'confit')[],
+    /** Mr Beast bar: eating it gives back this fraction of your health. */
+    beastBar: { heal: 0.2 },
+    /**
+     * Mini shield: drinking takes `drinkTime` s (moving cancels it) and adds `amount` of a full
+     * health bar to a blue shield bar, up to `max`. Damage takes the shield first.
+     */
+    shield: { drinkTime: 2, amount: 0.25, max: 1 },
+    /** The picture a Grapes of Wrath hit or slaying Waz flashes up: fades in and out within this. */
+    flashTime: 0.8,
     /** Bottles fly on until they hit a wall, Zach or an NPC. `zachDamage` is in Zach's hp. */
     bottle: { speed: 760, stun: 1.4, hitRadius: 10, damage: 0.2, zachDamage: 5 },
     /**
-     * The Grapes of Wrath: thrown like a bottle. On Zach it covers his screen with a picture
-     * for `blindTime` s and slows him to `slowMul` for as long.
+     * The Grapes of Wrath: thrown like a bottle. On Zach it stuns him for `stun` s and flashes a
+     * picture over his screen (for `flashTime`, whatever the stun).
      */
-    book: { speed: 700, stun: 0, hitRadius: 12, damage: 0.2, zachDamage: 5, blindTime: 4, slowMul: 0.5, images: 4 },
+    book: { speed: 700, stun: 3, hitRadius: 12, damage: 0.2, zachDamage: 5, images: 4 },
     /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
     goggles: { meter: 15, coneMul: 1.2 },
     /**
@@ -198,7 +212,7 @@ export const BALANCE = {
      * `pelletDamage` of a survivor's health; any pellet on Zach stuns him and blasts him back.
      */
     shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 0.8, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
-    /** Jaden's pistol, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
+    /** Jaden's P250, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
     pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10 },
     /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
     golden: { shells: 5, reload: 1 },
@@ -391,7 +405,7 @@ export const BALANCE = {
    * Waz wanders. A survivor who talks to him hears "lemme take a looksie" and sees `fovBonus`
    * more of the map for good (once each). Zach slays him in `hp` hits (he runs off like Sexton
    * in between) and gains the same; a survivor slays him in one hit and sees `fovPenalty` less.
-   * Whoever slays him gets a picture flashed across their screen for `slainFlash` s.
+   * Whoever slays him gets a picture flashed across their screen (`items.flashTime`).
    */
   waz: {
     radius: 15,
@@ -402,7 +416,6 @@ export const BALANCE = {
     reach: 72,
     fovBonus: 0.1,
     fovPenalty: 0.1,
-    slainFlash: 1.6,
     line: 'lemme take a looksie',
   },
 

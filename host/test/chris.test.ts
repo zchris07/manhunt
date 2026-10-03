@@ -123,7 +123,8 @@ describe('Chris Zelley and the ambulance', () => {
     expect(w.chris.mode).not.toBe('rescue');
     d.run(secs(1.2));
     expect(w.chris.mode).toBe('rescue');
-    expect(C.run).toBeCloseTo(BALANCE.hunter.sprint);
+    // Zach's old sprint speed (Zach himself is now 5% slower).
+    expect(C.run).toBeCloseTo(BALANCE.survivor.run * 1.2);
     // Measure his running speed over a second.
     const x0 = w.chris.x;
     const y0 = w.chris.y;

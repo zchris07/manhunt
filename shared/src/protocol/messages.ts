@@ -4,6 +4,10 @@ import type { Role } from '../sim/types';
 import { decodeText, encodeText } from './binary';
 
 export type RolePref = 'hunter' | 'survivor' | 'any';
+
+/** Testing mode: stun and flash effects you can play on yourself at the click of a button. */
+export const TEST_FX = ['scare', 'book', 'waz', 'stun', 'blast', 'gas', 'down'] as const;
+export type TestFx = (typeof TEST_FX)[number];
 export type AssignedRole = 'auto' | 'hunter' | 'survivor' | 'spectator';
 export type Phase = 'lobby' | 'match' | 'results';
 
@@ -139,6 +143,8 @@ export type ClientMessage =
   | { t: 'switchRole' }
   /** Testing mode: teleport to a world point (clicked on the full map). */
   | { t: 'teleport'; x: number; y: number }
+  /** Testing mode: play a stun or flash effect on yourself. */
+  | { t: 'testFx'; fx: TestFx }
   /** Reorder the inventory: swap two slots. */
   | { t: 'moveSlot'; from: number; to: number }
   /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
@@ -240,6 +246,8 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isStr(v.text, 280) ? { t: 'chat', text: v.text } : null;
     case 'skill':
       return isInt(v.id, 0, 1e9) && (v.result === 'miss' || v.result === 'good' || v.result === 'great') ? { t: 'skill', id: v.id, result: v.result } : null;
+    case 'testFx':
+      return typeof v.fx === 'string' && (TEST_FX as readonly string[]).includes(v.fx) ? { t: 'testFx', fx: v.fx as TestFx } : null;
     case 'moveSlot':
       return isInt(v.from, 0, 7) && isInt(v.to, 0, 7) ? { t: 'moveSlot', from: v.from, to: v.to } : null;
     case 'teleport':

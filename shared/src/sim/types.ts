@@ -47,6 +47,7 @@ export const Action = {
   Attack: 17,
   Talk: 18,
   Plant: 19,
+  Drink: 20,
 } as const;
 export type Action = (typeof Action)[keyof typeof Action];
 
@@ -66,6 +67,7 @@ export const ACTION_LABELS: Record<number, string> = {
   17: 'Swinging',
   18: 'Listening to Sexton',
   19: 'Planting a galaxy gas trap',
+  20: 'Drinking a mini shield',
 };
 
 /** Context-sensitive interaction offered to a player right now (drives the HUD prompt). */
@@ -150,11 +152,15 @@ export const ItemKind = {
   /** The Grapes of Wrath: thrown like a bottle. */
   Book: 6,
   Confit: 7,
-  /** Jaden Nguyen's pistol (he drops it when he dies). */
+  /** Jaden Nguyen's P250 (he drops it when he dies). */
   Pistol: 8,
+  /** Mr Beast bar: eat it for a fifth of your health back. */
+  BeastBar: 9,
+  /** Mini shield: drink it (2 s) for a quarter bar of shield. */
+  Shield: 10,
 } as const;
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
-export const ITEM_KIND_MAX = 8;
+export const ITEM_KIND_MAX = 10;
 export const INV_SLOTS = 8;
 /** Golden pump flag in a slot or drop byte (item kinds fit in the low 4 bits). */
 export const GOLDEN_BIT = 16;
@@ -167,7 +173,9 @@ export const ITEM_NAMES: Record<number, string> = {
   5: 'Galaxy gas trap',
   6: 'The Grapes of Wrath',
   7: 'Duck confit',
-  8: 'Pistol',
+  8: 'P250',
+  9: 'Mr Beast bar',
+  10: 'Mini shield',
 };
 /** A slot's display name (a golden shotgun is Plasma's golden pump). */
 export const slotName = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'Golden pump' : (ITEM_NAMES[kind] ?? ''));

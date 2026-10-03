@@ -2,7 +2,7 @@ import { Action, BALANCE, BarricadeState, Btn, GOLDEN_BIT, Health, ItemKind, Pro
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
+import { dropBarricade, drinkShield, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
 import { addItem } from './inventory';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
 
@@ -62,6 +62,8 @@ export const LOOT_TO_ITEM: Record<LootKind, ItemKind> = {
   trap: ItemKind.Trap,
   confit: ItemKind.Confit,
   book: ItemKind.Book,
+  beastbar: ItemKind.BeastBar,
+  shield: ItemKind.Shield,
 };
 
 /** Zach next to an NPC or an item gets its name (survivors see them in their prompts). */
@@ -443,6 +445,17 @@ export function updateInteractions(w: World, dt: number): void {
         plantTrap(w, p);
         continue;
       }
+      case Action.Drink: {
+        if (!canAct(p)) {
+          w.cancelAction(p);
+          continue;
+        }
+        p.actionT += dt;
+        if (p.actionT < p.actionDur) continue;
+        p.action = Action.None;
+        drinkShield(w, p);
+        continue;
+      }
       case Action.HideEnter: {
         p.actionT += dt;
         const spot = w.map.hidingSpots[p.actionTarget];
@@ -503,6 +516,8 @@ const ITEM_TEXT: Record<LootKind, string> = {
   energy: 'Doctor Pepper',
   trap: 'galaxy gas trap',
   book: 'The Grapes of Wrath',
+  beastbar: 'Mr Beast bar',
+  shield: 'mini shield',
 };
 
 export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {

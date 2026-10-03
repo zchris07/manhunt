@@ -62,7 +62,15 @@ body {
 }
 
 /* A picture flashed over the whole screen (the Grapes of Wrath, slaying Waz). */
+.scare.flash {
+  background: transparent;
+}
+
 .scare.flash img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   animation: none;
 }
@@ -100,6 +108,48 @@ body {
 
 .red {
   color: #ff4a4a !important;
+}
+
+.zach-hp.hp-bar > div {
+  background: linear-gradient(90deg, #3e7a2a, #6fbf3a);
+}
+
+.zach-hp.shield-bar {
+  height: 10px;
+  margin-bottom: 0;
+}
+
+.zach-hp.shield-bar > div {
+  background: linear-gradient(90deg, #1a6ad8, #4ab8ff);
+}
+
+.zach-hp.shield-bar > span {
+  font-size: 8px;
+  line-height: 10px;
+}
+
+/* Testing mode: play any stun or flash effect on yourself. */
+.fx-panel {
+  position: absolute;
+  left: 14px;
+  top: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+  z-index: 5;
+}
+
+.fx-panel .fx-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #b8b0a0;
+}
+
+.fx-panel button {
+  font-size: 11px;
+  padding: 4px 8px;
+  text-align: left;
 }
 
 button,

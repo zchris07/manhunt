@@ -91,7 +91,7 @@ function entityState(p: SimPlayer): number {
 
 
 function playerRecord(p: SimPlayer): EntityRecord {
-  const extra = p.role === 'hunter' ? p.carrying : p.health === Health.Staked ? Math.round((p.stakeT / BALANCE.objectives.stakeStageTime) * 255) : 0;
+  const extra = p.role === 'hunter' ? p.carrying : p.health === Health.Staked ? Math.round((p.stakeT / BALANCE.objectives.stakeStageTime) * 255) : Math.round(p.shield * 255);
   // A survivor's item in hand (GOLDEN_BIT: it's the golden pump), or Zach's swing charge
   // (0-254; 255 = he's holding the golden pump).
   const held = p.role === 'survivor' ? selected(p) : null;
@@ -170,6 +170,7 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.downs = p.downs;
   s.bookT = p.bookT;
   s.fovMul = p.fovMul;
+  s.shield = p.shield;
   return s;
 }
 

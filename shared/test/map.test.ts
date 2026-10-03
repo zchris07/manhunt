@@ -25,7 +25,14 @@ describe('map generation', () => {
     expect(d.generators.some((g) => g.area === 'woods')).toBe(true);
     const counts: Record<string, number> = {};
     for (const l of d.loot) counts[l.item] = (counts[l.item] ?? 0) + 1;
-    expect(counts).toEqual(BALANCE.items.counts);
+    // The fixed counts, plus the supplies set out beside the ambulance.
+    const want: Record<string, number> = { ...BALANCE.items.counts };
+    for (const k of BALANCE.items.ambulanceKit) want[k]++;
+    expect(counts).toEqual(want);
+    const amb = d.ambulance;
+    const kit = d.loot.slice(-BALANCE.items.ambulanceKit.length);
+    expect(kit.map((l) => l.item)).toEqual([...BALANCE.items.ambulanceKit]);
+    for (const l of kit) expect(Math.hypot(l.x - amb.x, l.y - amb.y)).toBeLessThan(260);
     expect(d.stakes.length).toBeGreaterThanOrEqual(6);
     expect(d.hidingSpots.map((h) => h.kind)).toEqual(expect.arrayContaining(['locker', 'wardrobe', 'bed', 'grass', 'barrel']));
     expect(d.doors.length).toBeGreaterThan(5);
