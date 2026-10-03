@@ -44,8 +44,16 @@ test('audio: the burst snippet only Zach hears, and Sexton\'s reel', async ({ br
   await expect.poll(async () => (await audio(surv))?.loops ?? [], { timeout: 10000 }).toEqual(['sexton']);
 
   // Shane Jeans, alerted, pitter-patters after you (a synthesized loop) until he gives up.
-  await dev(surv, 'shane', [40, 0]);
-  await expect.poll(async () => ((await audio(surv))?.loops ?? []).sort(), { timeout: 10000 }).toEqual(['sexton', 'shane']);
+  // His alert meter takes a few seconds to fill: keep him right beside the survivor meanwhile.
+  await expect
+    .poll(
+      async () => {
+        await dev(surv, 'shane', [40, 0]);
+        return ((await audio(surv))?.loops ?? []).sort();
+      },
+      { timeout: 20000, intervals: [500] },
+    )
+    .toEqual(['sexton', 'shane']);
   expect((await audio(surv))!.loaded).toContain('shane.steps');
   expect(errors).toEqual([]);
 });
