@@ -5,7 +5,7 @@ export const SURVIVOR_CONTROLS: [string, string][] = [
   ['C / Ctrl', 'Crouch'],
   ['E', 'Interact'],
   ['Left mouse', 'Use item'],
-  ['Wheel / 1-5', 'Select item'],
+  ['Wheel / 1-8', 'Select item'],
   ['G', 'Drop item'],
   ['Tab', 'Arrange inventory'],
   ['Q', 'JARVIS'],

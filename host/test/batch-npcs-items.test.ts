@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Action, BALANCE, Btn, EntityKind, Health, ItemKind, Prompt, maxStamina } from '@manhunt/shared';
-import { Driver, clearLane, makeWorld, parkChris, parkSexton, parkShane, place } from './worldHelpers';
+import { clearLane, countOf, Driver, makeWorld, parkChris, parkSexton, parkShane, place, runUntil, setCount } from './worldHelpers';
 import { buildView } from '../src/sim/view';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
@@ -29,13 +29,12 @@ function setup(): { w: World; d: Driver; h: SimPlayer; s: SimPlayer; m: SimPlaye
 }
 
 const throwBottle = (d: Driver, p: SimPlayer, aim = 0): void => {
-  p.inv[ItemKind.Bottle] = Math.max(1, p.inv[ItemKind.Bottle]);
+  setCount(p, ItemKind.Bottle, Math.max(1, countOf(p, ItemKind.Bottle)));
   d.tap(p.id, Btn.Primary, { item: ItemKind.Bottle, aim, aimDist: 100 });
 };
 const shoot = (d: Driver, p: SimPlayer, aim = 0): void => {
-  if (p.inv[ItemKind.Shotgun] <= 0) {
-    p.inv[ItemKind.Shotgun] = 1;
-    p.shells = [I.shotgun.shells];
+  if (countOf(p, ItemKind.Shotgun) <= 0) {
+    setCount(p, ItemKind.Shotgun, 1);
   }
   d.tap(p.id, Btn.Primary, { item: ItemKind.Shotgun, aim });
 };
@@ -44,7 +43,7 @@ describe('items', () => {
   it('energy drink: the sprint meter fills at once, and you walk up to 15% faster', () => {
     const { d, s } = setup();
     s.move.stamina = 0.5;
-    s.inv[ItemKind.Energy] = 1;
+    setCount(s, ItemKind.Energy, 1);
     d.tap(s.id, Btn.Primary, { item: ItemKind.Energy });
     expect(s.move.stamina).toBeCloseTo(maxStamina('survivor', s.move.boostT), 1);
     const x0 = s.move.x;
@@ -56,7 +55,7 @@ describe('items', () => {
 
   it('a galaxy gas trap takes 2 s to plant, and moving cancels it', () => {
     const { w, d, s } = setup();
-    s.inv[ItemKind.Trap] = 2;
+    setCount(s, ItemKind.Trap, 2);
     d.tap(s.id, Btn.Primary, { item: ItemKind.Trap });
     expect(s.action).toBe(Action.Plant);
     d.run(secs(1), (p) => (p === s ? { moveX: 1, item: ItemKind.Trap } : undefined));
@@ -67,22 +66,22 @@ describe('items', () => {
     expect(w.traps.length).toBe(0);
     d.run(secs(0.4), (p) => (p === s ? { item: ItemKind.Trap } : undefined));
     expect(w.traps.length).toBe(1);
-    expect(s.inv[ItemKind.Trap]).toBe(1);
+    expect(countOf(s, ItemKind.Trap)).toBe(1);
   });
 
   it('G drops one of the selected item; a teammate picks it up', () => {
     const { w, d, s, m } = setup();
-    s.inv[ItemKind.Bottle] = 2;
+    setCount(s, ItemKind.Bottle, 2);
     d.tap(s.id, Btn.Drop, { item: ItemKind.Bottle });
-    expect(s.inv[ItemKind.Bottle]).toBe(1);
+    expect(countOf(s, ItemKind.Bottle)).toBe(1);
     expect(w.drops.length).toBe(1);
-    expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Drop && (e.extra & 7) === ItemKind.Bottle)).toBe(true);
+    expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Drop && (e.extra & 15) === ItemKind.Bottle)).toBe(true);
     const dr = w.drops[0];
     place(m, dr.x + 20, dr.y);
     d.run(1);
     expect(m.prompt).toBe(Prompt.PickDrop);
     d.tap(m.id, Btn.Interact);
-    expect(m.inv[ItemKind.Bottle]).toBe(1);
+    expect(countOf(m, ItemKind.Bottle)).toBe(1);
     expect(w.drops.length).toBe(0);
   });
 
@@ -136,7 +135,7 @@ describe('NPCs and items', () => {
     const { w, d, s } = setup();
     w.shane.x = s.move.x + 40;
     w.shane.y = s.move.y;
-    d.run(1);
+    runUntil(d, () => w.shane.chasing);
     expect(w.shane.chasing).toBe(true);
     w.gases.push({ id: 200, x: w.shane.x, y: w.shane.y, age: 1 });
     d.run(2);
@@ -218,7 +217,7 @@ describe('Sexton Science self-defense', () => {
 });
 
 describe('Marc Cortez', () => {
-  it('starts in the warehouse; talking heals you to full and gives duck confit once', () => {
+  it('starts in the warehouse; talking hands you duck confit (once), and no longer heals', () => {
     const { w, d, s } = setup();
     const wh = w.map.warehouse;
     const fresh = makeWorld({ survivors: 2 });
@@ -231,13 +230,12 @@ describe('Marc Cortez', () => {
     d.run(1);
     expect(s.prompt).toBe(Prompt.TalkMarc);
     d.tap(s.id, Btn.Interact);
-    expect(s.hp).toBe(1);
-    expect(s.health).toBe(Health.Healthy);
-    expect(s.confit).toBe(1);
-    s.confit = 0;
+    expect(s.hp).toBe(0.4);
+    expect(s.health).toBe(Health.Wounded);
+    expect(countOf(s, ItemKind.Confit)).toBe(1);
     d.run(secs(BALANCE.marc.talkCooldown) + 1);
     d.tap(s.id, Btn.Interact);
-    expect(s.confit).toBe(0);
+    expect(countOf(s, ItemKind.Confit)).toBe(1);
   });
 
   it("Zach can't hurt him: he just complains and stands there", () => {
@@ -285,7 +283,7 @@ describe('Plasma.TTV', () => {
     expect(pl.beast).toBe(false);
   });
 
-  it('Zach who slashes him gets chased and knocked out for 6 s, then gets back up', () => {
+  it('Zach who slashes him gets punched down for 10 s, then gets back up at half health, no slower for it', () => {
     const { w, d, h } = plasmaLane();
     const pl = w.plasma;
     place(h, pl.x - 60, pl.y);
@@ -293,12 +291,13 @@ describe('Plasma.TTV', () => {
     d.run(6, (p) => (p === h ? { aim: 0 } : undefined));
     expect(pl.target).toBe(h.id);
     for (let t = 0; t < secs(15) && h.knockT <= 0; t++) d.run(1);
-    expect(h.knockT).toBeGreaterThan(5);
+    expect(h.knockT).toBeGreaterThan(9);
     const view = buildView(w, h);
     expect(view.self.health).toBe(Health.Downed);
-    d.run(secs(BALANCE.plasma.zachKnockTime + 0.2));
+    d.run(secs(BALANCE.hunter.health.downTime + 0.2));
     expect(h.knockT).toBe(0);
-    expect(h.hp).toBe(1);
+    expect(h.hp).toBeCloseTo(BALANCE.hunter.health.recoverFraction, 1);
+    expect(h.downs).toBe(0);
   });
 
   it('get away for 10 s and he calms down; items stun him and gas blinds him', () => {
@@ -315,21 +314,20 @@ describe('Plasma.TTV', () => {
     expect(pl.raging).toBe(false);
   });
 
-  it('talk to him: "ggs" and a golden pump (5 shells, half the reload) that takes the shotgun slot', () => {
+  it('talk to him: "ggs" and a golden pump (5 shells, half the reload) in a slot of its own', () => {
     const { w, d, s } = plasmaLane();
-    s.inv[ItemKind.Shotgun] = 1;
-    s.shells = [3];
+    setCount(s, ItemKind.Shotgun, 1);
     w.plasma.x = s.move.x + 40;
     w.plasma.y = s.move.y;
     d.run(1);
     expect(s.prompt).toBe(Prompt.TalkPlasma);
     d.tap(s.id, Btn.Interact);
     expect(w.events.some((e) => e.e.k === 'npc' && e.e.say === 'ggs')).toBe(true);
-    expect(s.golden).toBe(true);
-    expect(s.inv[ItemKind.Shotgun]).toBe(1);
-    expect(s.shells).toEqual([I.golden.shells]);
-    // The old shotgun went on the ground.
-    expect(w.drops.some((dr) => dr.kind === ItemKind.Shotgun && !dr.golden)).toBe(true);
+    // Weapons never stack: the shotgun keeps its slot, the golden pump takes another.
+    const guns = s.inv.filter((sl) => sl.kind === ItemKind.Shotgun);
+    expect(guns.length).toBe(2);
+    expect(guns.filter((g) => g.golden).map((g) => g.amt[0])).toEqual([I.golden.shells]);
+    expect(w.drops.length).toBe(0);
     expect(I.golden.reload).toBe(I.shotgun.reload / 2);
     // Only once each.
     d.run(1);

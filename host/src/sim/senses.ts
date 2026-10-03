@@ -18,12 +18,16 @@ export function updateSenses(w: World, dt: number): void {
     }
     p.noise = noise;
 
-    // Scent (sprinting) and blood (wounded or downed) for Zach's always-on nose.
+    // Scent (walking or running; crouching leaves none) and blood (wounded or downed) for
+    // Zach's always-on nose. A walker's scent is fainter: it starts part-way faded.
     const onGround = p.hideState === 0 && (p.health === Health.Healthy || p.health === Health.Wounded || p.health === Health.Downed);
     if (onGround) {
-      if (p.move.sprinting && w.time - p.lastScent >= BALANCE.trails.scentEvery) {
+      const T = BALANCE.trails;
+      const running = p.move.sprinting === 1;
+      const walking = !running && p.gait === Gait.Walk;
+      if ((running || walking) && w.time - p.lastScent >= T.scentEvery) {
         p.lastScent = w.time;
-        w.trails.push({ id: w.trailSeq++, x: p.move.x, y: p.move.y, t: w.time, kind: 0, who: p.id });
+        w.trails.push({ id: w.trailSeq++, x: p.move.x, y: p.move.y, t: w.time - (walking ? T.walkHeadStart : 0), kind: 0, who: p.id });
       }
       if ((p.health === Health.Wounded || p.health === Health.Downed) && w.time - p.lastBlood >= BALANCE.trails.bloodEvery) {
         p.lastBlood = w.time;

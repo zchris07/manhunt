@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Action, BALANCE, Btn, EntityKind, Health, ItemKind, Prompt, dashDistance, maxStamina } from '@manhunt/shared';
-import { Driver, clearLane, makeWorld, openSpot, parkSexton, place } from './worldHelpers';
+import { Driver, clearLane, countOf, give as giveItem, makeWorld, openSpot, parkSexton, place, slotOf } from './worldHelpers';
 import { buildView, canSee, visionFor } from '../src/sim/view';
-import { roomFor } from '../src/sim/interact';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -80,31 +79,22 @@ function duel(dist = 150, opts: { testMode?: boolean } = {}): { w: World; d: Dri
   place(s, c.x, c.y);
   place(h, c.x + dist, c.y);
   place(w.players.get(3)!, 5800, 5800);
+  currentWorld = w;
   return { w, d: new Driver(w), h, s, c };
 }
 
+/** The world `duel` made last (items are given in it). */
+let currentWorld: World | null = null;
 function give(p: SimPlayer, kind: ItemKind, n = 1): void {
-  p.inv[kind] = n;
-  if (kind === ItemKind.Goggles) p.goggles = Array.from({ length: n }, () => I.goggles.meter);
-  if (kind === ItemKind.Shotgun) p.shells = Array.from({ length: n }, () => I.shotgun.shells);
+  giveItem(currentWorld!, p, kind, n);
 }
 
-/** Clicks with the given item selected, aiming along +x. */
+/** Clicks with the slot holding `kind` selected, aiming along +x. */
 function use(d: Driver, p: SimPlayer, kind: ItemKind, extra: { aim?: number; aimDist?: number } = {}): void {
-  d.tap(p.id, Btn.Primary, { item: kind, aim: 0, aimDist: 300, ...extra });
+  d.tap(p.id, Btn.Primary, { item: slotOf(p, kind), aim: 0, aimDist: 300, ...extra });
 }
 
 describe('survivor items (stun, never kill)', () => {
-  it('inventory: at most 2 of each kind, and only one duck confit', () => {
-    const { s } = duel();
-    expect(roomFor(s, 'bottle')).toBe(true);
-    s.inv[ItemKind.Bottle] = 2;
-    expect(roomFor(s, 'bottle')).toBe(false);
-    expect(roomFor(s, 'trap')).toBe(true);
-    s.confit = 1;
-    expect(roomFor(s, 'confit')).toBe(false);
-  });
-
   it('a thrown bottle stuns Zach, and stun immunity stops a chain-stun', () => {
     const { w, d, h, s } = duel(200);
     give(s, ItemKind.Bottle, 2);
@@ -112,11 +102,11 @@ describe('survivor items (stun, never kill)', () => {
     d.run(secs(0.4));
     expect(h.stunT).toBeGreaterThan(0);
     expect(h.immuneT).toBeGreaterThan(I.stunImmunity);
-    expect(s.inv[ItemKind.Bottle]).toBe(1);
+    expect(countOf(s, ItemKind.Bottle)).toBe(1);
     expect(w.events.some((e) => e.e.k === 'stun' && e.e.kind === 'bottle')).toBe(true);
     use(d, s, ItemKind.Bottle);
     d.run(secs(0.4));
-    expect(s.inv[ItemKind.Bottle]).toBe(0);
+    expect(countOf(s, ItemKind.Bottle)).toBe(0);
     expect(s.stats.stuns).toBe(1);
     expect(h.health).not.toBe(Health.Eliminated);
   });
@@ -134,22 +124,21 @@ describe('survivor items (stun, never kill)', () => {
     expect(h.stunT).toBeGreaterThan(0);
     d.run(secs(0.5));
     expect(h.move.x - c.x).toBeGreaterThan(240);
-    expect(s.shells[0]).toBe(2);
+    expect(s.inv[0].amt[0]).toBe(2);
     expect(s.reloadT).toBeGreaterThan(1);
     use(d, s, ItemKind.Shotgun);
-    expect(s.shells[0]).toBe(2);
+    expect(s.inv[0].amt[0]).toBe(2);
     d.run(secs(I.shotgun.reload));
     use(d, s, ItemKind.Shotgun);
     d.run(secs(I.shotgun.reload));
     use(d, s, ItemKind.Shotgun);
-    expect(s.inv[ItemKind.Shotgun]).toBe(0);
-    expect(s.shells.length).toBe(0);
+    expect(countOf(s, ItemKind.Shotgun)).toBe(0);
   });
 
   it('night vision: on only while held, sees through walls, and is used up for good', () => {
     const { w, d, s } = duel(2000);
     give(s, ItemKind.Goggles);
-    const held = { buttons: Btn.Primary, item: ItemKind.Goggles };
+    const held = { buttons: Btn.Primary, item: slotOf(s, ItemKind.Goggles) };
     d.run(1, (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(true);
     const v = visionFor(w, s);
@@ -157,16 +146,16 @@ describe('survivor items (stun, never kill)', () => {
     expect(v.cone.halfAngle).toBeCloseTo(BALANCE.survivor.vision.coneHalfAngleDeg * (Math.PI / 180) * I.goggles.coneMul, 3);
     d.run(secs(1), (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(true);
-    d.run(1, (p) => (p.id === s.id ? { item: ItemKind.Goggles } : undefined));
+    d.run(1, (p) => (p.id === s.id ? { item: held.item } : undefined));
     expect(s.gogglesOn).toBe(false);
-    const left = s.goggles[0];
+    const left = s.inv[0].amt[0];
     expect(left).toBeLessThan(I.goggles.meter);
     d.run(secs(3));
-    expect(s.goggles[0]).toBe(left);
-    s.goggles[0] = 0.5;
+    expect(s.inv[0].amt[0]).toBe(left);
+    s.inv[0].amt[0] = 0.5;
     d.run(secs(1), (p) => (p.id === s.id ? held : undefined));
     expect(s.gogglesOn).toBe(false);
-    expect(s.inv[ItemKind.Goggles]).toBe(0);
+    expect(countOf(s, ItemKind.Goggles)).toBe(0);
   });
 
   it('the energy drink speeds up stamina refill and adds 2 s to the meter for 20 s', () => {
@@ -175,7 +164,7 @@ describe('survivor items (stun, never kill)', () => {
     use(d, s, ItemKind.Energy);
     expect(s.move.boostT).toBeGreaterThan(I.energy.duration - 0.2);
     expect(maxStamina('survivor', s.move.boostT)).toBeGreaterThan(BALANCE.survivor.stamina.max + 1.9);
-    expect(s.inv[ItemKind.Energy]).toBe(0);
+    expect(countOf(s, ItemKind.Energy)).toBe(0);
   });
 
   it('a galaxy gas trap arms, bursts when Zach comes near, and slows him', () => {
@@ -185,7 +174,8 @@ describe('survivor items (stun, never kill)', () => {
     // Planting takes 2 s (standing still).
     expect(w.traps.length).toBe(0);
     expect(s.action).toBe(Action.Plant);
-    d.run(secs(I.trap.plantTime) + 1, (p) => (p.id === s.id ? { item: ItemKind.Trap } : undefined));
+    const ts = slotOf(s, ItemKind.Trap);
+    d.run(secs(I.trap.plantTime) + 1, (p) => (p.id === s.id ? { item: ts } : undefined));
     expect(w.traps.length).toBe(1);
     // Semi-hidden: Zach only gets it in his view when he can see it.
     place(h, c.x + 1000, c.y);
@@ -204,20 +194,21 @@ describe('survivor items (stun, never kill)', () => {
     expect(slowed).toBeLessThan(w.balance.hunterSpeed * I.trap.slowMul * 1.1);
   });
 
-  it('duck confit revives a downed teammate instantly, once', () => {
+  it('duck confit heals you to full (it no longer revives anyone)', () => {
     const { w, d, s } = duel(3000);
     const mate = w.players.get(3)!;
     place(mate, s.move.x + 30, s.move.y);
     mate.health = Health.Downed;
-    s.confit = 1;
-    d.run(2);
-    expect(s.prompt).toBe(Prompt.ConfitRevive);
-    d.tap(s.id, Btn.Interact);
-    expect(mate.health).toBe(Health.Wounded);
-    expect(s.confit).toBe(0);
-    mate.health = Health.Downed;
+    give(s, ItemKind.Confit);
     d.run(2);
     expect(s.prompt).toBe(Prompt.Revive);
+    s.hp = 0.4;
+    s.health = Health.Wounded;
+    use(d, s, ItemKind.Confit);
+    expect(s.hp).toBe(1);
+    expect(s.health).toBe(Health.Healthy);
+    expect(countOf(s, ItemKind.Confit)).toBe(0);
+    expect(mate.health).toBe(Health.Downed);
   });
 });
 
@@ -394,13 +385,14 @@ describe('Sexton Science and JARVIS', () => {
 describe('testing mode', () => {
   it('fills the kit, never uses items up, and lets a player switch sides in place', () => {
     const { w, d, h, s } = duel(200, { testMode: true });
-    expect(s.inv[ItemKind.Bottle]).toBe(I.maxStack);
+    const full = countOf(s, ItemKind.Bottle);
+    expect(full).toBeGreaterThan(0);
     expect(s.jarvis).toBe(3);
     expect(h.hemp).toBe(2);
     use(d, s, ItemKind.Bottle);
     use(d, s, ItemKind.Bottle);
     use(d, s, ItemKind.Bottle);
-    expect(s.inv[ItemKind.Bottle]).toBe(I.maxStack);
+    expect(countOf(s, ItemKind.Bottle)).toBe(full);
     d.tap(s.id, Btn.Ability);
     d.tap(s.id, Btn.Ability);
     expect(w.events.filter((e) => e.e.k === 'jarvis').length).toBe(2);
@@ -411,7 +403,7 @@ describe('testing mode', () => {
     expect(s.move.x).toBeCloseTo(x, 0);
     expect(w.switchRole(s.id)).toBe(true);
     expect(s.role).toBe('survivor');
-    expect(s.inv[ItemKind.Trap]).toBe(I.maxStack);
+    expect(countOf(s, ItemKind.Trap)).toBeGreaterThan(0);
   });
 
   it('teleports to a clicked map point, and survivors see their own scent trail', () => {

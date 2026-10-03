@@ -29,8 +29,8 @@ test('audio: the burst snippet only Zach hears, and Sexton\'s reel', async ({ br
   await surv.mouse.click(400, 300);
   await zach.mouse.click(400, 300);
   await expect.poll(async () => (await audio(surv))?.state, { timeout: 10000 }).toBe('running');
-  await expect.poll(async () => ((await audio(surv))?.loaded ?? []).sort(), { timeout: 10000 }).toEqual(['burst', 'sexton.reel']);
-  await expect.poll(async () => ((await audio(zach))?.loaded ?? []).length, { timeout: 10000 }).toBe(2);
+  await expect.poll(async () => ((await audio(surv))?.loaded ?? []).sort(), { timeout: 10000 }).toEqual(['boom', 'burst', 'sexton.reel']);
+  await expect.poll(async () => ((await audio(zach))?.loaded ?? []).length, { timeout: 10000 }).toBe(3);
   expect((await audio(surv))!.loops).toEqual([]);
 
   // Zach fires a Soundcloud Burst (F): he hears a GMajor snippet; survivors hear nothing.

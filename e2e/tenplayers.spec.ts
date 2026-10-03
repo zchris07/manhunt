@@ -47,11 +47,15 @@ test('10 players join by invite link and finish a 2-hunter match set up by the o
   expect(roles.filter((r) => r === 'survivor').length).toBe(8);
   expect(roles[3]).toBe('hunter');
 
-  // Fast-forward the objectives, then 4 of 8 survivors (50%) walk out of the gate.
+  // Fast-forward the objectives, then 4 of 8 survivors (50%) walk out of the gate. The night
+  // goes on until the other 4 are down too; half escaped, so the survivors win.
   await dev(owner, 'gens');
   await dev(owner, 'gate');
   const survivors = all.filter((_p, i) => roles[i] === 'survivor');
   for (const s of survivors.slice(0, 4)) await dev(s, 'exit');
+  await owner.waitForTimeout(1500);
+  expect(await owner.locator('.banner').count()).toBe(0);
+  for (const s of survivors.slice(4)) await dev(s, 'health', [2]);
 
   for (const p of all) await expect(p.locator('.banner')).toHaveText('SURVIVORS ESCAPED', { timeout: 60000 });
   await expect(owner.locator('table.stats tr')).toHaveCount(11);

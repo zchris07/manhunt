@@ -5,9 +5,11 @@ import {
   Btn,
   EF,
   EntityKind,
+  GOLDEN_BIT,
   Gait,
   Health,
-  ItemKind,
+  INV_SLOTS,
+  JadenFlag,
   SextonFlag,
   ShaneFlag,
   TICK_DT,
@@ -172,9 +174,12 @@ export class GameView {
     return !!s && (s.spectating > 0 || s.role === 2);
   }
 
+  /** Camera zoom: the Hemp Battery zooms out, and Waz's field of view change shows more (or less). */
   private get zoom(): number {
     const e = this.zoomK * this.zoomK * (3 - 2 * this.zoomK);
-    return 1 + (HEMP_ZOOM - 1) * e;
+    const s = this.self;
+    const fov = s && !this.spectating() ? s.fovMul || 1 : 1;
+    return (1 + (HEMP_ZOOM - 1) * e) / fov;
   }
 
   private buildCmd(): Omit<InputCmd, 'seq'> {
@@ -234,7 +239,7 @@ export class GameView {
       this.lastAim = Math.atan2(dy, dx);
       this.lastAimDist = Math.hypot(dx, dy);
     }
-    const item = this.roleIsHunter || !this.self ? 0 : this.o.inventory.held(this.self.inv);
+    const item = this.roleIsHunter || !this.self ? 0 : this.o.inventory.held(this.self.slots);
     return { buttons: b, moveX: ax.x, moveY: ax.y, aim: this.lastAim, aimDist: this.lastAimDist, item };
   }
 
@@ -283,7 +288,8 @@ export class GameView {
         break;
       case 'stun':
         if (e.target === me) {
-          this.hud.center('STUNNED', 1500);
+          if (e.kind === 'down') this.hud.center('DOWN', BALANCE.hunter.health.downTime * 1000);
+          else this.hud.center('STUNNED', 1500);
           this.shake = Math.max(this.shake, 10);
         }
         break;
@@ -340,6 +346,20 @@ export class GameView {
         a.playClip('burst', { volume: S.scareVolume, fadeIn: S.scareFade, fadeOut: S.scareFade, duration: S.scareTime });
         break;
       }
+      case 'book': {
+        // The Grapes of Wrath hit Zach: a picture over his whole screen.
+        const B = BALANCE.items.book;
+        this.hud.flashImage(`ui.book.${e.img}`, B.blindTime * 1000, 200, 'book');
+        this.shake = Math.max(this.shake, 16);
+        break;
+      }
+      case 'boom':
+        a.oneShot('boom', Math.max(0.15, near(e.x, e.y, 1400)));
+        this.particles.burst(e.x, e.y, 18, { speed: 160, life: 0.5, tint: 0xe8dcc0, size: 1.1 });
+        break;
+      case 'wazSlain':
+        this.hud.flashImage('ui.wazSlain', BALANCE.waz.slainFlash * 1000, 180);
+        break;
       case 'jarvis':
         if (e.by === me) {
           this.hud.big('JARVIS ONLINE', 'jarvis');
@@ -433,13 +453,15 @@ export class GameView {
     if (p?.sprinting) state |= EF.Sprinting;
     state |= (Gait.Walk & 3) << EF.GaitShift;
     // Zach's aux is his swing charge (0-255); a survivor's is the item in hand.
-    const held = this.o.inventory.held(s.inv);
+    const held = this.o.inventory.heldSlot(s.slots);
     const aux =
       s.role === 1
         ? s.pump > 0
           ? 255
           : Math.round((charging || (performance.now() < this.swingUntil ? this.charge : 0)) * 254)
-        : held | (held === ItemKind.Shotgun && s.golden ? 8 : 0);
+        : held
+          ? held.kind | (held.golden ? GOLDEN_BIT : 0)
+          : 0;
     return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, hp: s.hp * 255 };
   }
 
@@ -452,7 +474,7 @@ export class GameView {
     const X = BALANCE.sexton.audio;
     if (sx && Math.hypot(sx.x - lx, sx.y - ly) < X.far + 100) a.loop('sexton', 'sexton.reel', { x: sx.x, y: sx.y, volume: 1, radius: X.far, near: X.near, curve: X.curve });
     else a.loop('sexton', null);
-    const sh = ents.find((e) => (e.kind === EntityKind.Shane || e.kind === EntityKind.Jaden) && (e.state & ShaneFlag.Chasing) !== 0);
+    const sh = ents.find((e) => (e.kind === EntityKind.Shane || e.kind === EntityKind.Jaden) && (e.state & ShaneFlag.Chasing) !== 0 && (e.state & JadenFlag.Dead) === 0);
     const P = BALANCE.shane.steps;
     if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
     else a.loop('shane', null);
@@ -475,9 +497,9 @@ export class GameView {
     if (inp.wasPressed('KeyT') && s0?.testMode) c.send({ t: 'switchRole' });
     if (!this.roleIsHunter && s0 && !this.spectating()) {
       if (inp.wasPressed('Tab')) this.hud.toggleEditor(s0);
-      for (let i = 0; i < 5; i++) if (inp.wasPressed(`Digit${i + 1}`)) this.o.inventory.select(i);
+      for (let i = 0; i < INV_SLOTS; i++) if (inp.wasPressed(`Digit${i + 1}`)) this.o.inventory.select(i);
       const wheel = inp.takeWheel();
-      if (wheel !== 0 && !this.hud.editorOpen) this.o.inventory.scroll(wheel > 0 ? 1 : -1, s0.inv);
+      if (wheel !== 0 && !this.hud.editorOpen) this.o.inventory.scroll(wheel > 0 ? 1 : -1, s0.slots);
     } else inp.takeWheel();
     inp.endFrame();
     c.decaySmoothing(dt);
@@ -511,6 +533,7 @@ export class GameView {
         downed: t ? (t.state & EF.HealthMask) === Health.Downed : false,
         hidden: null,
         coneMul: goggles ? BALANCE.items.goggles.coneMul : 1,
+        proxMul: 1,
         xray: 0,
       };
     } else {
@@ -534,7 +557,8 @@ export class GameView {
         hunter: this.roleIsHunter,
         downed: s.health === Health.Downed,
         hidden: s.hideState === 2 && s.hideSpot >= 0 ? c.match!.map.hidingSpots[s.hideSpot] : null,
-        coneMul: s.gogglesOn ? BALANCE.items.goggles.coneMul : 1,
+        coneMul: (s.gogglesOn ? BALANCE.items.goggles.coneMul : 1) * (s.fovMul || 1),
+        proxMul: s.fovMul || 1,
         xray: 0,
       };
     }
@@ -586,7 +610,7 @@ export class GameView {
     const jeans = ents.find((e) => e.kind === EntityKind.Shane);
     if (jeans) lights.push({ key: 'shane', x: jeans.x, y: jeans.y, radius: BALANCE.shane.light.radius, intensity: BALANCE.shane.light.intensity, static: false });
     // Jaden Nguyen carries one too.
-    const jaden = ents.find((e) => e.kind === EntityKind.Jaden);
+    const jaden = ents.find((e) => e.kind === EntityKind.Jaden && (e.state & JadenFlag.Dead) === 0);
     if (jaden) lights.push({ key: 'jaden', x: jaden.x, y: jaden.y, radius: BALANCE.jaden.light.radius, intensity: BALANCE.jaden.light.intensity, static: false });
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
@@ -599,16 +623,12 @@ export class GameView {
         lights.push({ key: `beam${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
       }
     }
-    // Sexton, Chris and Plasma carry a faint light too.
-    for (const e of ents) {
-      if (e.kind !== EntityKind.Sexton && e.kind !== EntityKind.Chris && e.kind !== EntityKind.Plasma) continue;
-      lights.push({ key: `npc${e.kind}`, x: e.x, y: e.y, radius: BALANCE.npcLight.radius, intensity: BALANCE.npcLight.intensity, static: false });
-    }
-    // Sexton, Chris and Plasma carry a faint light too.
+    // Sexton, Chris, Plasma and Waz carry a faint light too.
     for (const [key, kind, cfg] of [
       ['sexton', EntityKind.Sexton, BALANCE.sexton.light],
       ['chris', EntityKind.Chris, BALANCE.chris.light],
       ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
+      ['waz', EntityKind.Waz, BALANCE.npcLight],
     ] as const) {
       const n = ents.find((e) => e.kind === kind);
       if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });

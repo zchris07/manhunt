@@ -53,17 +53,12 @@ export interface SelfState {
   burstCd: number;
   /** Zach holds a Hemp Battery (1) or has infinite ones in testing mode (2). */
   hemp: number;
-  /** Survivor inventory: counts per ItemKind (index 0 unused). */
-  inv: number[];
-  /** Seconds left on the goggles currently in use. */
-  goggleMeter: number;
+  /** Survivor inventory: the eight slots in order. */
+  slots: SlotState[];
   gogglesOn: number;
   /** Zach: seconds the swing has been charged (-1 = not charging). */
   chargeT: number;
-  /** Shells left in the current shotgun. */
-  shells: number;
   reloadT: number;
-  confit: number;
   /** JARVIS tablet: 1 unused, 2 used (map revealed), 3 infinite (testing mode). */
   jarvis: number;
   jarvisT: number;
@@ -74,11 +69,28 @@ export interface SelfState {
   spectating: number;
   /** Health, 0 (down) to 1 (full). */
   hp: number;
-  /** Survivor: the shotgun in the shotgun slot is Plasma's golden pump. */
-  golden: number;
   /** Zach: golden pump shots left (it replaces the machete while he has any). */
   pump: number;
+  /** Zach: times he's been put down (each slows him for good). */
+  downs: number;
+  /** Zach: seconds left of a Grapes of Wrath picture over his screen. */
+  bookT: number;
+  /** Field of view multiplier (Waz). */
+  fovMul: number;
 }
+
+/**
+ * One inventory slot as the owner sees it. `amt` is the first unit's state: goggles' meter
+ * (s), or a weapon's rounds left.
+ */
+export interface SlotState {
+  kind: number;
+  n: number;
+  golden: boolean;
+  amt: number;
+}
+
+export const emptySlots = (): SlotState[] => Array.from({ length: 8 }, () => ({ kind: 0, n: 0, golden: false, amt: 0 }));
 
 export function emptySelf(id = 0): SelfState {
   return {
@@ -125,13 +137,10 @@ export function emptySelf(id = 0): SelfState {
     attackCd: 0,
     burstCd: 0,
     hemp: 0,
-    inv: [0, 0, 0, 0, 0, 0],
-    goggleMeter: 0,
+    slots: emptySlots(),
     gogglesOn: 0,
     chargeT: -1,
-    shells: 0,
     reloadT: 0,
-    confit: 0,
     jarvis: 0,
     jarvisT: 0,
     scareT: 0,
@@ -140,8 +149,10 @@ export function emptySelf(id = 0): SelfState {
     noise: 0,
     spectating: 0,
     hp: 1,
-    golden: 0,
     pump: 0,
+    downs: 0,
+    bookT: 0,
+    fovMul: 1,
   };
 }
 
@@ -178,6 +189,15 @@ export const JadenFlag = {
   Chasing: 1,
   Fleeing: 2,
   Firing: 4,
+  Dead: 8,
+  Stunned: 16,
+} as const;
+
+/** Waz's state bits. */
+export const WazFlag = {
+  Fleeing: 1,
+  Hurt: 2,
+  Talking: 4,
 } as const;
 
 /** Chris Zelley's state bits (EntityRecord.state for EntityKind.Chris). */
@@ -428,11 +448,14 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.i16(s.hideSpot).u8(s.hideState).u8(s.carrying).u8(s.carriedBy);
   w.u8(s.stakeStage).u16(tenths(s.stakeT)).u8(unit(s.wiggle));
   w.u8(unit(s.breath)).u16(ms(s.attackCd)).u16(tenths(s.burstCd)).u8(s.hemp);
-  for (let i = 1; i < 6; i++) w.u8(s.inv[i] ?? 0);
-  w.u16(tenths(s.goggleMeter)).u8(s.gogglesOn).u16(ms(s.chargeT + 1)).u8(s.shells).u16(ms(s.reloadT));
-  w.u8(s.confit).u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
+  for (let i = 0; i < 8; i++) {
+    const sl = s.slots[i] ?? { kind: 0, n: 0, golden: false, amt: 0 };
+    w.u8((sl.kind & 15) | (sl.golden ? 16 : 0)).u16(Math.min(65535, sl.n)).u16(sl.kind === 2 ? tenths(sl.amt) : Math.max(0, Math.min(65535, Math.round(sl.amt))));
+  }
+  w.u8(s.gogglesOn).u16(ms(s.chargeT + 1)).u16(ms(s.reloadT));
+  w.u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
-  w.u8(unit(s.hp)).u8(s.golden).u8(s.pump);
+  w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000));
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -480,14 +503,17 @@ function readSelf(r: ByteReader): SelfState {
   s.attackCd = r.u16() / 1000;
   s.burstCd = r.u16() / 10;
   s.hemp = r.u8();
-  s.inv = [0];
-  for (let i = 1; i < 6; i++) s.inv.push(r.u8());
-  s.goggleMeter = r.u16() / 10;
+  s.slots = [];
+  for (let i = 0; i < 8; i++) {
+    const kg = r.u8();
+    const n = r.u16();
+    const raw = r.u16();
+    const kind = kg & 15;
+    s.slots.push({ kind, n, golden: (kg & 16) !== 0, amt: kind === 2 ? raw / 10 : raw });
+  }
   s.gogglesOn = r.u8();
   s.chargeT = r.u16() / 1000 - 1;
-  s.shells = r.u8();
   s.reloadT = r.u16() / 1000;
-  s.confit = r.u8();
   s.jarvis = r.u8();
   s.jarvisT = r.u16() / 10;
   s.scareT = r.u16() / 10;
@@ -495,9 +521,11 @@ function readSelf(r: ByteReader): SelfState {
   s.testMode = r.u8();
   s.noise = r.u8() / 255;
   s.spectating = r.u8();
-  s.hp = r.u8() / 255;
-  s.golden = r.u8();
+  s.hp = r.u16() / 65535;
   s.pump = r.u8();
+  s.downs = r.u8();
+  s.bookT = r.u16() / 10;
+  s.fovMul = r.u16() / 1000;
   return s;
 }
 

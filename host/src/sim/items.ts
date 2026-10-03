@@ -1,8 +1,9 @@
-import { Action, BALANCE, BarricadeState, Btn, DEG, Health, ITEM_NAMES, ItemKind, maxStamina, overlapsCollider, pointSegDist2, rayCircle, raySegment, type InputCmd } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, DEG, Health, ItemKind, maxStamina, overlapsCollider, pointSegDist2, rayCircle, raySegment, slotName, type InputCmd } from '@manhunt/shared';
 import { canAct, type SimPlayer } from './player';
 import type { Drop, World } from './World';
-import { dropCarried, hurtSurvivor } from './combat';
+import { dropCarried, hurtHunter, hurtSurvivor, restoreSurvivor } from './combat';
 import type { NpcTarget } from './npc';
+import { addItem, consumeSlot, selected, takeOne, type Slot } from './inventory';
 
 const I = BALANCE.items;
 
@@ -50,22 +51,27 @@ export function dropBarricade(w: World, p: SimPlayer, bi: number): void {
   }
 }
 
-/** Uses up one of an item (testing mode never runs out). */
-function consume(w: World, p: SimPlayer, kind: ItemKind): void {
+/** Spends one round of a weapon slot; an empty weapon is gone. */
+function spendRound(w: World, p: SimPlayer, s: Slot): void {
   if (w.testMode) return;
-  p.inv[kind] = Math.max(0, p.inv[kind] - 1);
+  s.amt[0] = (s.amt[0] ?? 0) - 1;
+  if (s.amt[0] > 0) return;
+  w.emit([p.id], { k: 'item', text: `${slotName(s.kind, s.golden)} empty` });
+  consumeSlot(w, s);
 }
 
 /** Left click: use the item in the selected slot. */
 export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
-  const kind = p.selItem as ItemKind;
-  if (!kind || p.inv[kind] <= 0 || p.action !== Action.None || !canAct(p)) return;
-  switch (kind) {
-    case ItemKind.Bottle: {
+  const s = selected(p);
+  if (!s || p.action !== Action.None || !canAct(p)) return;
+  switch (s.kind) {
+    case ItemKind.Bottle:
+    case ItemKind.Book: {
       const dx = Math.cos(cmd.aim);
       const dy = Math.sin(cmd.aim);
-      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, owner: p.id });
-      consume(w, p, kind);
+      const book = s.kind === ItemKind.Book;
+      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, owner: p.id, book });
+      consumeSlot(w, s);
       break;
     }
     case ItemKind.Goggles:
@@ -73,17 +79,16 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       break;
     case ItemKind.Shotgun: {
       if (p.reloadT > 0) return;
-      fireShotgun(w, p, cmd.aim, I.shotgun.pelletDamage);
-      p.reloadT = p.golden ? I.golden.reload : I.shotgun.reload;
-      if (!w.testMode) {
-        p.shells[0] = (p.shells[0] ?? 0) - 1;
-        if (p.shells[0] <= 0) {
-          p.shells.shift();
-          consume(w, p, kind);
-          w.emit([p.id], { k: 'item', text: p.golden ? 'Golden pump empty' : 'Shotgun empty' });
-          p.golden = false;
-        }
-      }
+      fireShotgun(w, p, cmd.aim, I.shotgun.pelletDamage, s.golden);
+      p.reloadT = s.golden ? I.golden.reload : I.shotgun.reload;
+      spendRound(w, p, s);
+      break;
+    }
+    case ItemKind.Pistol: {
+      if (p.reloadT > 0) return;
+      firePistol(w, p, cmd.aim);
+      p.reloadT = I.pistol.reload;
+      spendRound(w, p, s);
       break;
     }
     case ItemKind.Energy: {
@@ -92,8 +97,18 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       p.move.stamina = maxStamina('survivor', p.move.boostT);
       p.move.staminaLock = 0;
       p.move.sprintBlocked = 0;
-      consume(w, p, kind);
-      w.emit([p.id], { k: 'item', text: 'Energy drink' });
+      consumeSlot(w, s);
+      w.emit([p.id], { k: 'item', text: 'Doctor Pepper' });
+      break;
+    }
+    case ItemKind.Confit: {
+      if (p.hp >= 0.999) {
+        w.emit([p.id], { k: 'item', text: 'Already at full health' });
+        return;
+      }
+      restoreSurvivor(p, 1);
+      consumeSlot(w, s);
+      w.emit([p.id], { k: 'item', text: 'Duck confit: healed to full' });
       break;
     }
     case ItemKind.Trap:
@@ -105,10 +120,49 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
 
 /** The plant finished: the trap goes down. */
 export function plantTrap(w: World, p: SimPlayer): void {
-  if (p.inv[ItemKind.Trap] <= 0) return;
+  const s = p.inv.find((x) => x.kind === ItemKind.Trap && x.n > 0);
+  if (!s) return;
   w.traps.push({ id: w.allocEntityId(), x: p.move.x, y: p.move.y, owner: p.id, armT: I.trap.armTime });
-  consume(w, p, ItemKind.Trap);
+  consumeSlot(w, s);
   w.emit([p.id], { k: 'item', text: 'Trap planted' });
+}
+
+/** Jaden's pistol in a survivor's hands: one bullet, straight down the sights. */
+function firePistol(w: World, p: SimPlayer, aim: number): void {
+  const G = I.pistol;
+  const a = aim + w.rng.range(-1, 1) * G.spreadDeg * DEG;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const sx = p.move.x + dx * (p.radius + 2);
+  const sy = p.move.y + dy * (p.radius + 2);
+  let best = Math.min(G.range, w.geo.raycastVision(sx, sy, a, G.range), windowHit(w, sx, sy, dx, dy, G.range));
+  let hitP: SimPlayer | null = null;
+  let hitN: NpcTarget | null = null;
+  for (const q of w.order) {
+    if (q === p) continue;
+    const ok = q.role === 'hunter' ? q.health !== Health.Eliminated : q.role === 'survivor' && (q.health === Health.Healthy || q.health === Health.Wounded) && q.hideState !== 2;
+    if (!ok) continue;
+    const t = rayCircle(sx, sy, dx, dy, q.move.x, q.move.y, q.radius);
+    if (t < best) {
+      best = t;
+      hitP = q;
+    }
+  }
+  for (const n of w.npcTargets()) {
+    const t = rayCircle(sx, sy, dx, dy, n.x, n.y, n.hitRadius);
+    if (t < best) {
+      best = t;
+      hitN = n;
+      hitP = null;
+    }
+  }
+  w.emit(w.near(p.move.x, p.move.y, BALANCE.net.maxSensingRadius), { k: 'shot', x: Math.round(p.move.x), y: Math.round(p.move.y), p: [Math.round(a * 1000), Math.round(best + p.radius + 2)], hit: hitP !== null, gold: false });
+  w.noise(p.move.x, p.move.y, 1000, 'shot');
+  if (hitN) hitN.itemHit(p, 'shot');
+  else if (hitP?.role === 'hunter') {
+    hurtHunter(w, hitP, G.zachDamage, p, 'bullet');
+    w.feed(`${p.name} shot ${hitP.name}`);
+  } else if (hitP) hurtSurvivor(w, hitP, G.damage, p, 'bullet');
 }
 
 /** Zach's golden pump (it replaces his machete until the shots run out). */
@@ -124,7 +178,7 @@ export function fireZachPump(w: World, h: SimPlayer, aim: number): void {
  * Eight pellets with random bloom inside the cone. Each flies on until it hits something
  * solid or someone; windows in the way shatter and let it through.
  */
-function fireShotgun(w: World, p: SimPlayer, aim: number, pelletDamage: number): void {
+function fireShotgun(w: World, p: SimPlayer, aim: number, pelletDamage: number, golden = false): void {
   const S = I.shotgun;
   const zachGun = p.role === 'hunter';
   const ox = p.move.x;
@@ -133,6 +187,7 @@ function fireShotgun(w: World, p: SimPlayer, aim: number, pelletDamage: number):
   const onSurvivor = new Map<SimPlayer, number>();
   const npcs = new Set<NpcTarget>();
   let zach: SimPlayer | null = null;
+  let onZach = 0;
   const targets = w.npcTargets();
   for (let i = 0; i < S.pellets; i++) {
     const a = aim + w.rng.range(-1, 1) * S.spreadDeg * DEG;
@@ -175,11 +230,14 @@ function fireShotgun(w: World, p: SimPlayer, aim: number, pelletDamage: number):
     }
     pellets.push(Math.round(a * 1000), Math.round(best + p.radius + 2));
     if (hitN) npcs.add(hitN);
-    else if (hitP?.role === 'hunter') zach = hitP;
+    else if (hitP?.role === 'hunter') {
+      zach = hitP;
+      onZach++;
+    }
     else if (hitP) onSurvivor.set(hitP, (onSurvivor.get(hitP) ?? 0) + 1);
   }
   const hit = zach !== null || onSurvivor.size > 0;
-  w.emit(w.near(ox, oy, BALANCE.net.maxSensingRadius), { k: 'shot', x: Math.round(ox), y: Math.round(oy), p: pellets, hit, gold: zachGun || p.golden });
+  w.emit(w.near(ox, oy, BALANCE.net.maxSensingRadius), { k: 'shot', x: Math.round(ox), y: Math.round(oy), p: pellets, hit, gold: zachGun || golden });
   w.noise(ox, oy, 1100, 'shot');
   for (const [q, n] of onSurvivor) {
     if (zachGun) {
@@ -202,7 +260,9 @@ function fireShotgun(w: World, p: SimPlayer, aim: number, pelletDamage: number):
   zach.move.kbPeak = S.kbPeak;
   zach.move.kbAng = away;
   zach.move.lungeT = 0;
-  if (stunHunter(w, zach, S.stun, 'shotgun', p)) w.feed(`${p.name} blasted ${zach.name} with a ${p.golden ? 'golden pump' : 'shotgun'}`);
+  if (stunHunter(w, zach, S.stun, 'shotgun', p)) w.feed(`${p.name} blasted ${zach.name} with a ${golden ? 'golden pump' : 'shotgun'}`);
+  // A full blast (every pellet) is `zachBlastDamage` hp.
+  hurtHunter(w, zach, (onZach * S.zachBlastDamage) / S.pellets, p, 'pellet');
 }
 
 /** The first unbroken window a ray meets before `max`, if any. */
@@ -220,18 +280,14 @@ function nearestWindow(w: World, x: number, y: number, dx: number, dy: number, m
 
 /** G: drop one of the selected item on the ground for a teammate. */
 export function dropItem(w: World, p: SimPlayer): void {
-  const kind = p.selItem as ItemKind;
-  if (!kind || p.inv[kind] <= 0 || !canAct(p) || p.action !== Action.None) return;
-  const d: Drop = { id: w.allocEntityId(), x: p.move.x, y: p.move.y, kind, golden: false, amount: 0 };
-  if (kind === ItemKind.Goggles) d.amount = (w.testMode ? I.goggles.meter : p.goggles.pop()) ?? I.goggles.meter;
-  if (kind === ItemKind.Shotgun) {
-    d.golden = p.golden;
-    d.amount = (w.testMode ? (p.golden ? I.golden.shells : I.shotgun.shells) : p.shells.pop()) ?? I.shotgun.shells;
-    if (!w.testMode) p.golden = false;
-  }
-  if (!w.testMode) p.inv[kind]--;
+  const s = selected(p);
+  if (!s || !canAct(p) || p.action !== Action.None) return;
+  const kind = s.kind;
+  const golden = s.golden;
+  const amount = w.testMode ? (s.amt[s.amt.length - 1] ?? 0) : takeOne(s);
+  const d: Drop = { id: w.allocEntityId(), x: p.move.x, y: p.move.y, kind, golden, amount };
   placeDrop(w, d, p.move.x + Math.cos(p.facing) * 26, p.move.y + Math.sin(p.facing) * 26);
-  w.emit([p.id], { k: 'item', text: `Dropped: ${ITEM_NAMES[kind]}${d.golden ? ' (golden pump)' : ''}` });
+  w.emit([p.id], { k: 'item', text: `Dropped: ${slotName(kind, golden)}` });
 }
 
 /** Puts a dropped item on the ground at (x,y), or at the dropper's feet if that's blocked. */
@@ -243,40 +299,14 @@ export function placeDrop(w: World, d: Drop, x: number, y: number): void {
   w.drops.push(d);
 }
 
-/** A survivor picks up a dropped item (a golden pump and a shotgun swap places). */
+/** A survivor picks up a dropped item (a full inventory drops the last slot to make room). */
 export function pickUpDrop(w: World, p: SimPlayer, id: number): void {
   const i = w.drops.findIndex((d) => d.id === id);
   if (i < 0) return;
   const d = w.drops[i];
-  if (d.kind === ItemKind.Shotgun) {
-    if (!giveShotgun(w, p, d.golden, d.amount)) return;
-  } else {
-    if (p.inv[d.kind] >= I.maxStack) return;
-    p.inv[d.kind]++;
-    if (d.kind === ItemKind.Goggles) p.goggles.push(d.amount);
-  }
   w.drops.splice(i, 1);
-  w.emit([p.id], { k: 'item', text: `Picked up: ${ITEM_NAMES[d.kind]}${d.golden ? ' (golden pump)' : ''}` });
-}
-
-/**
- * Puts a shotgun (or the golden pump) in the shotgun slot. The golden pump fills the slot on
- * its own: getting one drops your shotguns, and picking up a shotgun drops the golden pump.
- */
-export function giveShotgun(w: World, p: SimPlayer, golden: boolean, shells: number): boolean {
-  const S = ItemKind.Shotgun;
-  if (golden || p.golden) {
-    // Swap: whatever is in the slot goes on the ground.
-    while (p.inv[S] > 0) {
-      const d: Drop = { id: w.allocEntityId(), x: p.move.x, y: p.move.y, kind: S, golden: p.golden, amount: p.shells.pop() ?? I.shotgun.shells };
-      p.inv[S]--;
-      placeDrop(w, d, p.move.x - Math.cos(p.facing) * 24, p.move.y - Math.sin(p.facing) * 24);
-    }
-    p.golden = golden;
-  } else if (p.inv[S] >= I.maxStack) return false;
-  p.inv[S]++;
-  p.shells.push(shells);
-  return true;
+  addItem(w, p, d.kind, d.amount, d.golden);
+  w.emit([p.id], { k: 'item', text: `Picked up: ${slotName(d.kind, d.golden)}` });
 }
 
 /** Distance along a ray to the nearest unbroken window (bottles shatter on the glass). */
@@ -295,11 +325,11 @@ function windowHit(w: World, x: number, y: number, dx: number, dy: number, max: 
 export function updateItems(w: World, dt: number): void {
   // Bottles in flight fly on until they hit something: a wall, a tree, a closed door, an
   // unbroken window, Zach, another survivor or an NPC.
-  const B = I.bottle;
   const maxFlight = Math.hypot(w.map.width, w.map.height);
   const npcs = w.npcTargets();
   const keep: typeof w.bottles = [];
   for (const b of w.bottles) {
+    const B = b.book ? I.book : I.bottle;
     const step = B.speed * dt;
     const ang = Math.atan2(b.dy, b.dx);
     const free = Math.min(w.geo.raycastVision(b.x, b.y, ang, step + 1), windowHit(w, b.x, b.y, b.dx, b.dy, step + 1));
@@ -334,22 +364,25 @@ export function updateItems(w: World, dt: number): void {
     b.travelled += adv;
     const owner = w.players.get(b.owner);
     if (hitN) {
-      w.noise(nx, ny, 900, 'glass');
+      w.noise(nx, ny, 900, b.book ? 'book' : 'glass');
       if (owner) hitN.itemHit(owner, 'bottle');
       continue;
     }
+    const sound = b.book ? 'book' : 'glass';
     if (hitP?.role === 'hunter') {
-      w.noise(nx, ny, 900, 'glass');
-      if (stunHunter(w, hitP, B.stun, 'bottle', owner)) w.feed(`${owner?.name ?? 'Someone'} smashed a bottle on ${hitP.name}`);
+      w.noise(nx, ny, 900, sound);
+      if (b.book) bookHit(w, hitP, owner);
+      else if (stunHunter(w, hitP, I.bottle.stun, 'bottle', owner)) w.feed(`${owner?.name ?? 'Someone'} smashed a bottle on ${hitP.name}`);
+      hurtHunter(w, hitP, B.zachDamage, owner ?? null, 'bottle');
       continue;
     }
     if (hitP) {
-      w.noise(nx, ny, 900, 'glass');
+      w.noise(nx, ny, 900, sound);
       hurtSurvivor(w, hitP, B.damage, owner ?? null, 'bottle');
       continue;
     }
     if (free <= step || b.travelled >= maxFlight) {
-      w.noise(nx, ny, 900, 'glass');
+      w.noise(nx, ny, 900, sound);
       continue;
     }
     keep.push(b);
@@ -380,6 +413,7 @@ export function updateItems(w: World, dt: number): void {
       h.gassed = true;
       h.move.slowT = Math.max(h.move.slowT, 0.2);
       h.move.slowMul = Math.min(h.move.slowMul, T.slowMul);
+      hurtHunter(w, h, T.zachDps * dt, null, 'gas');
     }
     // NPCs in the gas: Shane gives up his chase, Sexton is slowed, Plasma is blinded and slowed.
     const inGas = (x: number, y: number): boolean => Math.hypot(x - g.x, y - g.y) <= r;
@@ -387,26 +421,40 @@ export function updateItems(w: World, dt: number): void {
     if (inGas(w.jaden.x, w.jaden.y)) w.jaden.gassed();
     if (inGas(w.sexton.x, w.sexton.y)) w.sexton.gasT = 0.25;
     if (inGas(w.plasma.x, w.plasma.y)) w.plasma.gasT = 0.25;
+    if (inGas(w.waz.x, w.waz.y)) w.waz.gasT = 0.25;
     return g.age < T.gasTime;
   });
 
   for (const p of w.order) {
+    if (p.role === 'hunter') p.bookT = Math.max(0, p.bookT - dt);
     if (p.role !== 'survivor') continue;
     p.reloadT = Math.max(0, p.reloadT - dt);
     p.scareT = Math.max(0, p.scareT - dt);
     p.jarvisT = Math.max(0, p.jarvisT - dt);
     // Night vision is on only while left click is held with the goggles selected.
-    const holding = (p.lastCmd.buttons & Btn.Primary) !== 0 && p.selItem === ItemKind.Goggles && p.inv[ItemKind.Goggles] > 0;
-    p.gogglesOn = holding && (canAct(p) || p.health === Health.Downed) && p.hideState === 0 && (w.testMode || (p.goggles[0] ?? 0) > 0);
-    if (p.gogglesOn && !w.testMode) {
-      p.goggles[0] = (p.goggles[0] ?? 0) - dt;
-      if (p.goggles[0] <= 0) {
+    const s = selected(p);
+    const holding = (p.lastCmd.buttons & Btn.Primary) !== 0 && s?.kind === ItemKind.Goggles;
+    p.gogglesOn = !!s && holding && (canAct(p) || p.health === Health.Downed) && p.hideState === 0 && (w.testMode || (s.amt[0] ?? 0) > 0);
+    if (s && p.gogglesOn && !w.testMode) {
+      s.amt[0] = (s.amt[0] ?? 0) - dt;
+      if (s.amt[0] <= 0) {
         // This pair is spent: it's gone.
-        p.goggles.shift();
-        p.inv[ItemKind.Goggles] = Math.max(0, p.inv[ItemKind.Goggles] - 1);
+        consumeSlot(w, s);
         p.gogglesOn = false;
         w.emit([p.id], { k: 'item', text: 'Goggles dead' });
       }
     }
   }
+}
+
+/** The Grapes of Wrath hits Zach: a picture over his screen, and he's slowed, for a while. */
+function bookHit(w: World, h: SimPlayer, by: SimPlayer | undefined): void {
+  const B = I.book;
+  h.bookT = B.blindTime;
+  h.move.slowT = Math.max(h.move.slowT, B.blindTime);
+  h.move.slowMul = Math.min(h.move.slowMul, B.slowMul);
+  w.emit([h.id], { k: 'book', img: w.rng.int(0, B.images - 1) });
+  w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'boom', x: Math.round(h.move.x), y: Math.round(h.move.y) });
+  if (by) by.stats.stuns++;
+  w.feed(`${by?.name ?? 'Someone'} threw The Grapes of Wrath at ${h.name}`);
 }

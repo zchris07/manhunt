@@ -14,7 +14,8 @@ const ITEM_COLORS: Record<string, string> = {
   goggles: '#5cff9a',
   confit: '#ffb04a',
   shotgun: '#ff6a4a',
-  energy: '#20d0ff',
+  energy: '#d8283a',
+  book: '#a86ac8',
   trap: '#d06aff',
 };
 

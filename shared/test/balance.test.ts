@@ -3,7 +3,7 @@ import { BALANCE, resolveBalance } from '../src/balance';
 
 describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () => {
   it('uses the reference values at 1 hunter vs 4 survivors', () => {
-    const b = resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 });
+    const b = resolveBalance({ hunters: 1, survivors: 4 });
     expect(b.pressure).toBe(4);
     expect(b.scale).toBe(1);
     expect(b.repairTime).toBe(BALANCE.objectives.repairTime);
@@ -34,8 +34,7 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(BALANCE.hunter.burst.width).toBe(BALANCE.hunter.radius * 2 * 6);
     expect(BALANCE.hunter.burst.scareTime).toBe(2.5);
     expect(BALANCE.hunter.hemp).toMatchObject({ duration: 8, zoomOut: 1.2, speedMul: 1.1 });
-    expect(BALANCE.items.counts).toEqual({ bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8 });
-    expect(BALANCE.items.maxStack).toBe(2);
+    expect(BALANCE.items.counts).toEqual({ bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8, book: 4 });
     expect(BALANCE.items.goggles).toMatchObject({ meter: 15, coneMul: 1.2 });
     expect(BALANCE.items.shotgun).toMatchObject({ shells: 3, reload: 2, stun: 0.8 });
     expect(BALANCE.items.energy).toMatchObject({ duration: 20, refillMul: 1.5, bonusSec: 2 });
@@ -49,7 +48,7 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
   it('keeps every lobby shape within the clamps', () => {
     for (let h = 1; h <= 9; h++) {
       for (let s = 1; h + s <= 10; s++) {
-        const b = resolveBalance({ hunters: h, survivors: s, difficulty: 1 });
+        const b = resolveBalance({ hunters: h, survivors: s });
         expect(b.requiredGenerators).toBeGreaterThanOrEqual(3);
         expect(b.requiredGenerators).toBeLessThanOrEqual(7);
         expect(b.repairTime).toBeGreaterThanOrEqual(BALANCE.objectives.repairTime * 0.75 - 1e-9);
@@ -65,21 +64,15 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
   });
 
   it('more survivors per hunter means a harder job for each survivor', () => {
-    const low = resolveBalance({ hunters: 2, survivors: 2, difficulty: 1 });
-    const high = resolveBalance({ hunters: 1, survivors: 9, difficulty: 1 });
+    const low = resolveBalance({ hunters: 2, survivors: 2 });
+    const high = resolveBalance({ hunters: 1, survivors: 9 });
     expect(high.repairTime).toBeGreaterThan(low.repairTime);
     expect(high.hunterSpeed).toBeGreaterThan(low.hunterSpeed);
     expect(high.stunMul).toBeLessThan(low.stunMul);
     expect(high.requiredGenerators).toBeGreaterThan(low.requiredGenerators);
   });
 
-  it('applies the lobby difficulty scaler and escape fraction', () => {
-    const easy = resolveBalance({ hunters: 1, survivors: 4, difficulty: 0.5 });
-    const hard = resolveBalance({ hunters: 1, survivors: 4, difficulty: 1.5 });
-    expect(hard.repairTime).toBeGreaterThan(easy.repairTime);
-    expect(hard.stunMul).toBeLessThan(easy.stunMul);
-    expect(resolveBalance({ hunters: 1, survivors: 4, difficulty: 9 }).difficulty).toBe(1.5);
-    expect(resolveBalance({ hunters: 1, survivors: 4, difficulty: 1, escapeFraction: 1 }).escapeNeeded).toBe(4);
-    expect(resolveBalance({ hunters: 1, survivors: 5, difficulty: 1, escapeFraction: 0.5 }).escapeNeeded).toBe(3);
+  it('counts half the survivors (rounded up) as the escape needed to win', () => {
+    expect(resolveBalance({ hunters: 1, survivors: 5 }).escapeNeeded).toBe(3);
   });
 });

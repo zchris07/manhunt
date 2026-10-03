@@ -36,6 +36,7 @@ import { World } from './sim/World';
 import { buildView } from './sim/view';
 import { cycleSpectate, skillCheckResult } from './sim/objectives';
 import { createPlayer } from './sim/player';
+import { moveSlot } from './sim/inventory';
 import { matchLogEntry, type MatchLogEntry } from './telemetry';
 import { devCommand } from './dev/devCommands';
 
@@ -306,6 +307,11 @@ export class GameHost {
         }
         break;
       }
+      case 'moveSlot': {
+        const sp = this.phase === 'match' ? this.world?.players.get(lp.id) : undefined;
+        if (sp) moveSlot(sp, msg.from, msg.to);
+        break;
+      }
       case 'teleport':
         if (this.phase === 'match') this.world?.teleport(lp.id, msg.x, msg.y);
         break;
@@ -390,7 +396,7 @@ export class GameHost {
       return;
     }
     this.matchSeed = s.seed ? hashString(s.seed) : (this.random() * 2 ** 32) >>> 0;
-    this.balance = resolveBalance({ hunters: split.hunters.length, survivors: split.survivors.length, difficulty: s.difficulty, escapeFraction: s.escapeFraction });
+    this.balance = resolveBalance({ hunters: split.hunters.length, survivors: split.survivors.length });
     const params = mapParamsFor(this.matchSeed, this.balance);
     this.map = generateMap(params);
     this.mapJson = null;
@@ -436,6 +442,8 @@ export class GameHost {
       ps.history.clear();
       ps.ackTick = 0;
     }
+    // A (re)started client has an empty scent overlay: send it every trail point again.
+    this.world.trailSent.delete(playerId);
     this.send(peer, {
       t: 'start',
       params: this.map.params,

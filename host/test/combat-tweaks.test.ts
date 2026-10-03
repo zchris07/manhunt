@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, Btn, Health, ItemKind } from '@manhunt/shared';
-import { Driver, clearLane, makeWorld, parkChris, parkSexton, parkShane, place } from './worldHelpers';
+import { clearLane, Driver, makeWorld, parkChris, parkSexton, parkShane, place, setCount } from './worldHelpers';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -82,7 +82,7 @@ describe('bottles', () => {
     const { w, d, h, s, c } = lane();
     place(s, c.x - 420, c.y);
     place(h, c.x + 420, c.y);
-    s.inv[ItemKind.Bottle] = 1;
+    setCount(s, ItemKind.Bottle, 1);
     d.tap(s.id, Btn.Primary, { aim: 0, aimDist: 80, item: ItemKind.Bottle });
     expect(w.bottles.length).toBe(1);
     d.run(secs(1.6), (p) => (p === s ? { aim: 0, item: ItemKind.Bottle } : undefined));
@@ -93,7 +93,7 @@ describe('bottles', () => {
   it('shatter on the first wall or tree in their way', () => {
     const { w, d, s, c } = lane();
     place(s, c.x, c.y);
-    s.inv[ItemKind.Bottle] = 1;
+    setCount(s, ItemKind.Bottle, 1);
     // Straight up or down from the lane there's always something eventually (the map edge at worst).
     d.tap(s.id, Btn.Primary, { aim: -Math.PI / 2, aimDist: 80, item: ItemKind.Bottle });
     const b = w.bottles[0];

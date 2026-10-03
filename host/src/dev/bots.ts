@@ -188,10 +188,11 @@ export class BotDirector {
     if (seen && hunter) {
       const aim = Math.atan2(hunter.y - p.move.y, hunter.x - p.move.x);
       if (hd < 150 && p.prompt2 === Prompt.DropBarricade) return cmd(Btn.Space);
-      if (hd < 330 && p.inv[ItemKind.Shotgun] > 0 && p.reloadT <= 0 && hunter.h.immuneT <= 0) return cmd(Btn.Primary, 0, 0, aim, hd, ItemKind.Shotgun);
-      if (hd < 300 && p.inv[ItemKind.Bottle] > 0 && hunter.h.immuneT <= 0 && this.rng.chance(0.4)) return cmd(Btn.Primary, 0, 0, aim, hd, ItemKind.Bottle);
-      if (hd < 260 && p.inv[ItemKind.Trap] > 0 && this.rng.chance(0.2)) return cmd(Btn.Primary, 0, 0, aim, hd, ItemKind.Trap);
-      if (p.move.stamina < 1 && p.inv[ItemKind.Energy] > 0 && p.move.boostT <= 0) return cmd(Btn.Primary, 0, 0, aim, hd, ItemKind.Energy);
+      const slot = (k: ItemKind): number => p.inv.findIndex((s) => s.kind === k && s.n > 0) + 1;
+      if (hd < 330 && slot(ItemKind.Shotgun) && p.reloadT <= 0 && hunter.h.immuneT <= 0) return cmd(Btn.Primary, 0, 0, aim, hd, slot(ItemKind.Shotgun));
+      if (hd < 300 && slot(ItemKind.Bottle) && hunter.h.immuneT <= 0 && this.rng.chance(0.4)) return cmd(Btn.Primary, 0, 0, aim, hd, slot(ItemKind.Bottle));
+      if (hd < 260 && slot(ItemKind.Trap) && this.rng.chance(0.2)) return cmd(Btn.Primary, 0, 0, aim, hd, slot(ItemKind.Trap));
+      if (p.move.stamina < 1 && slot(ItemKind.Energy) && p.move.boostT <= 0) return cmd(Btn.Primary, 0, 0, aim, hd, slot(ItemKind.Energy));
       // Loop: head for a standing barricade that isn't toward Zach.
       const loops = w.map.barricades
         .filter((_o, i) => w.barricades[i] === 0)
@@ -245,9 +246,9 @@ export class BotDirector {
     // Grab useful items nearby, then start generators.
     const loot = w.map.loot
       .map((l, i) => ({ ...l, i }))
-      .filter((l) => !w.lootTaken[l.i] && Math.hypot(l.x - p.move.x, l.y - p.move.y) < 300 && (l.item === 'confit' ? p.confit < 1 : l.item !== 'goggles'));
+      .filter((l) => !w.lootTaken[l.i] && Math.hypot(l.x - p.move.x, l.y - p.move.y) < 300 && l.item !== 'goggles' && p.inv.some((s) => s.kind === 0));
     const nearLoot = this.nearest(p, loot);
-    if (nearLoot && p.prompt !== Prompt.InventoryFull) return this.goTo(p, nearLoot.x, nearLoot.y, 0, 30, Btn.Interact);
+    if (nearLoot) return this.goTo(p, nearLoot.x, nearLoot.y, 0, 30, Btn.Interact);
     const gens = w.map.generators.map((g, i) => ({ x: g.x, y: g.y, i, s: w.gens[i] })).filter((g) => !g.s.repaired);
     const g = this.nearest(p, gens);
     if (g) return this.goTo(p, g.x + 50, g.y + 10, 0, 22, Btn.Interact);
@@ -344,13 +345,12 @@ export interface BotMatchOptions {
   seed: number;
   hunters: number;
   survivors: number;
-  difficulty?: number;
   timeLimitSec?: number;
 }
 
 /** Plays a whole match with bots and returns the result. */
 export function runBotMatch(o: BotMatchOptions): { result: MatchResult; world: World } {
-  const rb = resolveBalance({ hunters: o.hunters, survivors: o.survivors, difficulty: o.difficulty ?? 1 });
+  const rb = resolveBalance({ hunters: o.hunters, survivors: o.survivors });
   if (o.timeLimitSec) rb.timeLimit = o.timeLimitSec;
   const map = generateMap(mapParamsFor(o.seed, rb));
   const players: MatchPlayerInfo[] = [];

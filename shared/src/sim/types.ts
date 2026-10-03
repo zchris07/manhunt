@@ -90,8 +90,6 @@ export const Prompt = {
   CloseDoor: 22,
   TalkSexton: 23,
   TakeHemp: 24,
-  ConfitRevive: 25,
-  ConfitUnstake: 26,
   TalkChris: 27,
   TalkMarc: 28,
   TalkPlasma: 29,
@@ -101,6 +99,7 @@ export const Prompt = {
   NameNpc: 32,
   NameLoot: 33,
   NameDrop: 34,
+  TalkWaz: 35,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -124,37 +123,54 @@ export const PROMPT_LABELS: Record<number, string> = {
   22: 'Press E to close the door',
   23: 'Press E to talk to Sexton Science',
   24: 'Press E to take the Hemp Battery',
-  25: 'Press E to feed duck confit',
-  26: 'Press E to feed duck confit',
   27: 'Press E to talk to Chris Zelley',
   28: 'Press E to talk to Marc Cortez',
   29: 'Press E to talk to Plasma.TTV',
   30: 'Press E to keep listening',
   31: 'Press E to pick up',
+  35: 'Press E to talk to Waz',
 };
 
 /** NPC names, indexed by the NameNpc prompt target. */
-export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen'];
+export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen', 'Waz'];
 
-/** Items that take an inventory slot. Duck confit is carried separately (HUD icon). */
+/**
+ * Survivor items. Everything goes in one of the `INV_SLOTS` free slots: identical items
+ * stack in one slot without limit, except weapons (shotgun, golden pump, pistol), which
+ * take a slot each.
+ */
 export const ItemKind = {
   None: 0,
   Bottle: 1,
   Goggles: 2,
   Shotgun: 3,
+  /** Doctor Pepper (it was an energy drink). */
   Energy: 4,
   Trap: 5,
+  /** The Grapes of Wrath: thrown like a bottle. */
+  Book: 6,
+  Confit: 7,
+  /** Jaden Nguyen's pistol (he drops it when he dies). */
+  Pistol: 8,
 } as const;
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
-/** Every slot item, in default slot order. There are as many slots as item kinds. */
-export const SLOT_ITEMS: readonly ItemKind[] = [ItemKind.Bottle, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Energy, ItemKind.Trap];
+export const ITEM_KIND_MAX = 8;
+export const INV_SLOTS = 8;
+/** Golden pump flag in a slot or drop byte (item kinds fit in the low 4 bits). */
+export const GOLDEN_BIT = 16;
+export const isWeapon = (k: number): boolean => k === ItemKind.Shotgun || k === ItemKind.Pistol;
 export const ITEM_NAMES: Record<number, string> = {
   1: 'Bottle',
   2: 'Night vision goggles',
   3: 'Shotgun',
-  4: 'Energy drink',
+  4: 'Doctor Pepper',
   5: 'Galaxy gas trap',
+  6: 'The Grapes of Wrath',
+  7: 'Duck confit',
+  8: 'Pistol',
 };
+/** A slot's display name (a golden shotgun is Plasma's golden pump). */
+export const slotName = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'Golden pump' : (ITEM_NAMES[kind] ?? ''));
 
 /** Non-player entity kinds carried in snapshots. */
 export const EntityKind = {
@@ -172,8 +188,10 @@ export const EntityKind = {
   Drop: 10,
   /** Sexton's Hemp Beam: x,y origin, facing, extra = length / 8. */
   Beam: 11,
-  /** Jaden Nguyen: state = ShaneFlag (+ JadenFlag.Firing). */
+  /** Jaden Nguyen: state = ShaneFlag (+ JadenFlag.Firing), extra = alert meter 0-255. */
   Jaden: 12,
+  /** Waz: state = WazFlag. */
+  Waz: 13,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

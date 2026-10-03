@@ -18,10 +18,11 @@ async function mapInfo(page: Page): Promise<MapInfo> {
   });
 }
 
-async function self(page: Page): Promise<{ hideState: number; health: number; stunT: number; inv: number[] }> {
+async function self(page: Page): Promise<{ hideState: number; health: number; stunT: number; bottles: number }> {
   return page.evaluate(() => {
-    const s = (window.__manhunt.client as unknown as { self: { hideState: number; health: number; stunT: number; inv: number[] } }).self;
-    return { hideState: s.hideState, health: s.health, stunT: s.stunT, inv: [...s.inv] };
+    const s = (window.__manhunt.client as unknown as { self: { hideState: number; health: number; stunT: number; slots: { kind: number; n: number }[] } }).self;
+    const bottles = s.slots.filter((sl) => sl.kind === 1).reduce((a, sl) => a + sl.n, 0);
+    return { hideState: s.hideState, health: s.health, stunT: s.stunT, bottles };
   });
 }
 
@@ -62,12 +63,12 @@ test('hiding, searching and a thrown bottle work between two browsers', async ({
   await dev(surv, 'give', [1, 2]);
   await dev(zach, 'tp', [info.clearing.x + 100, info.clearing.y]);
   await surv.waitForTimeout(3500);
-  await expect.poll(async () => (await self(surv)).inv[1], { timeout: 10000 }).toBe(2);
+  await expect.poll(async () => (await self(surv)).bottles, { timeout: 10000 }).toBe(2);
   await surv.keyboard.press('Digit1');
   await surv.mouse.move(480 + 150, 300);
   await surv.waitForTimeout(300);
   await surv.mouse.click(480 + 150, 300);
   await expect.poll(async () => (await self(zach)).stunT, { timeout: 10000 }).toBeGreaterThan(0);
   await expect(zach.locator('.hud .center-msg')).toHaveText('STUNNED');
-  expect((await self(surv)).inv[1]).toBe(1);
+  expect((await self(surv)).bottles).toBe(1);
 });

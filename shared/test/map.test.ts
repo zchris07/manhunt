@@ -5,7 +5,7 @@ import { MapWorld } from '../src/map/world';
 import { BALANCE, resolveBalance } from '../src/balance';
 import { moveCircle } from '../src/collision';
 
-const rb = resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 });
+const rb = resolveBalance({ hunters: 1, survivors: 4 });
 
 describe('map generation', () => {
   it('is deterministic for a seed', () => {
@@ -72,7 +72,7 @@ describe('map generation', () => {
 
   it('keeps doorways clear of hiding spots, stakes and generators', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const d = generateMap(mapParamsFor(seed * 7919, resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 })));
+      const d = generateMap(mapParamsFor(seed * 7919, resolveBalance({ hunters: 1, survivors: 4 })));
       const doors = d.doors.map((o) => ({ x: o.hx + (Math.cos(o.angle) * o.length) / 2, y: o.hy + (Math.sin(o.angle) * o.length) / 2 }));
       const near = (x: number, y: number, r: number): boolean => doors.some((o) => Math.hypot(o.x - x, o.y - y) < r);
       expect(d.hidingSpots.filter((h) => h.kind !== 'grass' && near(h.x, h.y, 89))).toEqual([]);

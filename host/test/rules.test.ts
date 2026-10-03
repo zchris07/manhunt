@@ -338,15 +338,29 @@ describe('objectives and win conditions', () => {
     expect(w.result?.winner).toBe('survivors');
   });
 
-  it('the hunter wins once enough survivors are eliminated', () => {
+  it('the night goes on until every survivor has escaped, is down or is gone', () => {
     const w = makeWorld({ survivors: 4 });
     const d = new Driver(w);
-    for (const id of [2, 3]) w.players.get(id)!.health = Health.Eliminated;
+    for (const id of [2, 3, 4]) w.players.get(id)!.health = Health.Eliminated;
     d.run(2);
+    // One survivor is still standing: no result yet, whatever the count.
     expect(w.result).toBeNull();
-    w.players.get(4)!.health = Health.Eliminated;
+    w.players.get(5)!.health = Health.Downed;
     d.run(2);
     expect(w.result?.winner).toBe('hunters');
+    expect(w.result?.reason).toMatch(/incapacitated/);
+  });
+
+  it('the survivors win if at least half of them escaped by the end', () => {
+    const w = makeWorld({ survivors: 4 });
+    const d = new Driver(w);
+    for (const id of [2, 3]) w.players.get(id)!.health = Health.Escaped;
+    w.players.get(4)!.health = Health.Eliminated;
+    d.run(2);
+    expect(w.result).toBeNull();
+    w.players.get(5)!.health = Health.Staked;
+    d.run(2);
+    expect(w.result?.winner).toBe('survivors');
   });
 
   it('the hunter wins when time runs out', () => {

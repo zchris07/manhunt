@@ -10,6 +10,7 @@ import {
   type PlayerStats,
   type Role,
 } from '@manhunt/shared';
+import { newInventory, type Slot } from './inventory';
 
 export const HISTORY_TICKS = 16;
 
@@ -37,10 +38,18 @@ export interface SimPlayer {
 
   health: Health;
   lastHealth: Health;
-  /** Health, 0 to 1 (full). Survivors are down at 0; Zach (punched by Plasma) is knocked out. */
+  /** Health, 0 to 1 (full). Survivors are down at 0; Zach (out of 100 hp) is down for a while. */
   hp: number;
-  /** Zach: seconds left knocked down by Plasma. */
+  /** Zach: seconds left down. */
   knockT: number;
+  /** Zach: times he's been put down (Plasma's don't count): each one slows him for good. */
+  downs: number;
+  /** Zach: seconds left with a book picture over his screen. */
+  bookT: number;
+  /** Field of view multiplier (Waz). */
+  fovMul: number;
+  /** Already had Waz take a looksie. */
+  wazLooked: boolean;
   action: Action;
   actionT: number;
   actionDur: number;
@@ -64,21 +73,14 @@ export interface SimPlayer {
   holdingBreath: boolean;
   gaspCd: number;
 
-  /** Survivor inventory: count per ItemKind (index 0 unused). */
-  inv: number[];
-  /** Selected item kind (from the client's inventory slot). */
-  selItem: number;
-  /** Meter (seconds) of each pair of goggles carried, the one in use first. */
-  goggles: number[];
+  /** Survivor inventory: eight free slots. */
+  inv: Slot[];
+  /** Selected slot (0-7), -1 for none. */
+  selSlot: number;
   gogglesOn: boolean;
-  /** Shells left in each shotgun carried, the one in use first. */
-  shells: number[];
-  /** The shotgun in the shotgun slot is Plasma's golden pump. */
-  golden: boolean;
   /** Zach: golden pump shots left (it replaces the machete while he has any). */
   pump: number;
   reloadT: number;
-  confit: number;
   /** JARVIS: 0 none, 1 tablet in hand, 2 used, 3 infinite (testing mode). */
   jarvis: number;
   jarvisT: number;
@@ -143,6 +145,10 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     lastHealth: role === 'spectator' ? Health.Eliminated : Health.Healthy,
     hp: 1,
     knockT: 0,
+    downs: 0,
+    bookT: 0,
+    fovMul: 1,
+    wazLooked: false,
     action: Action.None,
     actionT: 0,
     actionDur: 0,
@@ -162,15 +168,11 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     breath: 1,
     holdingBreath: false,
     gaspCd: 0,
-    inv: [0, 0, 0, 0, 0, 0],
-    selItem: 0,
-    goggles: [],
+    inv: newInventory(),
+    selSlot: -1,
     gogglesOn: false,
-    shells: [],
-    golden: false,
     pump: 0,
     reloadT: 0,
-    confit: 0,
     jarvis: 0,
     jarvisT: 0,
     scareT: 0,

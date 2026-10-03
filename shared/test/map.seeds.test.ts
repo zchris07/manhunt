@@ -5,11 +5,11 @@ import { resolveBalance } from '../src/balance';
 // 200 seeds across several lobby shapes: every objective reachable from the survivor spawn,
 // enough parts, and at least two loopable structures around every generator.
 const shapes = [
-  resolveBalance({ hunters: 1, survivors: 4, difficulty: 1 }),
-  resolveBalance({ hunters: 2, survivors: 8, difficulty: 1 }),
-  resolveBalance({ hunters: 1, survivors: 1, difficulty: 1 }),
-  resolveBalance({ hunters: 3, survivors: 7, difficulty: 1.5 }),
-  resolveBalance({ hunters: 1, survivors: 9, difficulty: 0.5 }),
+  resolveBalance({ hunters: 1, survivors: 4 }),
+  resolveBalance({ hunters: 2, survivors: 8 }),
+  resolveBalance({ hunters: 1, survivors: 1 }),
+  resolveBalance({ hunters: 3, survivors: 7 }),
+  resolveBalance({ hunters: 1, survivors: 9 }),
 ];
 
 describe('map reachability across 200 seeds', () => {

@@ -180,9 +180,9 @@ export class WebRtcGuestTransport implements GuestTransport {
         if (!settled) {
           clearTimeout(timer);
           fail(new Error(type === 'peer-unavailable' ? `Room ${room} not found` : `Connection error (${type ?? e.message})`));
-        } else if (type === 'peer-unavailable' || type === 'network') {
-          this.handleClose('Lost connection to the host');
         }
+        // Once connected, the signaling broker no longer matters: losing it (a 'network'
+        // error) says nothing about the host. Only the data connection itself counts.
       });
       peer.on('open', () => {
         const conn = peer.connect(this.cfg.prefix + room, { reliable: true, serialization: 'raw' });
@@ -198,7 +198,8 @@ export class WebRtcGuestTransport implements GuestTransport {
           resolve();
         });
         conn.on('data', (d) => this.msgCb(toBytes(d)));
-        conn.on('close', () => this.handleClose('The host left'));
+        // A closed connection looks the same whether the host quit or the network dropped.
+        conn.on('close', () => this.handleClose('Lost connection to the host'));
         conn.on('error', () => this.handleClose('Connection error'));
       });
     });

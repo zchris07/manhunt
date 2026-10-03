@@ -156,7 +156,7 @@ export class LobbyScreen {
     const pv = rolePreview(v);
     const allReady = v.players.filter((p) => p.connected).every((p) => p.ready);
     const canStart = owner && (s.testMode || (allReady && pv.h >= 1 && pv.s >= 1));
-    const rb = resolveBalance({ hunters: Math.max(1, pv.h), survivors: Math.max(1, pv.s), difficulty: s.difficulty, escapeFraction: s.escapeFraction });
+    const rb = resolveBalance({ hunters: Math.max(1, pv.h), survivors: Math.max(1, pv.s) });
     const settings = $(this.root, '#settings');
     const focused = document.activeElement?.id;
     const seedValue = focused === 'seed' ? (document.getElementById('seed') as HTMLInputElement).value : s.seed;
@@ -172,16 +172,12 @@ export class LobbyScreen {
       </div>
       <div class="field"><label>Map seed (blank = random)</label>
         <input type="text" id="seed" maxlength="32" value="${esc(seedValue)}" ${owner ? '' : 'disabled'} style="width:100%"></div>
-      <div class="field"><label>Difficulty for survivors: ${s.difficulty.toFixed(2)}×</label>
-        <input type="range" id="diff" min="0.5" max="1.5" step="0.05" value="${s.difficulty}" ${owner ? '' : 'disabled'}></div>
-      <div class="field"><label>Survivors needed to escape: ${Math.round(s.escapeFraction * 100)}%</label>
-        <input type="range" id="esc" min="0.1" max="1" step="0.05" value="${s.escapeFraction}" ${owner ? '' : 'disabled'}></div>
       <label class="toggle"><input type="checkbox" id="testmode" ${s.testMode ? 'checked' : ''} ${owner ? '' : 'disabled'}>
         <span><b>Testing mode</b> · T switches Zach/survivor, infinite items and abilities, nobody wins</span></label>
       <div class="preview">
         Next match: <b>${pv.h}</b> Zach · <b>${pv.s}</b> survivors${pv.spec ? ` · ${pv.spec} spectating` : ''}<br>
         Auto-balance: all ${rb.requiredGenerators} generators, ${Math.round(rb.repairTime)} s each,
-        Zach walk ${Math.round(rb.hunterSpeed)}, stuns ×${rb.stunMul.toFixed(2)}, ${rb.escapeNeeded} must escape.
+        Zach walk ${Math.round(rb.hunterSpeed)}, stuns ×${rb.stunMul.toFixed(2)}. The night lasts until every survivor has escaped or is down.
       </div>
       ${
         owner
@@ -207,10 +203,6 @@ export class LobbyScreen {
       seed.focus();
       seed.setSelectionRange(seed.value.length, seed.value.length);
     }
-    const diff = $(settings, '#diff') as HTMLInputElement;
-    diff.addEventListener('change', () => this.sendSettings({ difficulty: Number(diff.value) }));
-    const escIn = $(settings, '#esc') as HTMLInputElement;
-    escIn.addEventListener('change', () => this.sendSettings({ escapeFraction: Number(escIn.value) }));
     const test = $(settings, '#testmode') as HTMLInputElement;
     test.addEventListener('change', () => this.sendSettings({ testMode: test.checked }));
     $(settings, '#shuffle').addEventListener('click', () => this.client.send({ t: 'shuffle' }));

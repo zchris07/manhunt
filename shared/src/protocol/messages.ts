@@ -12,8 +12,6 @@ export interface LobbySettings {
   survivors: number;
   /** Map seed text; empty means random each match. */
   seed: string;
-  difficulty: number;
-  escapeFraction: number;
   /** Testing mode: switch roles in-match (T), infinite items and abilities, no win checks. */
   testMode: boolean;
 }
@@ -101,6 +99,12 @@ export type GameEvent =
   | { k: 'burst'; x: number; y: number; a: number }
   /** The wave reached you: jump scare. */
   | { k: 'scare' }
+  /** The Grapes of Wrath hit you (Zach): picture `img` covers your screen. */
+  | { k: 'book'; img: number }
+  /** The book's boom, heard by everyone near (x,y). */
+  | { k: 'boom'; x: number; y: number }
+  /** You slew Waz. */
+  | { k: 'wazSlain' }
   | { k: 'jarvis'; by: number }
   /** Shane Jeans was alerted (true) or gave up the chase (false). */
   | { k: 'shane'; alerted: boolean }
@@ -109,7 +113,7 @@ export type GameEvent =
   /** Chris Zelley speaks (a speech bubble over him). */
   | { k: 'chris'; say: string }
   /** Marc Cortez or Plasma.TTV speaks. */
-  | { k: 'npc'; who: 'marc' | 'plasma' | 'jaden'; say: string }
+  | { k: 'npc'; who: 'marc' | 'plasma' | 'jaden' | 'waz'; say: string }
   /** Sexton hands a glowing tablet to a survivor. */
   | { k: 'tablet'; to: number; x: number; y: number }
   | { k: 'gas'; x: number; y: number }
@@ -135,6 +139,8 @@ export type ClientMessage =
   | { t: 'switchRole' }
   /** Testing mode: teleport to a world point (clicked on the full map). */
   | { t: 'teleport'; x: number; y: number }
+  /** Reorder the inventory: swap two slots. */
+  | { t: 'moveSlot'; from: number; to: number }
   /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
   | { t: 'dev'; cmd: string; args: number[] };
 
@@ -202,8 +208,6 @@ export function validSettings(s: unknown): s is LobbySettings {
     isInt(s.hunters, 1, 9) &&
     isInt(s.survivors, 1, 9) &&
     isStr(s.seed, 32) &&
-    isNum(s.difficulty, 0.5, 1.5) &&
-    isNum(s.escapeFraction, 0.1, 1) &&
     typeof s.testMode === 'boolean'
   );
 }
@@ -236,6 +240,8 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isStr(v.text, 280) ? { t: 'chat', text: v.text } : null;
     case 'skill':
       return isInt(v.id, 0, 1e9) && (v.result === 'miss' || v.result === 'good' || v.result === 'great') ? { t: 'skill', id: v.id, result: v.result } : null;
+    case 'moveSlot':
+      return isInt(v.from, 0, 7) && isInt(v.to, 0, 7) ? { t: 'moveSlot', from: v.from, to: v.to } : null;
     case 'teleport':
       return isNum(v.x, 0, 1e5) && isNum(v.y, 0, 1e5) ? { t: 'teleport', x: v.x, y: v.y } : null;
     case 'spectate':

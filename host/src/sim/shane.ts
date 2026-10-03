@@ -10,6 +10,7 @@ export interface WandererCfg {
   walk: number;
   chase: number;
   alertRadius: number;
+  proxAlertSec: number;
   flashAlertSec: number;
   alertDecay: number;
   chaseTime: number;
@@ -40,7 +41,7 @@ export class Shane implements NpcTarget {
   moving = false;
   /** Who he's chasing (0 = nobody). */
   target = 0;
-  /** Seconds of flashlight each survivor has built up on him. */
+  /** Alert each survivor has built up on him (0 to 1; full alerts him). */
   readonly meter = new Map<number, number>();
   protected modeT = 1;
   protected heading = 0;
@@ -83,7 +84,17 @@ export class Shane implements NpcTarget {
     this.facing = this.heading;
   }
 
-  readonly solid = true;
+  get solid(): boolean {
+    return true;
+  }
+
+  /** How close he is to being alerted (0-1), as everyone sees it over his head. */
+  get alertLevel(): number {
+    if (this.mode === 'chase') return 1;
+    let m = 0;
+    for (const v of this.meter.values()) m = Math.max(m, v);
+    return Math.min(1, m);
+  }
 
   itemHit(_by: SimPlayer, kind: ItemHit): void {
     if (kind === 'bottle') this.bottleHit();
@@ -101,7 +112,7 @@ export class Shane implements NpcTarget {
 
   record(): EntityRecord {
     const state = (this.mode === 'chase' ? ShaneFlag.Chasing : 0) | (this.mode === 'flee' ? ShaneFlag.Fleeing : 0);
-    return quantizeEntity(this.id, EntityKind.Shane, this.x, this.y, this.facing, state, this.moving ? 1 : 0, 0, 0, 0);
+    return quantizeEntity(this.id, EntityKind.Shane, this.x, this.y, this.facing, state, this.moving ? 1 : 0, Math.round(this.alertLevel * 255), 0, 0);
   }
 
   /** A thrown bottle hit him: two in one chase shake him off. */
@@ -163,8 +174,11 @@ export class Shane implements NpcTarget {
     return p.role === 'survivor' && (p.health === Health.Healthy || p.health === Health.Wounded || p.health === Health.Downed) && p.hideState === 0;
   }
 
-  /** Close survivors alert him at once; a flashlight on him builds (and slowly loses) alert. */
-  private watch(dt: number): void {
+  /**
+   * Standing close to him (faster the closer) or keeping a flashlight on him builds a
+   * survivor's alert meter; otherwise it drains. Full, he's alerted.
+   */
+  protected watch(dt: number): void {
     const w = this.w;
     const S = this.S;
     if (this.cooldownT > 0 || this.mode === 'chase' || this.mode === 'flee') {
@@ -174,14 +188,13 @@ export class Shane implements NpcTarget {
     for (const p of w.order) {
       if (!this.eligible(p)) continue;
       const d = Math.hypot(p.move.x - this.x, p.move.y - this.y);
-      if (d <= S.alertRadius + p.radius) {
-        this.alert(p);
-        return;
-      }
+      const near = S.alertRadius + p.radius;
+      let rate = 0;
+      if (d <= near && w.geo.hasLineOfSight(p.move.x, p.move.y, this.x, this.y)) rate += (0.5 + 0.5 * (1 - d / near)) / S.proxAlertSec;
       const { cone } = visionFor(w, p);
-      const lit = inCone(cone, this.x, this.y, S.radius) && w.geo.hasLineOfSight(p.move.x, p.move.y, this.x, this.y);
-      const m = Math.max(0, (this.meter.get(p.id) ?? 0) + (lit ? dt : -S.alertDecay * dt));
-      if (m >= S.flashAlertSec) {
+      if (inCone(cone, this.x, this.y, S.radius) && w.geo.hasLineOfSight(p.move.x, p.move.y, this.x, this.y)) rate += 1 / S.flashAlertSec;
+      const m = Math.max(0, (this.meter.get(p.id) ?? 0) + (rate > 0 ? rate * dt : -S.alertDecay * dt));
+      if (m >= 1) {
         this.alert(p);
         return;
       }

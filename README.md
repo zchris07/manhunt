@@ -4,8 +4,9 @@ A browser-based, top-down 2D, asymmetric multiplayer horror game for up to 10 fr
 
 Zach Branch plays the masked killer on the upcoming TV series *Crystal Lake*. Tonight he stopped
 acting. Survivors start every generator in the woods and an abandoned studio warehouse, power
-the exit gate and escape before he finds them. They can stun him with bottles and shotguns,
-slow him with gas traps and outsmart him, but they can never kill him.
+the exit gate and escape before he finds them. They can hurt and stun him with bottles, books,
+shotguns and a pistol, slow him with gas traps and put him down for a while, but they can never
+kill him.
 
 - **Feel:** Darkwood. A dark, desaturated, realistic top-down world where every sprite casts a
   soft shadow, so the flat art reads like a 3D scene seen from above. Your flashlight beam runs
@@ -17,8 +18,8 @@ slow him with gas traps and outsmart him, but they can never kill him.
 - **Structure:** Dead by Daylight-style asymmetric play. Loops, doors, barricades, hooks
   (scarecrow stakes) and skill checks. Survivors carry items; Zach has a lunge, the Soundcloud
   Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor,
-  Shane Jeans tails anyone who bothers him, Jaden Nguyen shoots them, and Chris Zelley waits by
-  his ambulance to save a life.
+  Shane Jeans tails anyone who bothers him, Jaden Nguyen shoots them, Chris Zelley waits by
+  his ambulance to save a life, and Waz takes a looksie.
 - **Hiding:** Outlast-style lockers, wardrobes, beds, barrels and tall grass, with a slatted
   peek view and breath holding.
 - **Play like a .io game:** no accounts. Pick a name, share a 4-letter code, play.
@@ -64,8 +65,10 @@ with a controllable player, FPS counter, polygon debug (`V`), mask view (`B`) an
    - **Hunters** (at least 1) and **max survivors** (at least 1, total up to 10). Extra
      players spectate. You can also assign each player's role or **Shuffle roles**.
    - **Map seed**: blank means random. The same seed gives the same map.
-   - **Difficulty for survivors** (0.5×–1.5×) and **survivors needed to escape** (default
-     50%). The auto-balance preview shows what the next match will look like.
+   - The auto-balance preview shows what the next match will look like. There's no difficulty
+     or escape setting: the night lasts until every survivor has escaped, is incapacitated
+     (downed, carried or staked) or has been eliminated. The survivors win if at least half of
+     them escaped; otherwise Zach wins. The 15-minute clock still ends the night for Zach.
 5. Press **Start the night**. After the match everyone sees the results. Press **Back to lobby**
    to rematch.
 
@@ -74,12 +77,15 @@ Worker in your tab and everyone connects to you directly.
 
 - Keep the tab open and in the foreground. The game warns you if it was backgrounded, and asks
   the browser to keep the screen awake.
-- If you close the tab, the match ends for everyone ("The host left").
+- If you close the tab, the match ends for everyone.
 - You are slightly handicapped on purpose: your own inputs are delayed by about half your
   guests' average ping (capped at 120 ms), so you don't get a 0 ms advantage. Override it with
   `?handicap=0` or `?handicap=80` on your URL.
-- A guest who disconnects can rejoin within 30 s and gets their character back. Players who
-  join mid-match spectate until the next one.
+- A guest who disconnects can rejoin within 30 s and gets their character back. Losing the
+  connection shows **Connection lost** with a **Rejoin** button (the host may still be playing:
+  only the data connection counts, not hiccups on the signaling broker). Rejoining is a full
+  reset of your connection: fresh input numbering on both ends and a fresh snapshot, so you can
+  move freely straight away. Players who join mid-match spectate until the next one.
 
 **Connectivity.** Players connect peer to peer over WebRTC. The free public signaling broker
 only introduces peers; no game traffic goes through it. Public STUN servers are used for NAT
@@ -101,26 +107,32 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | WASD / mouse | Move / aim your flashlight |
 | Shift | Sprint (8 s meter, refills in 10 s; after it runs dry you wait 1.5 s) |
 | C or Ctrl | Crouch (quiet, slow) |
-| E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton or Chris Zelley |
+| E | Start generators, pick up, heal, revive, unstake, hide, open and close doors, talk to Sexton, Chris Zelley, Marc, Plasma or Waz |
 | Left mouse | Use the selected item (hold it for night vision goggles) |
-| G | Drop one of the selected item on the ground for a teammate (JARVIS and duck confit can't be dropped or taken in hand) |
-| Mouse wheel / 1–5 / click a slot | Select an inventory slot |
+| G | Drop one of the selected item on the ground for a teammate (JARVIS can't be dropped or taken in hand) |
+| Mouse wheel / 1–8 / click a slot | Select an inventory slot |
 | Tab | Rearrange your inventory slots (drag and drop) |
 | Q | JARVIS, once you have Sexton's tablet: for 10 s every survivor's whole screen is visible (never Zach's); your own map is fully revealed and shows Zach |
 | Space | Slam a barricade down · skill checks · hold breath while hidden |
 | M | Full map (only the parts you've explored) |
 
-**Items** (at most 2 of each; you start with nothing):
+**Inventory.** Eight free slots (you start with nothing). Identical items stack in one slot
+with no limit, except weapons (shotgun, golden pump, pistol): you can carry several of the same
+weapon, but each takes its own slot. You can't carry more than 8 different things: picking up a
+ninth drops whatever is in the 8th slot (the whole stack) and puts the new item there. Pickups
+are instant.
 
 | Item | |
 |---|---|
-| Bottle (20 on the map) | Throw it toward the cursor. It flies on until it hits something: a wall, a tree, a closed door or window, Zach, another survivor, or an NPC. A hit stuns Zach; on a survivor it takes a fifth of their health. |
+| Bottle (20 on the map) | Throw it toward the cursor. It flies on until it hits something: a wall, a tree, a closed door or window, Zach, another survivor, or an NPC. On Zach it takes 5 hp and stuns him; on a survivor it takes a fifth of their health. |
+| The Grapes of Wrath (4) | A book, thrown like a bottle. On Zach it takes 5 hp, booms (the vine boom) and covers his whole screen with one of four pictures for 4 s while he moves at half speed. |
 | Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; your whole beam passes through walls and the cone is 20% wider. |
-| Shotgun (2) | 3 shells, 2 s reload. 8 pellets with random bloom in the same cone; each flies until it hits something solid or someone, shattering windows and flying on through. Any pellet on Zach stuns him for 0.8 s and blasts him back; each pellet on a survivor takes 15% of their health (enough can down them outright). |
-| Golden pump (from Plasma.TTV) | A gold tactical shotgun: 5 shells, 1 s reload. It takes the shotgun slot on its own: getting one drops your shotguns, picking up a shotgun drops it. |
-| Energy drink (8) | Fills your sprint meter at once. For 20 s it refills 1.5× faster, holds 2 s more, and you walk and run up to 15% faster, all fading over the 20 s. |
-| Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot. When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot, makes Shane give up his chase, slows Sexton, and blinds and slows Plasma. |
-| Duck confit (6) | Not a slot (it shows on the HUD). Revive a downed teammate, or free a staked one, instantly. |
+| Shotgun (2) | 3 shells, 2 s reload. 8 pellets with random bloom in the same cone; each flies until it hits something solid or someone, shattering windows and flying on through. Any pellet on Zach stuns him for 0.8 s and blasts him back; a full blast (all 8 pellets) takes 25 hp, 3.125 hp a pellet. Each pellet on a survivor takes 15% of their health (enough can down them outright). |
+| Golden pump (from Plasma.TTV) | A gold tactical shotgun: 5 shells, 1 s reload. A weapon of its own, in its own slot. |
+| Pistol (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health. |
+| Doctor Pepper (8) | A red can. Fills your sprint meter at once. For 20 s it refills 1.5× faster, holds 2 s more, and you walk and run up to 15% faster, all fading over the 20 s. |
+| Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot. When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot and burns 2 hp a second while he's in it, makes Shane give up his chase, stuns Jaden, slows Sexton, and blinds and slows Plasma. |
+| Duck confit (6) | Eat it to heal to full health. It no longer revives anyone. |
 
 | Zach Branch | |
 |---|---|
@@ -134,14 +146,21 @@ server, for example `node scripts/signal-server.mjs --port 9000`).
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
 
-Zach always has a scent trail left by anyone sprinting: thin wisps of pale smoke curling along their path and thinning out as it ages. Bleeding survivors leave red puffs too. He only sees it where his own light falls.
+Zach always has a scent trail left by anyone walking or running (crouching leaves none): thin wisps of pale smoke curling along their path and thinning out as it ages. A walker's scent is fainter and fades 4 s sooner than a runner's. Bleeding survivors leave red puffs too. He only sees it where his own light falls. It's sent reliably: a Zach who joins or rejoins gets every recent point again.
+
+**Zach's health.** Zach has a 100 hp bar (on the HUD and over his head). Bottles and books take
+5 hp, a full shotgun blast 25, a pistol shot 10, galaxy gas 2 a second and a Plasma punch 20.
+Hits that stunned him still do. While he's up he regenerates the whole bar in 90 s. At 0 he's
+down for 10 s (he drops anyone he was carrying), then gets back up at half health. Every 25% of
+the bar gone makes him 10% slower, walking and sprinting, and every time he's put down he gets
+5% slower for good, up to 20% (being knocked out by Plasma doesn't count).
 
 Next to an NPC or an item, Zach sees its name where survivors see their prompt.
 
-**Health.** Survivors have a health bar over their head (Zach has none). Survivors are down at zero; each machete
+**Health.** Everyone has a health bar over their head. Survivors are down at zero; each machete
 swipe takes a third (a full charge two thirds), a lunge a third, a bottle a fifth, a shotgun
 pellet 15%, a Hemp Beam a third and a Plasma punch a quarter. Anyone hit flinches. Lost health
-stays lost until a teammate heals you (or Marc Cortez does); a revive, unstake or struggle-free
+stays lost until a teammate heals you (or you eat duck confit); a revive, unstake or struggle-free
 leaves you on a third. The sprint meter is the wide bar above your inventory. Items are picked
 up instantly. The lake can be waded into: everyone moves at under half speed in the water.
 
@@ -156,9 +175,10 @@ stops at walls, trees and glass. It lasts 3 s with 3 s between, and takes a thir
 health if it touches you (three down you). After three beams he just flees; once no survivor
 has been near him for 10 s he calms down and can be talked to again. While defending, a bottle
 stuns him for 0.1 s and a shotgun blast for 0.3 s, and galaxy gas slows him.
-**Shane Jeans** (one, unkillable) wanders from a random spot with a faint light. A survivor
-who comes within 80 u of him, or keeps a flashlight on him for 2 s in total (the meter drains
-slowly while he's out of the beam), alerts him: everyone is told, and he tails that survivor
+**Shane Jeans** (one, unkillable) wanders from a random spot with a faint light. Each survivor
+builds an **alert meter** on him that everyone can see filling over his head: standing within
+130 u fills it in about 2 to 4 s (faster the closer you are), keeping a flashlight on him fills
+it in 3.5 s, and it slowly drains otherwise. Full, he's alerted: everyone is told, and he tails that survivor
 as closely as he can at 200 u/s (Sexton's panic speed) while Zach gets an arrow pointing
 toward him. Zach never alerts him. He gives up after 20 s, when Zach comes within 260 u of
 him, or when the survivor gets 1100 u away; 2 bottles or 1 shotgun blast shake him off (he
@@ -166,11 +186,13 @@ runs away for 4 s). He can't open doors or break barricades, and after a chase h
 alerted again for 10 s. While he's alerted you can hear his soft, quick footsteps pitter-patter
 after you.
 
-**Jaden Nguyen** (one, unkillable) wanders and is alerted exactly like Shane Jeans, but he has a
-pistol. Alerted, he says *"Back up!"*, closes to about 220 u and fires every 0.9 s (each hit
-takes 12.5% of your health; a stray shot hits whoever is in the way). Once his target has lost
-half their health to him he lets them go and wanders off. Bottles, a shotgun blast and galaxy
-gas shake him off like Shane, and he trips gas traps while alerted.
+**Jaden Nguyen** (one) wanders and is alerted exactly like Shane Jeans (the same visible
+meter), but he has a pistol. Alerted, he says *"Back up!"*, closes to about 220 u and fires every
+0.9 s (each hit takes 12.5% of your health; a stray shot hits whoever is in the way). He stops
+when you get more than 600 u away, or once you've lost half the health you had when he started,
+whichever comes first. Any survivor item (bottle, book, shotgun, pistol) or galaxy gas stuns him
+for 1.2 s, a chance to get away. Three survivor hits kill him: he drops his pistol (10 shots).
+He trips gas traps while alerted.
 
 **Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
 structure parked at a random spot in the woods with medical gear around it and a faint glow of
@@ -184,17 +206,27 @@ before or after he's activated, or mid-rescue; when he's hit he flees, much slow
 Sexton does. A survivor's bottle or pellets just make him flinch.
 
 **Marc Cortez** starts in the warehouse and wanders, through doors and out into the woods. He
-has a very faint light. Talk to him and he heals you to full health; the first time, he also
-hands you duck confit. Nothing hurts him: slashed by Zach he says *"Hey man, what the heck?"*
+has a very faint light. Talk to him and he hands you duck confit (once each); he no longer
+heals you himself. Nothing hurts him: slashed by Zach he says *"Hey man, what the heck?"*
 or *"Cut it out"* and just stands there; hit by a survivor he flinches.
 
 **Plasma.TTV** looks like a regular guy wandering around. Hit him (a survivor's bottle or
 shotgun, or Zach's machete) and he goes into **GAMER RAGE**: he transforms into a hulking beast
-over 2 s, then chases whoever hit him and punches them until they're down (Zach is knocked out
-for 6 s, then gets back up), then turns back into a human and walks off. Escape him for 10 s and
-he calms down too. Bottles stun him for 0.1 s, shotgun blasts for 0.3 s and the machete for
+over 2 s, then chases whoever hit him and punches them until they're down (each punch takes
+20 hp off Zach; at 0 Zach is down for 10 s, without the lasting slowdown), then turns back into a
+human and walks off. Escape him for 10 s and he calms down too, and 10 s after transforming he
+always turns back on his own if he hasn't put anyone down. Bottles stun him for 0.1 s, shotgun blasts for 0.3 s and the machete for
 0.1 s; galaxy gas blinds and slows him. He can't be killed. Talk to him (either side) and he
 says *"ggs"* and hands you a golden pump, once each.
+
+**Waz** (one) wanders the map with a faint light. Talk to him as a survivor and he says
+*"lemme take a looksie"*: you see 10% more of the map for good (the camera pulls back and your
+flashlight cone and the circle around you grow), once each. Zach slays him in three hits (he
+bolts between them, like Sexton) and gets the same 10% boost. A survivor slays him with any
+single item, and sees 10% less for it. Whoever slays him gets a picture flashed across their
+screen.
+
+**Name tags.** Every NPC has one name tag under them, readable by everyone.
 
 **Distances** are in world units (u); at normal zoom 1 u is one screen pixel. A survivor is
 30 u across and Zach 38 u. A warehouse door is 72 u long and a cabin door 76 u. The map is
@@ -228,8 +260,8 @@ suite on every push.
 ## Adding real art and audio
 
 Every texture and sound has a slot in `client/public/assets/manifest.json`. Out of the box each
-texture slot points at a procedural generator (canvas drawing). Sounds are always files: the
-game has no synthesized audio at all. To use a real file, replace the slot:
+texture slot points at a procedural generator (canvas drawing). Most sounds are files; a few are
+synthesized in the browser until a file is supplied. To use a real file, replace the slot:
 
 ```jsonc
 "textures": {
@@ -259,9 +291,12 @@ game has no synthesized audio at all. To use a real file, replace the slot:
   random point, half volume) that only Zach hears when he fires a Soundcloud Burst, and Sexton's
   reel (`sexton.reel`, a positional loop that gets louder the closer you are). Shane Jeans's
   footsteps (`shane.steps`) are synthesized in the browser (`"procedural": "pitterPatter"`);
-  point the id at a file to replace them. Sounds may set
+  point the id at a file to replace them. The Grapes of Wrath's vine boom (`boom`) is a
+  synthesized placeholder too (`"procedural": "vineBoom"`): drop the real clip in
+  `client/public/assets/audio/` and set `"boom": { "file": "audio/vine-boom.mp3" }`. Sounds may set
   `offset` and `duration` in seconds. Loops should loop seamlessly.
-- The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`).
+- The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`). The four
+  book pictures are `images.ui.book.0` to `ui.book.3`, and the Waz picture is `images.ui.wazSlain`.
 - The full list of ids is in the manifest. Everything under `client/public/assets/` is public
   once the site is deployed, including the supplied music and image.
 
@@ -276,8 +311,7 @@ cones, stamina, cooldowns, item counts and effects, and objective counts.
 auto-balanced by pressure `P = survivors / hunters` against a reference `P0 = 4`:
 `scale = sqrt(P / P0)`, clamped, drives repair time, Zach's speed and stun length. Item
 counts are fixed.
-The required generator count is `clamp(ceil(S / sqrt(H)) + 1, 3, 7)`. The lobby's difficulty
-slider multiplies on top.
+The required generator count is `clamp(ceil(S / sqrt(H)) + 1, 3, 7)`.
 
 **Match logs.** The host records every match (lobby shape, seed, resolved balance, winner and
 reason, duration, generators, escapes and eliminations, and per-player stats) in the host's

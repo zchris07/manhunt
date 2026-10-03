@@ -8,8 +8,6 @@ export interface MatchLogEntry {
   mapHash: number;
   hunters: number;
   survivors: number;
-  difficulty: number;
-  escapeFraction: number;
   requiredGenerators: number;
   totalGenerators: number;
   repairTime: number;
@@ -41,8 +39,6 @@ export function matchLogEntry(input: {
     mapHash: input.mapHash,
     hunters: b.hunters,
     survivors: b.survivors,
-    difficulty: b.difficulty,
-    escapeFraction: input.settings.escapeFraction,
     requiredGenerators: b.requiredGenerators,
     totalGenerators: b.totalGenerators,
     repairTime: Math.round(b.repairTime * 10) / 10,
