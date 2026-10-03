@@ -60,7 +60,7 @@
     "burst": { "file": "audio/gmajor.mp3", "duration": 2.6, "random": true },
     "sexton.reel": { "file": "audio/reel.mp3" },
     "shane.steps": { "procedural": "pitterPatter" },
-    "boom": { "procedural": "vineBoom" }
+    "boom": { "file": "audio/vine-boom.mp3" }
   },
   "images": {
     "ui.scare": { "file": "images/scare.webp" },

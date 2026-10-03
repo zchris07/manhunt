@@ -291,9 +291,7 @@ synthesized in the browser until a file is supplied. To use a real file, replace
   random point, half volume) that only Zach hears when he fires a Soundcloud Burst, and Sexton's
   reel (`sexton.reel`, a positional loop that gets louder the closer you are). Shane Jeans's
   footsteps (`shane.steps`) are synthesized in the browser (`"procedural": "pitterPatter"`);
-  point the id at a file to replace them. The Grapes of Wrath's vine boom (`boom`) is a
-  synthesized placeholder too (`"procedural": "vineBoom"`): drop the real clip in
-  `client/public/assets/audio/` and set `"boom": { "file": "audio/vine-boom.mp3" }`. Sounds may set
+  point the id at a file to replace them. The vine boom (`boom`, `audio/vine-boom.mp3`) plays when The Grapes of Wrath hits Zach (everyone nearby hears it) and for whoever slays Waz. Sounds may set
   `offset` and `duration` in seconds. Loops should loop seamlessly.
 - The jump-scare image is `images.ui.scare` (`client/public/assets/images/scare.webp`). The four
   book pictures are `images.ui.book.0` to `ui.book.3`, and the Waz picture is `images.ui.wazSlain`.

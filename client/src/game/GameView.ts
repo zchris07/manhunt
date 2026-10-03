@@ -359,6 +359,7 @@ export class GameView {
         break;
       case 'wazSlain':
         this.hud.flashImage('ui.wazSlain', BALANCE.waz.slainFlash * 1000, 180);
+        a.oneShot('boom', 1);
         break;
       case 'jarvis':
         if (e.by === me) {
