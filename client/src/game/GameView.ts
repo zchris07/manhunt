@@ -348,8 +348,8 @@ export class GameView {
       }
       case 'book': {
         // The Grapes of Wrath hit Zach: a picture over his whole screen.
-        const B = BALANCE.items.book;
-        this.hud.flashImage(`ui.book.${e.img}`, B.blindTime * 1000, 200, 'book');
+        const F = BALANCE.items.flashTime * 1000;
+        this.hud.flashImage(`ui.book.${e.img}`, F, F * 0.3, 'book');
         this.shake = Math.max(this.shake, 16);
         break;
       }
@@ -358,7 +358,7 @@ export class GameView {
         this.particles.burst(e.x, e.y, 18, { speed: 160, life: 0.5, tint: 0xe8dcc0, size: 1.1 });
         break;
       case 'wazSlain':
-        this.hud.flashImage('ui.wazSlain', BALANCE.waz.slainFlash * 1000, 180);
+        this.hud.flashImage('ui.wazSlain', BALANCE.items.flashTime * 1000, BALANCE.items.flashTime * 300);
         a.oneShot('boom', 1);
         break;
       case 'jarvis':
@@ -463,7 +463,7 @@ export class GameView {
         : held
           ? held.kind | (held.golden ? GOLDEN_BIT : 0)
           : 0;
-    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: 0, aux, hp: s.hp * 255 };
+    return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: s.role === 1 ? 0 : Math.round(s.shield * 255), aux, hp: s.hp * 255 };
   }
 
   /** Positional sounds: Sexton's reel and Shane's pitter-patter while he's alerted. */

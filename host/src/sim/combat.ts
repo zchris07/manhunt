@@ -260,7 +260,10 @@ export function hurtSurvivor(w: World, q: SimPlayer, amount: number, by: SimPlay
   const zach = by?.role === 'hunter';
   w.cancelAction(q);
   if (zach) by.stats.hits++;
-  q.hp = Math.max(0, q.hp - amount);
+  // A mini-shield bar soaks up damage before health does.
+  const soaked = Math.min(q.shield, amount);
+  q.shield -= soaked;
+  q.hp = Math.max(0, q.hp - (amount - soaked));
   w.emit('all', { k: 'hit', victim: q.id, by: by?.id ?? 0, x: Math.round(q.move.x), y: Math.round(q.move.y), w: kind });
   if (q.hp > 0.001) {
     q.health = Health.Wounded;

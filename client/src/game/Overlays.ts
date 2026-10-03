@@ -141,9 +141,9 @@ export class Overlays {
             if (alpha < 0.03) continue;
             const [x1, y1] = at(p);
             const [x2, y2] = at(q);
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 9 + sIdx, color: 0xb8a8a8, alpha: 0.035 * alpha, cap: 'round' });
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 3.2, color: 0xd8c8c8, alpha: 0.1 * alpha, cap: 'round' });
-            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 1.1, color: 0xf2e6e4, alpha: 0.42 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 9 + sIdx, color: 0xb01020, alpha: 0.06 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 3.2, color: 0xe0202e, alpha: 0.16 * alpha, cap: 'round' });
+            g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 1.1, color: 0xff5a5a, alpha: 0.5 * alpha, cap: 'round' });
           }
         }
       }

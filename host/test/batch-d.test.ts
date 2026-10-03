@@ -4,7 +4,8 @@ import { Driver, clearLane, countOf, give, makeWorld, parkChris, parkSexton, par
 import { createHarness, idle, move, startMatch } from './harness';
 import { buildView, visionFor } from '../src/sim/view';
 import { addItem, moveSlot } from '../src/sim/inventory';
-import { hurtHunter } from '../src/sim/combat';
+import { hurtHunter, hurtSurvivor } from '../src/sim/combat';
+import { playTestFx } from '../src/sim/testFx';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -162,15 +163,16 @@ describe("Zach's 100 hp", () => {
 });
 
 describe('The Grapes of Wrath', () => {
-  it('four spawn; thrown like a bottle, it covers his screen for 4 s, slows him by half and booms', () => {
+  it('four spawn; thrown like a bottle, it stuns him for 3 s, flashes a picture (0.8 s) and booms', () => {
     const { w, d, h, s } = arena(250);
     expect(w.map.loot.filter((l) => l.item === 'book').length).toBe(4);
     give(w, s, ItemKind.Book);
     use(d, s, ItemKind.Book);
     expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Bottle && e.state === 1)).toBe(true);
     d.run(secs(0.5));
-    expect(h.bookT).toBeGreaterThan(3);
-    expect(h.move.slowMul).toBe(0.5);
+    // Stunned for exactly 3 s (whatever the lobby's stun scaling), less the flight time.
+    expect(h.stunT).toBeGreaterThan(2.5);
+    expect(h.stunT).toBeLessThanOrEqual(I.book.stun);
     expect(h.hp * ZH.max).toBeCloseTo(95, 0);
     const book = w.events.find((e) => e.e.k === 'book');
     expect(book?.to).toEqual([h.id]);
@@ -223,7 +225,7 @@ describe('Jaden Nguyen, revised', () => {
     expect(drop?.amount).toBe(I.pistol.shots);
   });
 
-  it("the pistol: 10 shots, 10 hp each on Zach", () => {
+  it('the P250: 10 shots, 10 hp each on Zach', () => {
     const { w, d, h, s } = arena(200);
     give(w, s, ItemKind.Pistol);
     use(d, s, ItemKind.Pistol);
@@ -334,5 +336,73 @@ describe('rejoining', () => {
     h.run(2000, () => back.pushInput(move(1, 0)));
     const moved = Math.hypot(sp.move.x - x0, sp.move.y - y0);
     expect(moved).toBeGreaterThan(80);
+  });
+});
+
+describe('Mr Beast bars and mini shields', () => {
+  it('15 beast bars and 20 mini shields spawn, plus 2 + 2 + a duck confit by the ambulance', () => {
+    const { w } = arena();
+    const n = (k: string): number => w.map.loot.filter((l) => l.item === k).length;
+    expect(n('beastbar')).toBe(17);
+    expect(n('shield')).toBe(22);
+    expect(n('confit')).toBe(I.counts.confit + 1);
+  });
+
+  it('a Mr Beast bar heals a fifth of your health', () => {
+    const { w, d, s } = arena();
+    s.hp = 0.5;
+    s.health = Health.Wounded;
+    give(w, s, ItemKind.BeastBar);
+    use(d, s, ItemKind.BeastBar);
+    expect(s.hp).toBeCloseTo(0.7, 5);
+    expect(countOf(s, ItemKind.BeastBar)).toBe(0);
+  });
+
+  it('a mini shield takes 2 s to drink, adds a quarter bar of shield (max a full bar), and soaks damage first', () => {
+    const { w, d, s } = arena(3000);
+    give(w, s, ItemKind.Shield, 6);
+    const slot = slotOf(s, ItemKind.Shield);
+    for (let i = 0; i < 5; i++) {
+      d.tap(s.id, Btn.Primary, { item: slot });
+      d.run(secs(I.shield.drinkTime - 0.3), (p) => (p === s ? { item: slot } : undefined));
+      expect(s.shield).toBeCloseTo(Math.min(1, i * 0.25), 5);
+      d.run(secs(0.5), (p) => (p === s ? { item: slot } : undefined));
+    }
+    expect(s.shield).toBe(1);
+    // Full: the fifth wasn't drunk.
+    expect(countOf(s, ItemKind.Shield)).toBe(2);
+    expect(buildView(w, s).self.shield).toBeCloseTo(1, 2);
+    // Moving cancels a drink.
+    s.shield = 0.5;
+    d.tap(s.id, Btn.Primary, { item: slot });
+    d.run(secs(1), (p) => (p === s ? { item: slot, moveX: 1 } : undefined));
+    d.run(secs(2), (p) => (p === s ? { item: slot } : undefined));
+    expect(s.shield).toBe(0.5);
+    // Damage: the shield goes first.
+    hurtSurvivor(w, s, 0.7, null, 'bottle');
+    expect(s.shield).toBe(0);
+    expect(s.hp).toBeCloseTo(0.8, 5);
+  });
+});
+
+describe('testing mode effects', () => {
+  it('plays any stun or flash on yourself at the click of a button', () => {
+    const w = makeWorld({ testMode: true });
+    const h = w.players.get(1)!;
+    const s = w.players.get(2)!;
+    playTestFx(w, h, 'book');
+    expect(h.stunT).toBe(I.book.stun);
+    expect(w.events.some((e) => e.e.k === 'book' && e.to.includes(h.id))).toBe(true);
+    playTestFx(w, s, 'waz');
+    expect(w.events.some((e) => e.e.k === 'wazSlain' && e.to.includes(s.id))).toBe(true);
+    playTestFx(w, s, 'stun');
+    expect(s.stunT).toBeGreaterThan(0);
+    playTestFx(w, h, 'down');
+    expect(h.knockT).toBe(ZH.downTime);
+    expect(h.downs).toBe(0);
+    // Never outside testing mode.
+    const n = makeWorld();
+    playTestFx(n, n.players.get(2)!, 'stun');
+    expect(n.players.get(2)!.stunT).toBe(0);
   });
 });

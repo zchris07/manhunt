@@ -125,19 +125,24 @@ are instant.
 | Item | |
 |---|---|
 | Bottle (20 on the map) | Throw it toward the cursor. It flies on until it hits something: a wall, a tree, a closed door or window, Zach, another survivor, or an NPC. On Zach it takes 5 hp and stuns him; on a survivor it takes a fifth of their health. |
-| The Grapes of Wrath (4) | A book, thrown like a bottle. On Zach it takes 5 hp, booms (the vine boom) and covers his whole screen with one of four pictures for 4 s while he moves at half speed. |
+| The Grapes of Wrath (4) | A book, thrown like a bottle. On Zach it takes 5 hp, stuns him for 3 s (his stun immunity still applies), booms (the vine boom) and flashes one of four pictures over his screen for 0.8 s, fading in and out. The map stays visible around the picture. |
 | Night vision goggles (3) | Hold left click to look through them. A 15 s meter that never refills; your whole beam passes through walls and the cone is 20% wider. |
 | Shotgun (2) | 3 shells, 2 s reload. 8 pellets with random bloom in the same cone; each flies until it hits something solid or someone, shattering windows and flying on through. Any pellet on Zach stuns him for 0.8 s and blasts him back; a full blast (all 8 pellets) takes 25 hp, 3.125 hp a pellet. Each pellet on a survivor takes 15% of their health (enough can down them outright). |
 | Golden pump (from Plasma.TTV) | A gold tactical shotgun: 5 shells, 1 s reload. A weapon of its own, in its own slot. |
-| Pistol (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health. |
+| P250 (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health. |
 | Doctor Pepper (8) | A red can. Fills your sprint meter at once. For 20 s it refills 1.5× faster, holds 2 s more, and you walk and run up to 15% faster, all fading over the 20 s. |
 | Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot. When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot and burns 2 hp a second while he's in it, makes Shane give up his chase, stuns Jaden, slows Sexton, and blinds and slows Plasma. |
-| Duck confit (6) | Eat it to heal to full health. It no longer revives anyone. |
+| Duck confit (6, plus 1 by the ambulance) | Eat it to heal to full health. It no longer revives anyone. |
+| Mr Beast bar (15, plus 2 by the ambulance) | A chocolate bar. Eat it for a fifth of your health back. |
+| Mini shield (20, plus 2 by the ambulance) | A small blue shield potion. Drinking takes 2 s (moving cancels it) and adds a quarter of a health bar to a blue shield bar shown above your green health bar, up to a full extra bar (four). Any damage takes the shield first. Zach can't drink them. |
+
+Beside Chris Zelley's ambulance, 2 mini shields, 2 Mr Beast bars and a duck confit are set out in
+a neat row.
 
 | Zach Branch | |
 |---|---|
-| WASD / mouse | Move / look (walk 10% slower than survivors, sprint 20% faster) |
-| Shift | Sprint (6 s meter, refills in 6 s) |
+| WASD / mouse | Move / look (walk about 15% slower than survivors, sprint about 14% faster: 10% slower and 20% faster, then both cut by 5%) |
+| Shift | Sprint (6 s meter, refills in 10 s) |
 | Left mouse | Machete swipe. Hold to charge, release to strike (after 3 s it strikes by itself). A swipe takes a third of a survivor's health; a full charge takes two thirds (in between, proportionally) and is a heavy swipe that reaches 30% farther and sweeps wider. Two swipes smash a closed door (it stays open) or a dropped barricade; one smashes a window, which anyone can then climb through (slowly), survivors included. A whiff recovers in 0.2 s; any hit that lands (on a survivor, an NPC, a door, a barricade or a window) locks the machete for 0.8 s. |
 | Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. Swipe mid-lunge, or lunge mid-charge, for a combo: the lunge and the swipe can both land. |
 | F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared for 2.5 s (the image and a snippet of the song fade in and out). Only you hear it go out: a very quiet snippet of GMajor from a random point in the song. |
@@ -146,11 +151,11 @@ are instant.
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
 
-Zach always has a scent trail left by anyone walking or running (crouching leaves none): thin wisps of pale smoke curling along their path and thinning out as it ages. A walker's scent is fainter and fades 4 s sooner than a runner's. Bleeding survivors leave red puffs too. He only sees it where his own light falls. It's sent reliably: a Zach who joins or rejoins gets every recent point again.
+Zach always has a scent trail left by anyone walking or running (crouching leaves none): thin wisps of red smoke curling along their path and thinning out as it ages. A walker's scent is fainter and fades 4 s sooner than a runner's. Bleeding survivors leave red puffs too. He only sees it where his own light falls. It's sent reliably: a Zach who joins or rejoins gets every recent point again.
 
 **Zach's health.** Zach has a 100 hp bar (on the HUD and over his head). Bottles and books take
 5 hp, a full shotgun blast 25, a pistol shot 10, galaxy gas 2 a second and a Plasma punch 20.
-Hits that stunned him still do. While he's up he regenerates the whole bar in 90 s. At 0 he's
+Hits that stunned him still do. While he's up he regenerates the whole bar in 240 s. At 0 he's
 down for 10 s (he drops anyone he was carrying), then gets back up at half health. Every 25% of
 the bar gone makes him 10% slower, walking and sprinting, and every time he's put down he gets
 5% slower for good, up to 20% (being knocked out by Plasma doesn't count).
@@ -224,7 +229,7 @@ says *"ggs"* and hands you a golden pump, once each.
 flashlight cone and the circle around you grow), once each. Zach slays him in three hits (he
 bolts between them, like Sexton) and gets the same 10% boost. A survivor slays him with any
 single item, and sees 10% less for it. Whoever slays him gets a picture flashed across their
-screen.
+screen for 0.8 s (with the vine boom), fading in and out.
 
 **Name tags.** Every NPC has one name tag under them, readable by everyone.
 
@@ -367,7 +372,11 @@ in the match as a survivor with the same permissions as the host (settings, star
 lobby). If no room can be opened it runs offline. You get every item and ability with infinite
 uses (Zach's Hemp Battery toggles on and off), there's no win condition, and **T** switches you
 between Zach and a survivor. Every NPC is shown on the map. Open the full map (**M**) and click
-anywhere to teleport there. Survivors see their own scent trail. A lobby owner can also tick
+anywhere to teleport there. Survivors see their own scent trail. The **Test effects** buttons
+(left side) play any stun or flash on yourself: the Soundcloud Burst scare, the Grapes of Wrath
+flash (and its 3 s stun as Zach), the Waz flash, a stun, a shotgun blast, galaxy gas, and being
+knocked down. The testing kit holds 8 kinds of item (there are 10; pick the rest up on the map).
+A lobby owner can also tick
 **Testing mode** in the lobby settings.
 
 Dev URL flags: `?lag=100` simulates 100 ms of latency on your connection, `?handicap=N`

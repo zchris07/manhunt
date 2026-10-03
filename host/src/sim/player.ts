@@ -40,6 +40,8 @@ export interface SimPlayer {
   lastHealth: Health;
   /** Health, 0 to 1 (full). Survivors are down at 0; Zach (out of 100 hp) is down for a while. */
   hp: number;
+  /** Survivor: blue shield bar on top of health, 0 to 1 (a full extra bar). Damage takes it first. */
+  shield: number;
   /** Zach: seconds left down. */
   knockT: number;
   /** Zach: times he's been put down (Plasma's don't count): each one slows him for good. */
@@ -145,6 +147,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     lastHealth: role === 'spectator' ? Health.Eliminated : Health.Healthy,
     hp: 1,
     knockT: 0,
+    shield: 0,
     downs: 0,
     bookT: 0,
     fovMul: 1,

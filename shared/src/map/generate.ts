@@ -812,6 +812,22 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       lootCandidates.push({ x: ax - ((by - ay) / l) * 42 * side, y: ay + ((bx - ax) / l) * 42 * side });
     }
   }
+  // More spots along the paths (from their own random stream, so the spots above stay put):
+  // there are a lot of items to place.
+  const extraRng = rng.fork(17);
+  for (const p of paths) {
+    for (let i = 0; i < 8; i++) {
+      const k = extraRng.int(1, p.points.length / 2 - 2) * 2;
+      const t = extraRng.next();
+      const ax = p.points[k];
+      const ay = p.points[k + 1];
+      const bx = p.points[k + 2];
+      const by = p.points[k + 3];
+      const l = Math.hypot(bx - ax, by - ay) || 1;
+      const side = extraRng.chance(0.5) ? 1 : -1;
+      lootCandidates.push({ x: ax + (bx - ax) * t - ((by - ay) / l) * 42 * side, y: ay + (by - ay) * t + ((bx - ax) / l) * 42 * side });
+    }
+  }
   const pool = rng.shuffle(lootCandidates.filter((p) => p.x > 60 && p.y > 60 && p.x < W - 60 && p.y < W - 60));
   const clear = pool.filter((p) => !overlapsCollider(world.geo, p.x, p.y, 24) && !inRect(yard, p.x, p.y, 20) && lakeClear(p.x, p.y, 30));
   const loot: LootSpawnDef[] = [];
@@ -823,6 +839,28 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     if (idx < 0) break;
     const p = clear.splice(idx, 1)[0];
     loot.push({ id: loot.length, x: p.x, y: p.y, item: kind });
+  }
+  // A neat row of supplies beside Chris Zelley's ambulance, just outside the ring he paces.
+  {
+    const kit = BALANCE.items.ambulanceKit;
+    const { x, y, angle, width } = ambulance;
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const gap = 44;
+    let placed = false;
+    for (const side of [1, -1]) {
+      for (const off of [width / 2 + BALANCE.chris.pace + 34, width / 2 + BALANCE.chris.pace + 70]) {
+        const spots = kit.map((_k, i) => {
+          const along = (i - (kit.length - 1) / 2) * gap;
+          return { x: x + ux * along - uy * off * side, y: y + uy * along + ux * off * side };
+        });
+        if (spots.some((s) => overlapsCollider(world.geo, s.x, s.y, 20) || !lakeClear(s.x, s.y, 20))) continue;
+        kit.forEach((item, i) => loot.push({ id: loot.length, x: spots[i].x, y: spots[i].y, item }));
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
   }
   partial.loot = loot;
   partial.surface = buildSurface(partial);

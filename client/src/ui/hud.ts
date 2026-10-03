@@ -16,6 +16,7 @@ import {
   slotName,
   type SelfState,
   type SlotState,
+  type TestFx,
   type WorldState,
 } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
@@ -33,6 +34,8 @@ export const ITEM_ICON: Record<number, string> = {
   [ItemKind.Book]: 'item.book',
   [ItemKind.Confit]: 'item.confit',
   [ItemKind.Pistol]: 'item.pistol',
+  [ItemKind.BeastBar]: 'item.beastBar',
+  [ItemKind.Shield]: 'item.shield',
 };
 const slotIcon = (s: SlotState): string => (s.kind === ItemKind.Shotgun && s.golden ? 'item.goldenPump' : (ITEM_ICON[s.kind] ?? ''));
 const EMPTY_SLOT: SlotState = { kind: 0, n: 0, golden: false, amt: 0 };
@@ -144,7 +147,22 @@ export class Hud {
     parent.appendChild(this.scare);
     this.flash = el('div', 'scare flash', '<img alt="">');
     parent.appendChild(this.flash);
+    // Testing mode: a button for every stun and flash effect, played on yourself.
+    this.fxPanel = el('div', 'fx-panel', '<div class="fx-title">TEST EFFECTS</div>');
+    for (const [fx, label] of FX_BUTTONS) {
+      const b = el('button', '', esc(label));
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.client.send({ t: 'testFx', fx });
+      });
+      this.fxPanel.appendChild(b);
+    }
+    this.fxPanel.style.display = 'none';
+    this.root.appendChild(this.fxPanel);
   }
+
+  private readonly fxPanel: HTMLElement;
 
   /** Covers the screen with a manifest image for `ms`, fading in and out over `fadeMs`. */
   flashImage(imageId: string, ms: number, fadeMs: number, cls = ''): void {
@@ -348,6 +366,7 @@ export class Hud {
     const hunter = self.role === 1;
     const spectating = self.spectating > 0 || self.role === 2;
     const test = self.testMode === 1;
+    this.fxPanel.style.display = test && self.spectating === 0 && self.role !== 2 ? '' : 'none';
 
     // Objective card.
     const req = world.required;
@@ -398,7 +417,6 @@ export class Hud {
           `<div class="zach-hp"><div style="width:${(self.hp * 100).toFixed(1)}%"></div><span>${Math.ceil(self.hp * Hh.max)} / ${Hh.max}</span></div>` +
           (slow > 0 && self.health !== Health.Downed ? `<div class="dim">${slow}% slower${self.downs ? ` (${Math.min(Hh.downPenaltyMax * 100, self.downs * Hh.downPenalty * 100)}% for good)` : ''}</div>` : '') +
           (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
-          (self.bookT > 0 ? `<div class="warn">THE GRAPES OF WRATH ${self.bookT.toFixed(1)}s</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempT.toFixed(1)}s`}</div>` : '') +
@@ -409,6 +427,8 @@ export class Hud {
           `<div class="who ${HEALTH_CLASS[self.health]}">${HEALTH_LABEL[self.health].toUpperCase()}${self.hideState === 2 ? ' <span>hidden</span>' : ''}${
             self.health === Health.Healthy || self.health === Health.Wounded ? ` <span>${Math.round(self.hp * 100)}%</span>` : ''
           }</div>` +
+          (self.shield > 0.005 ? `<div class="zach-hp shield-bar"><div style="width:${(self.shield * 100).toFixed(1)}%"></div><span>SHIELD ${Math.round(self.shield * 100)}%</span></div>` : '') +
+          (self.health === Health.Healthy || self.health === Health.Wounded ? `<div class="zach-hp hp-bar"><div style="width:${(self.hp * 100).toFixed(1)}%"></div><span>${Math.round(self.hp * 100)}%</span></div>` : '') +
           (self.boostT > 0 ? `<div class="red">DOCTOR PEPPER ${Math.ceil(self.boostT)}s</div>` : '') +
           (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${(this.inventory.heldSlot(self.slots)?.amt ?? 0).toFixed(1)}s`}</div>` : '') +
           (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s</div>` : '') +
@@ -561,6 +581,16 @@ export class Hud {
 
 const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
+const FX_BUTTONS: readonly [TestFx, string][] = [
+  ['scare', 'Soundcloud Burst scare'],
+  ['book', 'Grapes of Wrath flash'],
+  ['waz', 'Waz slain flash'],
+  ['stun', 'Stun (bottle)'],
+  ['blast', 'Shotgun blast'],
+  ['gas', 'Galaxy gas'],
+  ['down', 'Knocked down'],
+];
+
 const LOOT_NAMES: Record<string, string> = {
   bottle: 'bottle',
   goggles: 'night vision goggles',
@@ -569,6 +599,8 @@ const LOOT_NAMES: Record<string, string> = {
   energy: 'Doctor Pepper',
   trap: 'galaxy gas trap',
   book: 'The Grapes of Wrath',
+  beastbar: 'Mr Beast bar',
+  shield: 'mini shield',
 };
 
 /** Skill check: a needle sweeps a circle; press Space inside the zone. */

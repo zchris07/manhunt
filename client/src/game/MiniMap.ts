@@ -16,6 +16,8 @@ const ITEM_COLORS: Record<string, string> = {
   shotgun: '#ff6a4a',
   energy: '#d8283a',
   book: '#a86ac8',
+  beastbar: '#8a5a2a',
+  shield: '#3aa8ff',
   trap: '#d06aff',
 };
 

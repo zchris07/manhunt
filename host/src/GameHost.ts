@@ -37,6 +37,7 @@ import { buildView } from './sim/view';
 import { cycleSpectate, skillCheckResult } from './sim/objectives';
 import { createPlayer } from './sim/player';
 import { moveSlot } from './sim/inventory';
+import { playTestFx } from './sim/testFx';
 import { matchLogEntry, type MatchLogEntry } from './telemetry';
 import { devCommand } from './dev/devCommands';
 
@@ -305,6 +306,11 @@ export class GameHost {
           this.matchPlayers = info;
           for (const p of w.order) this.sendToPlayer(p.id, { t: 'ev', e: { k: 'roles', players: info } });
         }
+        break;
+      }
+      case 'testFx': {
+        const sp = this.phase === 'match' ? this.world?.players.get(lp.id) : undefined;
+        if (sp && this.world) playTestFx(this.world, sp, msg.fx);
         break;
       }
       case 'moveSlot': {
