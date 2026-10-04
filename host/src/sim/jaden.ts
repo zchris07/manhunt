@@ -2,7 +2,7 @@ import { BALANCE, DEG, EntityKind, Health, ItemKind, JadenFlag, quantizeEntity, 
 import type { SimPlayer } from './player';
 import type { World } from './World';
 import type { ItemHit } from './npc';
-import { hurtSurvivor } from './combat';
+import { hurtHunter, hurtSurvivor } from './combat';
 import { placeDrop } from './items';
 import { Shane } from './shane';
 
@@ -13,7 +13,8 @@ const G = J.pistol;
  * Jaden Nguyen: wanders and is alerted exactly like Shane Jeans, but he has a pistol. Once
  * alerted he hangs back at a few metres and shoots the survivor who set him off, until they
  * get out of range or have lost half the health they had when he started. Any survivor item
- * stuns him for a moment; three of them kill him, and he drops his pistol.
+ * stuns him for a moment; three of them kill him, and he drops his pistol. Anyone who attacks
+ * him (a survivor's item, Zach's machete, lunge, golden pump or Penjamin) sets him on them.
  */
 export class Jaden extends Shane {
   protected override readonly who = 'Jaden Nguyen';
@@ -49,14 +50,32 @@ export class Jaden extends Shane {
     return quantizeEntity(this.id, EntityKind.Jaden, this.x, this.y, this.facing, st, this.moving ? 1 : 0, Math.round(this.alertLevel * 255), 0, 0);
   }
 
-  /** Anything thrown or fired at him stuns him; three survivor hits and he's dead. */
+  /** Anything thrown or fired at him stuns him, and he goes after whoever did it; three survivor hits and he's dead. */
   override itemHit(by: SimPlayer, _kind: ItemHit): void {
     if (!this.alive) return;
     this.stunT = Math.max(this.stunT, J.stun);
     this.moving = false;
-    if (by.role !== 'survivor') return;
-    this.hits++;
-    if (this.hits >= J.hp) this.die(by);
+    if (by.role === 'survivor') {
+      this.hits++;
+      if (this.hits >= J.hp) {
+        this.die(by);
+        return;
+      }
+    }
+    this.provoke(by);
+  }
+
+  /** Attacked or gassed with Penjamin, by anyone: he turns on them at once. */
+  provoke(by: SimPlayer): void {
+    if (!this.alive || (this.mode === 'chase' && this.target === by.id)) return;
+    if (!this.targetable(by)) return;
+    this.alert(by);
+  }
+
+  /** Anyone he's after: a survivor on their feet, or Zach (only once Zach has provoked him). */
+  private targetable(p: SimPlayer): boolean {
+    if (p.role === 'hunter') return p.health !== Health.Eliminated && p.knockT <= 0;
+    return p.role === 'survivor' && (p.health === Health.Healthy || p.health === Health.Wounded) && p.hideState === 0;
   }
 
   override gassed(): void {
@@ -86,9 +105,10 @@ export class Jaden extends Shane {
     this.w.emit(this.w.near(this.x, this.y, BALANCE.net.maxSensingRadius), { k: 'npc', who: 'jaden', say: 'Back up!' });
   }
 
-  /** Only someone on their feet sets him off (he won't shoot the downed). */
+  /** Only someone on their feet sets him off (he won't shoot the downed); Zach only once he's the target. */
   protected override eligible(p: SimPlayer): boolean {
-    return p.role === 'survivor' && (p.health === Health.Healthy || p.health === Health.Wounded) && p.hideState === 0;
+    if (p.role === 'hunter') return p.id === this.target && this.targetable(p);
+    return this.targetable(p);
   }
 
   override update(dt: number): void {
@@ -129,7 +149,8 @@ export class Jaden extends Shane {
     let best = wall;
     let hit: SimPlayer | null = null;
     for (const q of w.order) {
-      if (q.role !== 'survivor' || (q.health !== Health.Healthy && q.health !== Health.Wounded) || q.hideState === 2) continue;
+      const ok = q.role === 'hunter' ? q.health !== Health.Eliminated && q.knockT <= 0 : q.role === 'survivor' && (q.health === Health.Healthy || q.health === Health.Wounded) && q.hideState !== 2;
+      if (!ok) continue;
       const tt = rayCircle(sx, sy, dx, dy, q.move.x, q.move.y, q.radius);
       if (tt < best) {
         best = tt;
@@ -140,10 +161,11 @@ export class Jaden extends Shane {
     w.noise(this.x, this.y, 900, 'shot');
     if (!hit) return;
     const before = hit.hp;
-    hurtSurvivor(w, hit, G.damage, null, 'bullet');
+    if (hit.role === 'hunter') hurtHunter(w, hit, G.damage * BALANCE.hunter.health.max, null, 'bullet');
+    else hurtSurvivor(w, hit, G.damage, null, 'bullet');
     if (hit !== t) return;
     this.dealt += before - hit.hp;
-    if (this.dealt >= this.startHp * G.stopAfter - 1e-6 || t.health === Health.Downed) {
+    if (this.dealt >= this.startHp * G.stopAfter - 1e-6 || t.health === Health.Downed || t.knockT > 0) {
       w.feed(`Jaden Nguyen let ${t.name} go`);
       this.endChase('walk');
     }

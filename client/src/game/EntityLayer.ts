@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, DIZZY_BIT, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -278,6 +278,21 @@ class PlayerSprite {
       for (let i = 0; i < 4; i++) {
         const a = time * 5 + (i * Math.PI * 2) / 4;
         this.star(Math.cos(a) * 16, -r - 8 + Math.sin(a) * 5, 4);
+      }
+    }
+    if (!hunter && p.aux & DIZZY_BIT && !down) {
+      // Dizzy in Penjamin gas: a lazy yellow spiral and little stars circling the head.
+      const cy = -r - 10;
+      const spin = time * 4;
+      for (let i = 0; i < 14; i++) {
+        const t = i / 14;
+        const a = spin + t * Math.PI * 3;
+        const rr = 2 + t * 9;
+        this.fx.circle(Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.45, 1.3).fill({ color: 0xe8d84a, alpha: 0.35 + 0.55 * t });
+      }
+      for (let i = 0; i < 3; i++) {
+        const a = -spin * 0.8 + (i * Math.PI * 2) / 3;
+        this.star(Math.cos(a) * 15, cy + Math.sin(a) * 6, 3);
       }
     }
     if (p.state & EF.Gassed) {
@@ -1119,6 +1134,21 @@ export class EntityLayer {
     }
     const { man, beast, aura } = this.plasma;
     const st = e.state;
+    if (st & PlasmaFlag.Dead) {
+      // Slain: back in human form, lying still, greyed out.
+      man.step(e, dt);
+      man.fx.clear();
+      aura.clear();
+      beast.visible = false;
+      man.legs.visible = false;
+      man.body.visible = true;
+      man.body.tint = 0x8a8a8a;
+      man.body.scale.set(0.95, 1.1);
+      man.body.rotation = e.facing + Math.PI / 2;
+      man.body.position.set(0, 0);
+      return;
+    }
+    man.body.rotation = e.facing;
     const raging = (st & PlasmaFlag.Raging) !== 0;
     const transforming = (st & PlasmaFlag.Transforming) !== 0;
     const reverting = (st & PlasmaFlag.Reverting) !== 0;
@@ -1158,6 +1188,22 @@ export class EntityLayer {
       }
     }
     if (st & PlasmaFlag.Stunned) man.stars(time, 26);
+    // His two health bars (survivors' hits, Zach's hits), in beast form or once he's been hurt.
+    const sHits = e.extra & 15;
+    const zHits = (e.extra >> 4) & 15;
+    if (b >= 0.5 || sHits > 0 || zHits > 0) {
+      const P = BALANCE.plasma;
+      const w = 40;
+      const y0 = -(b >= 0.5 ? 40 : 30);
+      for (const [row, left, color] of [
+        [0, 1 - sHits / P.survivorHits, 0xe8a03a],
+        [1, 1 - zHits / P.zachHits, 0xc8202a],
+      ] as const) {
+        const y = y0 + row * 6;
+        man.fx.rect(-w / 2 - 1, y - 1, w + 2, 6).fill({ color: INK, alpha: 0.8 });
+        man.fx.rect(-w / 2, y, w * Math.max(0, left), 4).fill({ color });
+      }
+    }
     if (st & PlasmaFlag.Blind) {
       for (let i = 0; i < 5; i++) {
         const a = time * 2 + i * 1.3;

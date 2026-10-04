@@ -5,6 +5,7 @@ import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvi
 import { dropBarricade, drinkShield, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
 import { addItem } from './inventory';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
+import { tryVape } from './vape';
 
 const R = BALANCE.reach;
 
@@ -267,6 +268,7 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
     if (cmd.buttons & Btn.Primary) fireZachPump(w, p, cmd.aim);
   } else if (pressed & Btn.Primary) startCharge(p);
   if (pressed & Btn.Secondary) tryBurst(w, p, cmd.aim);
+  if (pressed & Btn.Vape) tryVape(w, p, cmd.aim);
   if (pressed & Btn.Ability) tryHemp(w, p);
   if (p.action !== Action.None || p.attackWindup > 0) return;
   if (pressed & Btn.Interact) {

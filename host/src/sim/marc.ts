@@ -75,9 +75,11 @@ export class Marc implements NpcTarget {
   }
 
   /** Zach's machete (or anything of his): he protests and stands his ground. */
-  hit(h: SimPlayer): void {
-    h.stats.hits++;
-    this.hurtT = 0.35;
+  hit(h: SimPlayer, harm = true): void {
+    if (harm) {
+      h.stats.hits++;
+      this.hurtT = 0.35;
+    }
     this.holdT = 1.5;
     this.facing = Math.atan2(h.move.y - this.y, h.move.x - this.x);
     this.say(this.complaints++ % 2 === 0 ? 'Hey man, what the heck?' : 'Cut it out');

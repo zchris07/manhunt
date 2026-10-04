@@ -147,6 +147,7 @@ a neat row.
 | Right mouse | Lunge: an instant dash that slows quickly. 2 charges, 7 s each. Touching a survivor hits them. Swipe mid-lunge, or lunge mid-charge, for a combo: the lunge and the swipe can both land. |
 | F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared for 2.5 s (the image and a snippet of the song fade in and out). Only you hear it go out: a very quiet snippet of GMajor from a random point in the song. |
 | Q | Hemp Battery (drops when you slay Sexton Science): for 8 s, a wider view, light through walls and +10% speed |
+| R | **Penjamin** (20 s cooldown): a narrow (10°) cone of translucent yellow vape gas toward the cursor. It rolls out in 0.6 s to 1.1× the distance from you to the corner of your screen (it never visibly stops on screen), widens naturally with distance, passes through walls, hangs for 4 s and fades over 1 s. A survivor with at least half their body in it is slowed (20% close up, down to 1% at the far end) and loses health (5% of the bar a second close up, down to 1%), for as long as they're in it and 2 s more, with a dizzy marker over their head. Their flashlight beam narrows by 60% and everything outside their light goes pitch black, easing in and out, while they're in it and for 6 s after. NPCs who react to being attacked react to the gas (it doesn't hurt them): Sexton, Chris Zelley and Waz run, Marc protests, Plasma.TTV rages at you and Jaden Nguyen turns his gun on you. |
 | E | Pick up, stake, search a hiding spot (instant), damage a generator, open and close doors, talk to Plasma.TTV |
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
@@ -197,7 +198,9 @@ meter), but he has a pistol. Alerted, he says *"Back up!"*, closes to about 220 
 when you get more than 600 u away, or once you've lost half the health you had when he started,
 whichever comes first. Any survivor item (bottle, book, shotgun, pistol) or galaxy gas stuns him
 for 1.2 s, a chance to get away. Three survivor hits kill him: he drops his pistol (10 shots).
-He trips gas traps while alerted.
+Whoever provokes him, survivor or Zach (an item, the machete or a lunge, Zach's golden pump, or
+Penjamin), becomes his target: he goes after Zach too, 12.5 hp a shot. He trips gas traps while
+alerted.
 
 **Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
 structure parked at a random spot in the woods with medical gear around it and a faint glow of
@@ -221,8 +224,11 @@ over 2 s, then chases whoever hit him and punches them until they're down (each 
 20 hp off Zach; at 0 Zach is down for 10 s, without the lasting slowdown), then turns back into a
 human and walks off. Escape him for 10 s and he calms down too, and 10 s after transforming he
 always turns back on his own if he hasn't put anyone down. Bottles stun him for 0.1 s, shotgun blasts for 0.3 s and the machete for
-0.1 s; galaxy gas blinds and slows him. He can't be killed. Talk to him (either side) and he
-says *"ggs"* and hands you a golden pump, once each.
+0.1 s; galaxy gas blinds and slows him. Penjamin sets him off too, without hurting him. He can
+only be hurt once he's fully a beast, and he keeps two separate health bars (shown over him):
+6 survivor item hits slay him, or 6 of Zach's (a light swing, a lunge or a golden-pump blast is
+1, a heavy swing 2). The damage stays when he turns back human. Slain, he drops a golden pump.
+Talk to him (either side) and he says *"ggs"* and hands you a golden pump, once each.
 
 **Waz** (one) wanders the map with a faint light. Talk to him as a survivor and he says
 *"lemme take a looksie"*: you see 10% more of the map for good (the camera pulls back and your
@@ -375,7 +381,8 @@ between Zach and a survivor. Every NPC is shown on the map. Open the full map (*
 anywhere to teleport there. Survivors see their own scent trail. The **Test effects** buttons
 (left side) play any stun or flash on yourself: the Soundcloud Burst scare, the Grapes of Wrath
 flash (and its 3 s stun as Zach), the Waz flash, a stun, a shotgun blast, galaxy gas, and being
-knocked down. The testing kit holds 8 kinds of item (there are 10; pick the rest up on the map).
+knocked down, and Penjamin gas (as Zach, a cloud from where you stand; as a survivor, its
+effects at full strength). The testing kit holds 8 kinds of item (there are 10; pick the rest up on the map).
 A lobby owner can also tick
 **Testing mode** in the lobby settings.
 

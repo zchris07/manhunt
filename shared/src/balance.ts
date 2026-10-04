@@ -150,6 +150,38 @@ export const BALANCE = {
     health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 240, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
     /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
+    /**
+     * Penjamin (R): a narrow cone of yellow vape gas. It reaches `reachMul` times the distance
+     * from Zach to the corner of his screen (so it never visibly stops on screen), grows out to
+     * that over `growTime` s, hangs for `lingerTime` s and thins out over `fadeTime` s. Through
+     * walls, like the Soundcloud Burst. A survivor with at least `coverage` of their body in it
+     * is slowed (`slow`, down to `slowFar` at the far end), loses `dps` of their health a second
+     * (down to `dpsFar`), both for as long as they're in it and `afterTime` s more, and their
+     * flashlight cone narrows by `coneCut` with the darkness outside it going pitch black, while
+     * in it and `darkAfter` s more.
+     */
+    vape: {
+      cooldown: 20,
+      halfAngleDeg: 10,
+      reachMul: 1.1,
+      /** Used if the client hasn't told the host how big its screen is. */
+      defaultView: 760,
+      minView: 400,
+      maxView: 2200,
+      growTime: 0.6,
+      lingerTime: 4,
+      fadeTime: 1,
+      coverage: 0.5,
+      slow: 0.2,
+      slowFar: 0.01,
+      dps: 0.05,
+      dpsFar: 0.01,
+      afterTime: 2,
+      coneCut: 0.6,
+      darkAfter: 6,
+      /** How fast the narrowing and darkening ease in and out (client), seconds. */
+      darkEase: 0.6,
+    },
     /** Hemp Battery (Q, dropped by Sexton Science). */
     hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
     /** Speed multiplier while climbing through a smashed window (one swipe smashes it). */
@@ -386,6 +418,13 @@ export const BALANCE = {
     zachPunchDamage: 20,
     escapeTime: 10,
     rageTime: 10,
+    /**
+     * In beast form only, he can be slain: `survivorHits` survivor item hits, or `zachHits` of
+     * Zach's (a light swing or lunge 1, a heavy swing 2). The two counts are separate and stay
+     * when he turns back. Slain, he drops a golden pump.
+     */
+    survivorHits: 6,
+    zachHits: 6,
     loseRadius: 900,
     bottleStun: 0.1,
     shotStun: 0.3,

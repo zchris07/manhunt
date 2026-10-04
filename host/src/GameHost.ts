@@ -308,6 +308,11 @@ export class GameHost {
         }
         break;
       }
+      case 'view': {
+        const sp = this.world?.players.get(lp.id);
+        if (sp) sp.viewReach = msg.r;
+        break;
+      }
       case 'testFx': {
         const sp = this.phase === 'match' ? this.world?.players.get(lp.id) : undefined;
         if (sp && this.world) playTestFx(this.world, sp, msg.fx);

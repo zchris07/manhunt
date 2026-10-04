@@ -357,6 +357,7 @@ export class Hud {
       slot('RMB', 'Lunge', '', 'ability lunge');
       slot('F', 'Soundcloud Burst', '', 'ability burst');
       slot('Q', 'Hemp Battery', 'item.hemp', 'ability');
+      slot('R', 'Penjamin', '', 'ability vape');
     }
   }
 
@@ -429,6 +430,7 @@ export class Hud {
           }</div>` +
           (self.shield > 0.005 ? `<div class="zach-hp shield-bar"><div style="width:${(self.shield * 100).toFixed(1)}%"></div><span>SHIELD ${Math.round(self.shield * 100)}%</span></div>` : '') +
           (self.health === Health.Healthy || self.health === Health.Wounded ? `<div class="zach-hp hp-bar"><div style="width:${(self.hp * 100).toFixed(1)}%"></div><span>${Math.round(self.hp * 100)}%</span></div>` : '') +
+          (self.vapeT > 0 ? '<div class="warn">DIZZY: slowed and choking</div>' : self.darkT > 0 ? `<div class="dim">Your eyes sting... ${Math.ceil(self.darkT)}s</div>` : '') +
           (self.boostT > 0 ? `<div class="red">DOCTOR PEPPER ${Math.ceil(self.boostT)}s</div>` : '') +
           (self.gogglesOn ? `<div class="ok">NIGHT VISION ${test ? '∞' : `${(this.inventory.heldSlot(self.slots)?.amt ?? 0).toFixed(1)}s`}</div>` : '') +
           (self.health === Health.Staked ? `<div class="warn">Stake: ${Math.ceil(self.stakeT)}s</div>` : '') +
@@ -533,6 +535,7 @@ export class Hud {
       const charges = self.lungeCharges;
       set(this.slots[1], { on: charges > 0, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
       set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
+      set(this.slots[4], { on: self.vapeCd <= 0, count: self.vapeCd > 0 ? `${Math.ceil(self.vapeCd)}s` : '', cd: self.vapeCd / H.vape.cooldown });
       set(this.slots[3], { on: self.hemp > 0 || self.hempT > 0, count: self.hemp === 2 ? '∞' : self.hempT > 0 ? `${Math.ceil(self.hempT)}s` : '', active: self.hempT > 0, hidden: self.hemp === 0 && self.hempT <= 0 });
     }
   }
@@ -589,6 +592,7 @@ const FX_BUTTONS: readonly [TestFx, string][] = [
   ['blast', 'Shotgun blast'],
   ['gas', 'Galaxy gas'],
   ['down', 'Knocked down'],
+  ['vape', 'Penjamin gas'],
 ];
 
 const LOOT_NAMES: Record<string, string> = {

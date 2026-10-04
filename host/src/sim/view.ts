@@ -7,6 +7,7 @@ import {
   GenFlag,
   Health,
   SextonFlag,
+  DIZZY_BIT,
   GOLDEN_BIT,
   emptySelf,
   inCone,
@@ -53,7 +54,9 @@ export function visionFor(w: World, v: SimPlayer): Vision {
   const sv = BALANCE.survivor.vision;
   const k = v.health === Health.Downed ? BALANCE.survivor.downedVisionMul : 1;
   const wide = v.gogglesOn ? BALANCE.items.goggles.coneMul : 1;
-  return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG * wide * fov, range: sv.range * k }, prox: sv.proximity * fov, xray: v.gogglesOn };
+  // Penjamin's darkness narrows the beam.
+  const dark = v.darkT > 0 ? 1 - BALANCE.hunter.vape.coneCut : 1;
+  return { cone: { x, y, dir: v.facing, halfAngle: sv.coneHalfAngleDeg * DEG * wide * fov * dark, range: sv.range * k }, prox: sv.proximity * fov, xray: v.gogglesOn };
 }
 
 /**
@@ -97,9 +100,7 @@ function playerRecord(p: SimPlayer): EntityRecord {
   const held = p.role === 'survivor' ? selected(p) : null;
   const aux =
     p.role === 'survivor'
-      ? held
-        ? held.kind | (held.golden ? GOLDEN_BIT : 0)
-        : 0
+      ? (held ? held.kind | (held.golden ? GOLDEN_BIT : 0) : 0) | (p.vapeT > 0 ? DIZZY_BIT : 0)
       : p.pump > 0
         ? 255
         : p.chargeT >= 0
@@ -171,6 +172,9 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.bookT = p.bookT;
   s.fovMul = p.fovMul;
   s.shield = p.shield;
+  s.vapeT = p.vapeT;
+  s.darkT = p.darkT;
+  s.vapeCd = p.vapeCd;
   return s;
 }
 

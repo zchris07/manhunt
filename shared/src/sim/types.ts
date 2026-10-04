@@ -164,6 +164,8 @@ export const ITEM_KIND_MAX = 10;
 export const INV_SLOTS = 8;
 /** Golden pump flag in a slot or drop byte (item kinds fit in the low 4 bits). */
 export const GOLDEN_BIT = 16;
+/** A survivor's entity `aux`: dizzy in Penjamin gas. */
+export const DIZZY_BIT = 32;
 export const isWeapon = (k: number): boolean => k === ItemKind.Shotgun || k === ItemKind.Pistol;
 export const ITEM_NAMES: Record<number, string> = {
   1: 'Bottle',

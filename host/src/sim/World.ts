@@ -35,6 +35,7 @@ import { Chris } from './chris';
 import { Marc } from './marc';
 import { Plasma } from './plasma';
 import { Waz } from './waz';
+import { updateVapes, type VapeCloud } from './vape';
 import { addItem, emptySlot } from './inventory';
 import type { NpcTarget } from './npc';
 
@@ -152,6 +153,7 @@ export class World {
   drops: Drop[] = [];
   gases: Gas[] = [];
   bursts: Burst[] = [];
+  vapes: VapeCloud[] = [];
   trails: TrailRecord[] = [];
   trailSeq = 1;
   /** Per hunter: scent trail ids already sent. */
@@ -376,6 +378,7 @@ export class World {
     updateCombat(this, dt);
     updateItems(this, dt);
     updateAbilities(this, dt);
+    updateVapes(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
     this.jaden.update(dt);

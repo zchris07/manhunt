@@ -105,13 +105,15 @@ export class Chris implements NpcTarget {
     w.feed(`${p.name} enlisted Chris Zelley`);
   }
 
-  /** Zach hits him: he runs (slowly); the second hit kills him. */
-  hit(h: SimPlayer): void {
+  /** Zach hits him: he runs (slowly); the second hit kills him. `harm` false: only scared (Penjamin). */
+  hit(h: SimPlayer, harm = true): void {
     if (!this.hittable) return;
     const w = this.w;
-    this.hp--;
-    this.hurtT = 0.35;
-    h.stats.hits++;
+    if (harm) {
+      this.hp--;
+      this.hurtT = 0.35;
+      h.stats.hits++;
+    }
     if (this.hp <= 0) {
       this.alive = false;
       this.moving = false;
