@@ -45,7 +45,7 @@ export function vapeCoverage(v: VapeCloud, extent: number, x: number, y: number,
   return n / DISC.length;
 }
 
-/** Penjamin (R): a cone of vape gas toward the cursor, reaching past the edge of his screen. */
+/** Penjamin (Space): a cone of vape gas toward the cursor, reaching past the edge of his screen. */
 export function tryVape(w: World, h: SimPlayer, aim: number): void {
   if (h.vapeCd > 0 || h.role !== 'hunter') return;
   h.vapeCd = V.cooldown;

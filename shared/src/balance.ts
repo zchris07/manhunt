@@ -151,7 +151,7 @@ export const BALANCE = {
     /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /**
-     * Penjamin (R): a narrow cone of yellow vape gas. It reaches `reachMul` times the distance
+     * Penjamin (Space): a narrow cone of yellow vape gas. It reaches `reachMul` times the distance
      * from Zach to the corner of his screen (so it never visibly stops on screen), grows out to
      * that over `growTime` s, hangs for `lingerTime` s and thins out over `fadeTime` s. Through
      * walls, like the Soundcloud Burst. A survivor with at least `coverage` of their body in it

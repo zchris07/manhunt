@@ -357,7 +357,7 @@ export class Hud {
       slot('RMB', 'Lunge', '', 'ability lunge');
       slot('F', 'Soundcloud Burst', '', 'ability burst');
       slot('Q', 'Hemp Battery', 'item.hemp', 'ability');
-      slot('R', 'Penjamin', '', 'ability vape');
+      slot('Space', 'Penjamin', '', 'ability vape');
     }
   }
 

@@ -203,7 +203,7 @@ export class GameView {
       // Right click lunges; F fires the Soundcloud Burst.
       if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
       if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
-      if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Vape;
+      if (inp.isDown('Space') || L('Space')) b |= Btn.Vape;
       // Hold left click to charge the swipe, release to strike.
       const s = this.self;
       const now = performance.now();
