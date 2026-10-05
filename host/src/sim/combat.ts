@@ -99,8 +99,8 @@ function resolveAttack(w: World, h: SimPlayer): void {
     w.plasma.slashHit(h, power);
     hit = true;
   } else if (w.jaden.alive && inSwipe(h, w.jaden.x, w.jaden.y, BALANCE.jaden.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.jaden.x, w.jaden.y)) {
-    // He can't be hurt by the machete, but it sets him on Zach.
-    w.jaden.provoke(h);
+    // Six points (3 heavy swipes, or 6 light) kill him; each hit shoves him back and stuns him briefly.
+    w.jaden.slashHit(h, power);
     hit = true;
   } else if (w.waz.solid && inSwipe(h, w.waz.x, w.waz.y, BALANCE.waz.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.waz.x, w.waz.y)) {
     w.waz.hit(h);
@@ -212,7 +212,7 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
   }
   const jd = w.jaden;
   if (jd.alive && pointSegDist2(jd.x, jd.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.jaden.radius) ** 2) {
-    jd.provoke(h);
+    jd.slashHit(h, 1);
     lungeLanded(h);
     return;
   }
@@ -333,6 +333,10 @@ export function stakeSurvivor(w: World, h: SimPlayer, q: SimPlayer, stakeId: num
   q.stakeCount++;
   q.stakedBy = h.id;
   h.stats.stakes++;
+  // Every survivor staked buffs Zach for good: faster, and he sees further.
+  h.stakeBuff++;
+  h.fovMul *= 1 + BALANCE.hunter.stakeBuff;
+  w.emit([h.id], { k: 'item', text: `Staked ${q.name}: +${Math.round(BALANCE.hunter.stakeBuff * 100)}% speed and view` });
   const stake = w.map.stakes[stakeId];
   if (q.stakeCount >= 2) {
     q.move.x = stake.x;
@@ -369,7 +373,7 @@ export function updateCombat(w: World, dt: number): void {
           w.feed(`${p.name} got back up`);
         }
       } else if (p.health !== Health.Eliminated) {
-        p.hp = Math.min(1, p.hp + dt / H.health.regenTime);
+        p.hp = Math.min(1, p.hp + (dt / H.health.regenTime) * (1 + H.stakeRegen * p.stakeBuff));
       }
       if (p.chargeT >= 0) {
         const C = H.attack.charge;

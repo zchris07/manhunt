@@ -297,8 +297,7 @@ export class BotDirector {
       if (d < 230 && d > 90 && h.move.lungeCharges > 0 && h.attackCd <= 0 && w.geo.hasLineOfSight(h.move.x, h.move.y, target.x, target.y)) {
         return cmd(Btn.Lunge, Math.cos(aim), Math.sin(aim), aim, d);
       }
-      if (h.hemp > 0 && h.move.hempT <= 0) return cmd(Btn.Ability, 0, 0, aim, d);
-      const c = this.goTo(h, target.x, target.y, Btn.Run, 10);
+      const c = this.goTo(h, target.x, target.y, Btn.Run | (h.hemp === 2 || (h.hemp === 1 && h.hempLeft > 0) ? Btn.Ability : 0), 10);
       return { ...c, aim };
     }
     if (w.hempDrop) {

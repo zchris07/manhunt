@@ -54,6 +54,8 @@ export interface SimPlayer {
   knockT: number;
   /** Zach: times he's been put down (Plasma's don't count): each one slows him for good. */
   downs: number;
+  /** Zach: survivors he has staked (each buffs his speed and view for good). */
+  stakeBuff: number;
   /** Zach: seconds left with a book picture over his screen. */
   bookT: number;
   /** Field of view multiplier (Waz). */
@@ -113,6 +115,8 @@ export interface SimPlayer {
   burstCd: number;
   /** Hemp Battery: 0 none, 1 carried, 2 infinite (testing mode). */
   hemp: number;
+  /** Seconds of Hemp Battery use left. */
+  hempLeft: number;
 
   noise: number;
   prompt: Prompt;
@@ -163,6 +167,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     darkT: 0,
     shield: 0,
     downs: 0,
+    stakeBuff: 0,
     bookT: 0,
     fovMul: 1,
     wazLooked: false,
@@ -205,6 +210,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     wasLunging: false,
     burstCd: 0,
     hemp: 0,
+    hempLeft: 0,
     noise: 0,
     prompt: Prompt.None,
     promptTarget: -1,

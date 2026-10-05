@@ -142,7 +142,9 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   const E = BALANCE.items.energy;
   const boostK = Math.max(0, Math.min(1, s.boostT / E.duration));
   const cap = maxStamina(role, s.boostT);
-  const refill = (cfg.max / cfg.refill) * (1 + (E.refillMul - 1) * boostK);
+  // Zach's Hemp Battery, while it's in use: his sprint lasts longer and comes back faster.
+  const hemp = role === 'hunter' && s.hempT > 0 && (cmd.buttons & Btn.Ability) !== 0;
+  const refill = (cfg.max / cfg.refill) * (1 + (E.refillMul - 1) * boostK) * (hemp ? BALANCE.hunter.hemp.sprintRefillMul : 1);
   s.boostT = Math.max(0, s.boostT - dt);
   if (s.staminaLock > 0) s.staminaLock = Math.max(0, s.staminaLock - dt);
   const runHeld = (cmd.buttons & Btn.Run) !== 0;
@@ -162,7 +164,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   const wantsSprint = runHeld && moving && !crouching && s.mode === MoveMode.Normal;
   const sprint = wantsSprint && s.sprintBlocked === 0 && s.staminaLock <= 0 && s.stamina > 0;
   if (sprint) {
-    s.stamina -= dt;
+    s.stamina -= dt * (hemp ? BALANCE.hunter.hemp.sprintDrainMul : 1);
     if (s.stamina <= 0) {
       s.stamina = 0;
       s.staminaLock = BALANCE.sprintLockout;
@@ -194,7 +196,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     }
     speed = (sprint ? H.sprint : H.walk) * ctx.hunterSpeedMul;
     if (ctx.carrying) speed *= H.carrySpeedMul;
-    if (s.hempT > 0) speed *= H.hemp.speedMul;
+    if (s.hempT > 0 && cmd.buttons & Btn.Ability) speed *= H.hemp.speedMul;
     if (s.slowT > 0) speed *= s.slowMul;
     // Climbing through a smashed window is slow.
     if (geo.inBrokenWindow(s.x, s.y, radius + 4)) speed *= H.windowClimbMul;

@@ -275,7 +275,7 @@ describe("Zach's kit", () => {
     expect(pts.length / 4).toBeGreaterThan(5);
   });
 
-  it('Hemp Battery: picked up where Sexton fell, used once with Q for x-ray light and speed', () => {
+  it('Hemp Battery: picked up where Sexton fell, held with Q for x-ray light and speed until its 16 s run out', () => {
     const { w, d, h, s } = duel(300);
     w.hempDrop = { id: w.allocEntityId(), x: h.move.x + 20, y: h.move.y };
     d.run(2);
@@ -283,14 +283,23 @@ describe("Zach's kit", () => {
     d.tap(h.id, Btn.Interact);
     expect(h.hemp).toBe(1);
     expect(w.hempDrop).toBeNull();
-    d.tap(h.id, Btn.Ability);
-    expect(h.move.hempT).toBeGreaterThan(H.hemp.duration - 0.2);
-    expect(h.hemp).toBe(0);
+    expect(h.hempLeft).toBe(H.hemp.duration);
+    d.hold(h.id, Btn.Ability, 1);
+    expect(h.move.hempT).toBeGreaterThan(0);
+    expect(h.hempLeft).toBeCloseTo(H.hemp.duration - 1, 0);
     expect(w.events.some((e) => e.e.k === 'hemp' && e.to.includes(s.id))).toBe(true);
     expect(visionFor(w, h).xray).toBe(true);
-    d.run(secs(H.hemp.duration));
+    // Let go and it stops at once (and the charge is kept); hold again and it carries on.
+    d.run(2);
     expect(h.move.hempT).toBe(0);
-    d.tap(h.id, Btn.Ability);
+    expect(visionFor(w, h).xray).toBe(false);
+    const kept = h.hempLeft;
+    d.run(secs(2));
+    expect(h.hempLeft).toBe(kept);
+    d.hold(h.id, Btn.Ability, H.hemp.duration + 1);
+    expect(h.hemp).toBe(0);
+    expect(h.move.hempT).toBe(0);
+    d.hold(h.id, Btn.Ability, 1);
     expect(h.move.hempT).toBe(0);
   });
 

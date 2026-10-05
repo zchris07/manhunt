@@ -45,6 +45,8 @@ export class Overlays {
   private bursts: Wave[] = [];
   /** Penjamin clouds (drawn above the vision mask: Zach sees the gas run to the edge of his screen). */
   private readonly vapeG = new Graphics();
+  /** Where teammates' torches point, for downed and staked survivors. */
+  private readonly coneG = new Graphics();
   private readonly vapeLayer = new Container();
   private readonly vapeSprites: Sprite[] = [];
   private vapes: { x: number; y: number; a: number; r: number; born: number }[] = [];
@@ -57,7 +59,25 @@ export class Overlays {
     this.rings.blendMode = 'add';
     this.aurora.blendMode = 'add';
     this.scentRoot.addChild(this.aurora, this.scentLayer);
-    this.senses.addChild(this.vapeLayer, this.vapeG, this.g, this.rings);
+    this.senses.addChild(this.coneG, this.vapeLayer, this.vapeG, this.g, this.rings);
+  }
+
+  /** Teammates' flashlight cones (wall-clipped polygons, origin first): a soft glow, strongest near the torch. Empty clears. */
+  setAllyCones(polys: number[][]): void {
+    const g = this.coneG;
+    g.clear();
+    const A = BALANCE.survivor.allyLight.coneAlpha;
+    for (const poly of polys) {
+      if (poly.length < 6) continue;
+      g.poly(poly).fill({ color: 0xffe9b0, alpha: A });
+      const ox = poly[0];
+      const oy = poly[1];
+      for (const k of [0.6, 0.3]) {
+        const inner: number[] = [];
+        for (let i = 0; i < poly.length; i += 2) inner.push(ox + (poly[i] - ox) * k, oy + (poly[i + 1] - oy) * k);
+        g.poly(inner).fill({ color: 0xffe9b0, alpha: A * 0.7 });
+      }
+    }
   }
 
   /** Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */

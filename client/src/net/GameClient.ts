@@ -23,6 +23,7 @@ import {
   quantizeInput,
   stepMovement,
   hunterHealthMul,
+  hunterStakeMul,
   type ClientMessage,
   type DecodedSnapshot,
   type EntityRecord,
@@ -351,7 +352,7 @@ export class GameClient {
   private moveCtx(): MoveContext {
     const m = this.match!;
     const s = this.self;
-    const healthMul = m.role === 'hunter' && s ? hunterHealthMul(s.hp, s.downs) : 1;
+    const healthMul = m.role === 'hunter' && s ? hunterHealthMul(s.hp, s.downs) * hunterStakeMul(s.stakeBuff) : 1;
     return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul * healthMul, carrying: (s?.carrying ?? 0) > 0 };
   }
 

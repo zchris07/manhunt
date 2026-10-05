@@ -106,6 +106,8 @@ export class AudioEngine {
   private readonly loops = new Map<string, Loop>();
   private clip: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private clips = 0;
+  /** The Penjamin gas sound: the first seconds of a file, looped while a survivor stands in the gas. */
+  private gas: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   constructor(readonly assets: AssetManager) {}
 
@@ -232,6 +234,41 @@ export class AudioEngine {
     return true;
   }
 
+  /**
+   * While `on`, loops the first `duration` seconds of a sound (fading in); when it goes
+   * off the loop fades out and stops. Call it every frame.
+   */
+  gasLoop(on: boolean, id: string, o: { volume?: number; fadeIn?: number; fadeOut?: number } = {}): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const g = this.gas;
+    if (!on) {
+      if (!g) return;
+      this.gas = null;
+      g.gain.gain.cancelScheduledValues(t);
+      g.gain.gain.setValueAtTime(g.gain.gain.value, t);
+      g.gain.gain.linearRampToValueAtTime(0.0001, t + (o.fadeOut ?? 0.8));
+      g.src.stop(t + (o.fadeOut ?? 0.8) + 0.05);
+      return;
+    }
+    if (g) return;
+    const b = this.getSound(id);
+    if (!b) return;
+    const entry = this.assets.soundEntry(id);
+    const src = ctx.createBufferSource();
+    src.buffer = b;
+    src.loop = true;
+    src.loopStart = 0;
+    src.loopEnd = Math.min(entry?.duration ?? b.duration, b.duration);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(o.volume ?? 1, t + (o.fadeIn ?? 0.8));
+    src.connect(gain).connect(this.clipBus);
+    src.start(t, 0);
+    this.gas = { src, gain };
+  }
+
   /** Plays a whole sound once, on its own (it doesn't cut off or wait for other sounds). */
   oneShot(id: string, volume = 1): boolean {
     const ctx = this.ctx;
@@ -332,6 +369,7 @@ export class AudioEngine {
   }
 
   stopAllLoops(): void {
+    this.gasLoop(false, 'penjamin');
     for (const key of [...this.loops.keys()]) this.loop(key, null);
     this.clip?.src.stop();
     this.clip = null;

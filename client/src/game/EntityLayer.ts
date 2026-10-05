@@ -1261,6 +1261,11 @@ export class EntityLayer {
     mark.visible = false;
     if (dead) return;
     if (e.state & JadenFlag.Stunned) npc.stars(time, 18);
+    if (e.state & JadenFlag.Hurt) {
+      // Flinch: squashed and flushed red for a moment.
+      npc.body.tint = 0xff8a8a;
+      npc.body.scale.set(1.12, 0.88);
+    }
     const chasing = (e.state & JadenFlag.Chasing) !== 0;
     mark.visible = chasing;
     if (chasing) mark.scale.set(1 + 0.15 * Math.sin(time * 10));

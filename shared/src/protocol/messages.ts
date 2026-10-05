@@ -109,6 +109,8 @@ export type GameEvent =
   | { k: 'boom'; x: number; y: number }
   /** You slew Waz. */
   | { k: 'wazSlain' }
+  /** The player read a note: open picture `n` full screen. */
+  | { k: 'note'; n: number }
   /** Zach's Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */
   | { k: 'vape'; x: number; y: number; a: number; r: number }
   | { k: 'jarvis'; by: number }

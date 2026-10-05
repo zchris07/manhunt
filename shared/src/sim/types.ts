@@ -102,6 +102,7 @@ export const Prompt = {
   NameLoot: 33,
   NameDrop: 34,
   TalkWaz: 35,
+  ReadNote: 36,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -131,6 +132,7 @@ export const PROMPT_LABELS: Record<number, string> = {
   30: 'Press E to keep listening',
   31: 'Press E to pick up',
   35: 'Press E to talk to Waz',
+  36: 'Press E to read the note',
 };
 
 /** NPC names, indexed by the NameNpc prompt target. */

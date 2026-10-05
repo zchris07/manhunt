@@ -1,4 +1,4 @@
-import { BALANCE, DEG, EntityKind, Health, ItemKind, JadenFlag, quantizeEntity, rayCircle, type EntityRecord } from '@manhunt/shared';
+import { BALANCE, DEG, EntityKind, Health, ItemKind, JadenFlag, moveCircle, quantizeEntity, rayCircle, type EntityRecord } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 import type { ItemHit } from './npc';
@@ -27,6 +27,8 @@ export class Jaden extends Shane {
   private dealt = 0;
   private startHp = 1;
   private hits = 0;
+  private zachHits = 0;
+  hurtT = 0;
 
   constructor(w: World) {
     super(w, J);
@@ -47,6 +49,7 @@ export class Jaden extends Shane {
     if (this.mode === 'flee') st |= JadenFlag.Fleeing;
     if (this.shotAge < 0.15) st |= JadenFlag.Firing;
     if (this.stunT > 0) st |= JadenFlag.Stunned;
+    if (this.hurtT > 0) st |= JadenFlag.Hurt;
     return quantizeEntity(this.id, EntityKind.Jaden, this.x, this.y, this.facing, st, this.moving ? 1 : 0, Math.round(this.alertLevel * 255), 0, 0);
   }
 
@@ -62,6 +65,25 @@ export class Jaden extends Shane {
         return;
       }
     }
+    this.provoke(by);
+  }
+
+  /**
+   * Zach's machete (power 1 light, 2 heavy; a lunge counts as light): he flinches, is shoved
+   * back and stunned for a moment, and six points of it kill him.
+   */
+  slashHit(by: SimPlayer, power: number): void {
+    if (!this.alive) return;
+    this.zachHits += power;
+    this.hurtT = 0.3;
+    this.stunT = Math.max(this.stunT, J.meleeStun);
+    this.moving = false;
+    if (this.zachHits >= J.zachHp) {
+      this.die(by);
+      return;
+    }
+    const a = Math.atan2(this.y - by.move.y, this.x - by.move.x);
+    moveCircle(this.w.geo, this, J.radius, Math.cos(a) * J.kb, Math.sin(a) * J.kb);
     this.provoke(by);
   }
 
@@ -86,6 +108,7 @@ export class Jaden extends Shane {
     const w = this.w;
     this.alive = false;
     this.moving = false;
+    this.hurtT = 0;
     if (this.mode === 'chase') this.endChase('walk');
     this.meter.clear();
     placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Pistol, golden: false, amount: BALANCE.items.pistol.shots }, this.x + Math.cos(this.facing) * 22, this.y + Math.sin(this.facing) * 22);
@@ -115,6 +138,7 @@ export class Jaden extends Shane {
     if (!this.alive) return;
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.shotAge += dt;
+    this.hurtT = Math.max(0, this.hurtT - dt);
     if (this.stunT > 0) {
       this.stunT = Math.max(0, this.stunT - dt);
       this.moving = false;

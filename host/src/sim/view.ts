@@ -175,6 +175,8 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.vapeT = p.vapeT;
   s.darkT = p.darkT;
   s.vapeCd = p.vapeCd;
+  s.hempLeft = p.hempLeft;
+  s.stakeBuff = p.stakeBuff;
   return s;
 }
 
@@ -191,6 +193,8 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
   // Testing mode: every NPC is sent to everyone, wherever they are.
   const npcR = w.testMode ? Infinity : R;
   if (v) {
+    const reach = Math.min(R, Math.max(400, v.viewReach || 760));
+    const cones = v.role === 'survivor' && (v.health === Health.Downed || v.health === Health.Staked);
     for (const q of w.order) {
       if (q.role === 'spectator' || q.health === Health.Escaped || q.health === Health.Eliminated || q.health === Health.Carried) continue;
       if (q.id === peerPlayer.id && q.id === v.id) continue;
@@ -202,7 +206,11 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
       const d = Math.hypot(q.move.x - v.move.x, q.move.y - v.move.y);
       if (d > R) continue;
       const aura = survivorSide && q.role === 'survivor' && q.health === Health.Staked;
-      if (aura || canSee(w, v, q.move.x, q.move.y)) entities.push(playerRecord(q));
+      // Teammates glow faintly: one on your screen with a clear line to you is seen, and a
+      // downed or staked survivor sees every teammate nearby (and where their torches point).
+      const ally = survivorSide && v.role === 'survivor' && q.role === 'survivor';
+      const glow = ally && (cones || (d <= reach && w.geo.hasLineOfSight(v.move.x, v.move.y, q.move.x, q.move.y)));
+      if (aura || glow || canSee(w, v, q.move.x, q.move.y)) entities.push(playerRecord(q));
     }
     for (const b of w.bottles) {
       if (Math.hypot(b.x - v.move.x, b.y - v.move.y) > 900) continue;

@@ -34,6 +34,7 @@
     "obj.bed": { "procedural": "bed" },
     "obj.barrel": { "procedural": "barrel" },
     "obj.stake": { "procedural": "stake" },
+    "obj.note": { "procedural": "note" },
     "obj.gate": { "procedural": "gate", "variants": 2 },
     "obj.barricade": { "procedural": "barricade", "variants": 2 },
     "obj.door": { "procedural": "door", "variants": 2 },
@@ -62,10 +63,15 @@
     "burst": { "file": "audio/gmajor.mp3", "duration": 2.6, "random": true },
     "sexton.reel": { "file": "audio/reel.mp3" },
     "shane.steps": { "procedural": "pitterPatter" },
-    "boom": { "file": "audio/vine-boom.mp3" }
+    "boom": { "file": "audio/vine-boom.mp3" },
+    "penjamin": { "file": "audio/penjamin.mp3", "duration": 4 }
   },
   "images": {
     "ui.scare": { "file": "images/scare.webp" },
+    "ui.note.0": { "file": "images/note-1.jpg" },
+    "ui.note.1": { "file": "images/note-2.jpg" },
+    "ui.note.2": { "file": "images/note-3.webp" },
+    "ui.note.3": { "file": "images/note-4.webp" },
     "ui.book.0": { "file": "images/book-1.png" },
     "ui.book.1": { "file": "images/book-2.png" },
     "ui.book.2": { "file": "images/book-3.jpg" },
