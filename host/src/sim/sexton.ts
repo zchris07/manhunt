@@ -146,13 +146,16 @@ export class Sexton implements NpcTarget {
   }
 
   /** Zach hits him: he runs off erratically; the third hit kills him. */
-  hit(h: SimPlayer): void {
+  /** Zach hits him (`harm` false: only scared, by Penjamin): he flees; three hits slay him. */
+  hit(h: SimPlayer, harm = true): void {
     if (!this.alive) return;
     const w = this.w;
-    this.hp--;
-    this.hurtT = 0.35;
+    if (harm) {
+      this.hp--;
+      this.hurtT = 0.35;
+      h.stats.hits++;
+    }
     this.dropTalk();
-    h.stats.hits++;
     if (this.hp <= 0) {
       this.alive = false;
       this.mode = 'idle';

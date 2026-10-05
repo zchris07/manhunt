@@ -40,6 +40,14 @@ export interface SimPlayer {
   lastHealth: Health;
   /** Health, 0 to 1 (full). Survivors are down at 0; Zach (out of 100 hp) is down for a while. */
   hp: number;
+  /** Zach: Penjamin cooldown, and how far he can see to the corner of his screen (his client says). */
+  vapeCd: number;
+  viewReach: number;
+  /** Survivor, in Penjamin gas: seconds the slow and burn last, their strength, and seconds of darkness. */
+  vapeT: number;
+  vapeSlow: number;
+  vapeDps: number;
+  darkT: number;
   /** Survivor: blue shield bar on top of health, 0 to 1 (a full extra bar). Damage takes it first. */
   shield: number;
   /** Zach: seconds left down. */
@@ -147,6 +155,12 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     lastHealth: role === 'spectator' ? Health.Eliminated : Health.Healthy,
     hp: 1,
     knockT: 0,
+    vapeCd: 0,
+    viewReach: 0,
+    vapeT: 0,
+    vapeSlow: 0,
+    vapeDps: 0,
+    darkT: 0,
     shield: 0,
     downs: 0,
     bookT: 0,

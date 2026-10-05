@@ -6,7 +6,7 @@ import { decodeText, encodeText } from './binary';
 export type RolePref = 'hunter' | 'survivor' | 'any';
 
 /** Testing mode: stun and flash effects you can play on yourself at the click of a button. */
-export const TEST_FX = ['scare', 'book', 'waz', 'stun', 'blast', 'gas', 'down'] as const;
+export const TEST_FX = ['scare', 'book', 'waz', 'stun', 'blast', 'gas', 'down', 'vape'] as const;
 export type TestFx = (typeof TEST_FX)[number];
 export type AssignedRole = 'auto' | 'hunter' | 'survivor' | 'spectator';
 export type Phase = 'lobby' | 'match' | 'results';
@@ -109,6 +109,8 @@ export type GameEvent =
   | { k: 'boom'; x: number; y: number }
   /** You slew Waz. */
   | { k: 'wazSlain' }
+  /** Zach's Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */
+  | { k: 'vape'; x: number; y: number; a: number; r: number }
   | { k: 'jarvis'; by: number }
   /** Shane Jeans was alerted (true) or gave up the chase (false). */
   | { k: 'shane'; alerted: boolean }
@@ -143,6 +145,8 @@ export type ClientMessage =
   | { t: 'switchRole' }
   /** Testing mode: teleport to a world point (clicked on the full map). */
   | { t: 'teleport'; x: number; y: number }
+  /** How far it is from you to the farthest corner of your screen (world units): Penjamin's reach. */
+  | { t: 'view'; r: number }
   /** Testing mode: play a stun or flash effect on yourself. */
   | { t: 'testFx'; fx: TestFx }
   /** Reorder the inventory: swap two slots. */
@@ -246,6 +250,8 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isStr(v.text, 280) ? { t: 'chat', text: v.text } : null;
     case 'skill':
       return isInt(v.id, 0, 1e9) && (v.result === 'miss' || v.result === 'good' || v.result === 'great') ? { t: 'skill', id: v.id, result: v.result } : null;
+    case 'view':
+      return isNum(v.r, 0, 10000) ? { t: 'view', r: v.r } : null;
     case 'testFx':
       return typeof v.fx === 'string' && (TEST_FX as readonly string[]).includes(v.fx) ? { t: 'testFx', fx: v.fx as TestFx } : null;
     case 'moveSlot':

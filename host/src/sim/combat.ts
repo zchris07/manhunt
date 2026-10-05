@@ -95,8 +95,12 @@ function resolveAttack(w: World, h: SimPlayer): void {
   } else if (inSwipe(h, w.marc.x, w.marc.y, BALANCE.marc.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.marc.x, w.marc.y)) {
     w.marc.hit(h);
     hit = true;
-  } else if (inSwipe(h, w.plasma.x, w.plasma.y, w.plasma.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.plasma.x, w.plasma.y)) {
-    w.plasma.slashHit(h);
+  } else if (w.plasma.alive && inSwipe(h, w.plasma.x, w.plasma.y, w.plasma.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.plasma.x, w.plasma.y)) {
+    w.plasma.slashHit(h, power);
+    hit = true;
+  } else if (w.jaden.alive && inSwipe(h, w.jaden.x, w.jaden.y, BALANCE.jaden.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.jaden.x, w.jaden.y)) {
+    // He can't be hurt by the machete, but it sets him on Zach.
+    w.jaden.provoke(h);
     hit = true;
   } else if (w.waz.solid && inSwipe(h, w.waz.x, w.waz.y, BALANCE.waz.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.waz.x, w.waz.y)) {
     w.waz.hit(h);
@@ -201,8 +205,14 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
     return;
   }
   const pl = w.plasma;
-  if (pointSegDist2(pl.x, pl.y, fromX, fromY, h.move.x, h.move.y) <= (reach + pl.radius) ** 2) {
-    pl.slashHit(h);
+  if (pl.alive && pointSegDist2(pl.x, pl.y, fromX, fromY, h.move.x, h.move.y) <= (reach + pl.radius) ** 2) {
+    pl.slashHit(h, 1);
+    lungeLanded(h);
+    return;
+  }
+  const jd = w.jaden;
+  if (jd.alive && pointSegDist2(jd.x, jd.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.jaden.radius) ** 2) {
+    jd.provoke(h);
     lungeLanded(h);
     return;
   }
@@ -255,21 +265,24 @@ export function downHunter(w: World, h: SimPlayer, counts: boolean): void {
  * Takes `amount` (a fraction of full health) off a survivor: they flinch, and at zero they're
  * down. Zach's hits also give them a burst of speed.
  */
-export function hurtSurvivor(w: World, q: SimPlayer, amount: number, by: SimPlayer | null, kind: HitKind): void {
+export function hurtSurvivor(w: World, q: SimPlayer, amount: number, by: SimPlayer | null, kind: HitKind | 'gas'): void {
   if (q.role !== 'survivor' || (q.health !== Health.Healthy && q.health !== Health.Wounded) || q.hideState === 2) return;
   const zach = by?.role === 'hunter';
-  w.cancelAction(q);
-  if (zach) by.stats.hits++;
+  // Gas (Penjamin) burns away quietly: no flinch, and it doesn't stop what you're doing.
+  const quiet = kind === 'gas';
+  if (!quiet) w.cancelAction(q);
+  if (zach && !quiet) by.stats.hits++;
   // A mini-shield bar soaks up damage before health does.
   const soaked = Math.min(q.shield, amount);
   q.shield -= soaked;
   q.hp = Math.max(0, q.hp - (amount - soaked));
-  w.emit('all', { k: 'hit', victim: q.id, by: by?.id ?? 0, x: Math.round(q.move.x), y: Math.round(q.move.y), w: kind });
+  if (!quiet) w.emit('all', { k: 'hit', victim: q.id, by: by?.id ?? 0, x: Math.round(q.move.x), y: Math.round(q.move.y), w: kind });
   if (q.hp > 0.001) {
     q.health = Health.Wounded;
-    if (zach) q.move.hasteT = BALANCE.survivor.hitHasteTime;
+    if (zach && !quiet) q.move.hasteT = BALANCE.survivor.hitHasteTime;
     return;
   }
+  if (quiet) w.cancelAction(q);
   q.hp = 0;
   q.health = Health.Downed;
   q.move.hasteT = 0;

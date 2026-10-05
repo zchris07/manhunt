@@ -28,9 +28,13 @@ export interface VisionEffects {
   time: number;
   flicker: number;
   damage: number;
+  /** How bright the unlit fog of war is, as a fraction of normal (0 = pitch black). */
+  fog?: number;
 }
 
 const MASK_SCALE = 0.5;
+/** Brightness of the unlit fog of war. */
+const FOG = 0.4;
 /**
  * Own light, by absolute distance (world units): the beam never ends before it hits
  * something, but it is brightest close up. [max distance, added intensity].
@@ -90,7 +94,7 @@ export class VisionRenderer {
       uFlicker: { value: 1, type: 'f32' },
       uDamage: { value: 0, type: 'f32' },
       uSaturation: { value: GRADE.saturation, type: 'f32' },
-      uFog: { value: 0.4, type: 'f32' },
+      uFog: { value: FOG, type: 'f32' },
       uTint: { value: new Float32Array(GRADE.tint), type: 'vec3<f32>' },
     });
     this.visionFilter = new Filter({
@@ -192,6 +196,7 @@ export class VisionRenderer {
     u.uTime = fx.time;
     u.uFlicker = fx.flicker;
     u.uDamage = fx.damage;
+    u.uFog = FOG * (fx.fog ?? 1);
   }
 
   destroy(): void {

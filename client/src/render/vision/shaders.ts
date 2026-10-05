@@ -98,7 +98,7 @@ void main(void)
 
     float lum = dot(scene.rgb, vec3(0.299, 0.587, 0.114));
     // Fog of war: colourless, dim, slightly cold.
-    vec3 fog = vec3(lum) * uFog * vec3(0.94, 0.98, 1.0) + vec3(0.006);
+    vec3 fog = (vec3(lum) * vec3(0.94, 0.98, 1.0) + vec3(0.015)) * uFog;
     vec3 lit = gradeLit(scene.rgb) * (vis * 1.45) * uFlicker;
     vec3 col = mix(fog, max(lit, fog), smoothstep(0.02, 0.3, vis));
 

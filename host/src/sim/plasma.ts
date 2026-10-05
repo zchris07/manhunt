@@ -4,6 +4,7 @@ import type { World } from './World';
 import { nearbyDoor } from './interact';
 import { hurtHunter, hurtSurvivor } from './combat';
 import { addItem } from './inventory';
+import { placeDrop } from './items';
 import { Chaser } from './nav';
 import type { ItemHit, NpcTarget } from './npc';
 
@@ -33,8 +34,11 @@ export class Plasma implements NpcTarget {
   target = 0;
   /** Seconds since the last punch landed (drives the punch animation). */
   punchAge = 9;
-  readonly solid = true;
   readonly given = new Set<number>();
+  alive = true;
+  /** Hits taken in beast form: from survivors' items, and from Zach (a heavy swing is 2). */
+  survivorHits = 0;
+  zachHits = 0;
   private modeT = 1;
   private heading = 0;
   private stuckT = 0;
@@ -61,6 +65,10 @@ export class Plasma implements NpcTarget {
     this.facing = this.heading;
   }
 
+  get solid(): boolean {
+    return this.alive;
+  }
+
   get raging(): boolean {
     return this.mode === 'transform' || this.mode === 'rage';
   }
@@ -78,7 +86,7 @@ export class Plasma implements NpcTarget {
   }
 
   canTalk(p: SimPlayer): boolean {
-    if (this.beast || this.given.has(p.id)) return false;
+    if (!this.alive || this.beast || this.given.has(p.id)) return false;
     if (p.role === 'survivor' && p.health !== Health.Healthy && p.health !== Health.Wounded) return false;
     if (p.role === 'hunter' && (p.carrying || p.knockT > 0)) return false;
     return Math.hypot(p.move.x - this.x, p.move.y - this.y) < P.reach;
@@ -103,22 +111,34 @@ export class Plasma implements NpcTarget {
     }
   }
 
-  /** A survivor's item or Zach's pump. */
+  /** A survivor's item or Zach's pump (which counts as a light hit). */
   itemHit(by: SimPlayer, kind: ItemHit): void {
-    this.attacked(by, kind === 'bottle' ? P.bottleStun : P.shotStun);
+    this.attacked(by, kind === 'bottle' ? P.bottleStun : P.shotStun, 1);
   }
 
-  /** Zach's machete. */
-  slashHit(h: SimPlayer): void {
+  /** Zach's machete or lunge: a heavy swing counts twice. */
+  slashHit(h: SimPlayer, power = 1): void {
     h.stats.hits++;
-    this.attacked(h, P.slashStun);
+    this.attacked(h, P.slashStun, power);
   }
 
-  private attacked(by: SimPlayer, stun: number): void {
-    this.hurtT = 0.3;
+  /** Penjamin: it sets him off like an attack, but doesn't hurt him. */
+  provoke(by: SimPlayer): void {
+    this.attacked(by, 0, 0);
+  }
+
+  private attacked(by: SimPlayer, stun: number, damage: number): void {
+    if (!this.alive) return;
+    this.hurtT = damage > 0 ? 0.3 : this.hurtT;
     if (this.beast) {
-      // Already raging: it only stuns him (and he flinches).
-      this.stunT = Math.max(this.stunT, stun);
+      // Already raging: it stuns him (and he flinches). In beast form he can be hurt.
+      if (stun > 0) this.stunT = Math.max(this.stunT, stun);
+      // Only the beast can be hurt (not while he's still changing).
+      if (damage > 0 && this.mode !== 'transform') {
+        if (by.role === 'hunter') this.zachHits = Math.min(P.zachHits, this.zachHits + damage);
+        else this.survivorHits = Math.min(P.survivorHits, this.survivorHits + damage);
+        if (this.zachHits >= P.zachHits || this.survivorHits >= P.survivorHits) this.die(by);
+      }
       return;
     }
     // GAMER RAGE.
@@ -135,6 +155,18 @@ export class Plasma implements NpcTarget {
     w.feed(`${by.name} made Plasma.TTV rage`);
   }
 
+  /** Slain (beast form only): he drops his golden pump. */
+  private die(by: SimPlayer): void {
+    const w = this.w;
+    this.alive = false;
+    this.mode = 'idle';
+    this.target = 0;
+    this.moving = false;
+    this.stunT = 0;
+    placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Shotgun, golden: true, amount: BALANCE.items.golden.shells }, this.x + Math.cos(this.facing) * 26, this.y + Math.sin(this.facing) * 26);
+    w.feed(`${by.name} slew Plasma.TTV. His golden pump is on the ground`);
+  }
+
   private say(text: string): void {
     this.w.emit(this.w.near(this.x, this.y, BALANCE.net.maxSensingRadius), { k: 'npc', who: 'plasma', say: text });
   }
@@ -148,11 +180,13 @@ export class Plasma implements NpcTarget {
     if (this.hurtT > 0) st |= PlasmaFlag.Hurt;
     if (this.gasT > 0) st |= PlasmaFlag.Blind;
     if (this.punchAge < 0.3) st |= PlasmaFlag.Punching;
+    if (!this.alive) st |= PlasmaFlag.Dead;
     const progress = this.mode === 'transform' ? 1 - this.modeT / P.transformTime : this.mode === 'revert' ? 1 - this.modeT / 1 : 0;
-    return quantizeEntity(this.id, EntityKind.Plasma, this.x, this.y, this.facing, st, Math.round(Math.max(0, Math.min(1, progress)) * 255), 0, this.moving ? 1 : 0, 0);
+    return quantizeEntity(this.id, EntityKind.Plasma, this.x, this.y, this.facing, st, Math.round(Math.max(0, Math.min(1, progress)) * 255), this.survivorHits | (this.zachHits << 4), this.moving ? 1 : 0, 0);
   }
 
   unstick(): void {
+    if (!this.alive) return;
     resolveOverlaps(this.w.geo, this, this.radius);
   }
 
@@ -172,6 +206,7 @@ export class Plasma implements NpcTarget {
 
   update(dt: number): void {
     const w = this.w;
+    if (!this.alive) return;
     this.hurtT = Math.max(0, this.hurtT - dt);
     this.gasT = Math.max(0, this.gasT - dt);
     this.punchCd = Math.max(0, this.punchCd - dt);

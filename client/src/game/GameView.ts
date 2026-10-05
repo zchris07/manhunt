@@ -5,11 +5,13 @@ import {
   Btn,
   EF,
   EntityKind,
+  DIZZY_BIT,
   GOLDEN_BIT,
   Gait,
   Health,
   INV_SLOTS,
   JadenFlag,
+  PlasmaFlag,
   SextonFlag,
   ShaneFlag,
   TICK_DT,
@@ -81,6 +83,11 @@ export class GameView {
   private readonly particles: Particles;
   private shake = 0;
   private zoomK = 0;
+  /** Penjamin's darkness, eased in and out (0-1). */
+  private darkK = 0;
+  /** The screen reach last reported to the host (Penjamin's range), and when. */
+  private sentReach = 0;
+  private sentReachAt = 0;
   private xrayK = 0;
   private lastReveal = 0;
   private doorVersion = -1;
@@ -196,6 +203,7 @@ export class GameView {
       // Right click lunges; F fires the Soundcloud Burst.
       if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
       if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
+      if (inp.isDown('Space') || L('Space')) b |= Btn.Vape;
       // Hold left click to charge the swipe, release to strike.
       const s = this.self;
       const now = performance.now();
@@ -357,6 +365,9 @@ export class GameView {
         a.oneShot('boom', Math.max(0.15, near(e.x, e.y, 1400)));
         this.particles.burst(e.x, e.y, 18, { speed: 160, life: 0.5, tint: 0xe8dcc0, size: 1.1 });
         break;
+      case 'vape':
+        this.overlays.addVape(e.x, e.y, e.a, e.r, now);
+        break;
       case 'wazSlain':
         this.hud.flashImage('ui.wazSlain', BALANCE.items.flashTime * 1000, BALANCE.items.flashTime * 300);
         a.oneShot('boom', 1);
@@ -460,9 +471,7 @@ export class GameView {
         ? s.pump > 0
           ? 255
           : Math.round((charging || (performance.now() < this.swingUntil ? this.charge : 0)) * 254)
-        : held
-          ? held.kind | (held.golden ? GOLDEN_BIT : 0)
-          : 0;
+        : (held ? held.kind | (held.golden ? GOLDEN_BIT : 0) : 0) | (s.vapeT > 0 ? DIZZY_BIT : 0);
     return { id: s.id, x: this.renderPos.x, y: this.renderPos.y, facing: this.lastAim, state, action: s.action, extra: s.role === 1 ? 0 : Math.round(s.shield * 255), aux, hp: s.hp * 255 };
   }
 
@@ -558,7 +567,7 @@ export class GameView {
         hunter: this.roleIsHunter,
         downed: s.health === Health.Downed,
         hidden: s.hideState === 2 && s.hideSpot >= 0 ? c.match!.map.hidingSpots[s.hideSpot] : null,
-        coneMul: (s.gogglesOn ? BALANCE.items.goggles.coneMul : 1) * (s.fovMul || 1),
+        coneMul: (s.gogglesOn ? BALANCE.items.goggles.coneMul : 1) * (s.fovMul || 1) * (1 - BALANCE.hunter.vape.coneCut * this.darkK),
         proxMul: s.fovMul || 1,
         xray: 0,
       };
@@ -566,6 +575,10 @@ export class GameView {
     // See-through light fades in over 0.75 s and out in 1/6 s; the Hemp Battery zooms out over 1 s.
     this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt / BALANCE.xray.fadeOut);
     viewer.xray = this.xrayK;
+    // Penjamin: the beam narrows and the dark goes pitch black, easing in and out.
+    const VP = BALANCE.hunter.vape;
+    const darkOn = !spect && s.role === 0 && s.darkT > 0;
+    this.darkK = darkOn ? Math.min(1, this.darkK + dt / VP.darkEase) : Math.max(0, this.darkK - dt / VP.darkEase);
     this.zoomK = hemp && viewer.hunter ? Math.min(1, this.zoomK + dt) : Math.max(0, this.zoomK - dt);
 
     const ws = snap.worldState;
@@ -631,7 +644,7 @@ export class GameView {
       ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
       ['waz', EntityKind.Waz, BALANCE.npcLight],
     ] as const) {
-      const n = ents.find((e) => e.kind === kind);
+      const n = ents.find((e) => e.kind === kind && !(kind === EntityKind.Plasma && e.state & PlasmaFlag.Dead));
       if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });
     }
     // Chris Zelley's ambulance glows faintly on both sides (he carries his own faint light too).
@@ -648,6 +661,16 @@ export class GameView {
         static: true,
       });
     }
+    // Zach: tell the host how far his screen reaches (to its farthest corner, with the camera's
+    // look-ahead), so Penjamin's gas always runs past the edge of it.
+    if (this.roleIsHunter && !spect) {
+      const reach = Math.round(Math.hypot(vw, vh) / 2 + 260 * 0.22);
+      if (Math.abs(reach - this.sentReach) > this.sentReach * 0.03 && now - this.sentReachAt > 250) {
+        this.sentReach = reach;
+        this.sentReachAt = now;
+        c.send({ t: 'view', r: reach });
+      }
+    }
     const sources = this.sources.build(viewer, lights, Math.hypot(vw, vh) / 2);
     sources.reveal = ws.reveal;
     this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources, z);
@@ -663,7 +686,8 @@ export class GameView {
     // Screen effects.
     this.damage = Math.max(0, this.damage - dt * 1.4);
     const flicker = 0.975 + 0.025 * Math.sin(this.time * 2.3) * Math.sin(this.time * 5.7);
-    this.vision.setEffects({ time: this.time, flicker, damage: this.damage + (s.health === Health.Downed && !spect ? 0.3 : 0) });
+    const ease = this.darkK * this.darkK * (3 - 2 * this.darkK);
+    this.vision.setEffects({ time: this.time, flicker, damage: this.damage + (s.health === Health.Downed && !spect ? 0.3 : 0), fog: 1 - ease });
 
     // Senses overlay.
     const auras: { x: number; y: number }[] = [];

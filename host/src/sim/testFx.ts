@@ -3,6 +3,7 @@ import type { SimPlayer } from './player';
 import type { World } from './World';
 import { bookHit, stunHunter } from './items';
 import { downHunter } from './combat';
+import { spawnVape, vapeSurvivor } from './vape';
 
 const I = BALANCE.items;
 
@@ -55,6 +56,11 @@ export function playTestFx(w: World, p: SimPlayer, fx: TestFx): void {
     case 'gas':
       w.gases.push({ id: w.allocEntityId(), x: p.move.x, y: p.move.y, age: 0 });
       w.emit(w.near(p.move.x, p.move.y, BALANCE.net.maxSensingRadius), { k: 'gas', x: Math.round(p.move.x), y: Math.round(p.move.y) });
+      break;
+    case 'vape':
+      // Zach: a cloud from where he stands; a survivor: caught in one, point blank.
+      if (zach) spawnVape(w, p, p.facing);
+      else vapeSurvivor(p, 1);
       break;
     case 'down':
       // Zach knocked out cold (as by Plasma: no lasting slowdown); a survivor flinches.

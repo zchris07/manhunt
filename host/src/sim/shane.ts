@@ -212,7 +212,8 @@ export class Shane implements NpcTarget {
     if (this.mode === 'chase') {
       const t = w.players.get(this.target);
       this.chaseT -= dt;
-      const zachNear = w.order.some((h) => h.role === 'hunter' && h.health !== Health.Eliminated && Math.hypot(h.move.x - this.x, h.move.y - this.y) < S.hunterBreakRadius);
+      // Zach coming close ends a chase, unless Zach is the one being chased (Jaden, provoked).
+      const zachNear = t?.role !== 'hunter' && w.order.some((h) => h.role === 'hunter' && h.health !== Health.Eliminated && Math.hypot(h.move.x - this.x, h.move.y - this.y) < S.hunterBreakRadius);
       if (!t || !this.eligible(t) || this.chaseT <= 0 || zachNear || Math.hypot(t.move.x - this.x, t.move.y - this.y) > S.loseRadius) {
         this.endChase('walk');
         this.announce(false);

@@ -21,6 +21,8 @@ export const Btn = {
   Lunge: 1 << 7,
   /** G: drop one of the selected item for a teammate (survivors). */
   Drop: 1 << 8,
+  /** Space (Zach): Penjamin. */
+  Vape: 1 << 9,
 } as const;
 
 export interface InputCmd {

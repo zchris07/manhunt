@@ -43,6 +43,11 @@ export class Overlays {
   private readonly scentSprites: Sprite[] = [];
   private breaths: Mark[] = [];
   private bursts: Wave[] = [];
+  /** Penjamin clouds (drawn above the vision mask: Zach sees the gas run to the edge of his screen). */
+  private readonly vapeG = new Graphics();
+  private readonly vapeLayer = new Container();
+  private readonly vapeSprites: Sprite[] = [];
+  private vapes: { x: number; y: number; a: number; r: number; born: number }[] = [];
 
   constructor(
     private readonly assets: AssetManager,
@@ -52,7 +57,98 @@ export class Overlays {
     this.rings.blendMode = 'add';
     this.aurora.blendMode = 'add';
     this.scentRoot.addChild(this.aurora, this.scentLayer);
-    this.senses.addChild(this.g, this.rings);
+    this.senses.addChild(this.vapeLayer, this.vapeG, this.g, this.rings);
+  }
+
+  /** Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */
+  addVape(x: number, y: number, a: number, r: number, now: number): void {
+    this.vapes.push({ x, y, a, r, born: now });
+  }
+
+  /**
+   * Penjamin's gas, built like the galaxy gas: soft lumpy puffs (the shared `fx.puff`
+   * texture) billowing out along a narrow cone, each one swelling as the front reaches it,
+   * curling and drifting on, bigger and thinner the farther out it is, with a warm glow layer
+   * on top and a faint shimmer of droplets. It rolls out in 0.6 s, hangs, then fades away.
+   */
+  private drawVapes(now: number): void {
+    const V = BALANCE.hunter.vape;
+    const g = this.vapeG;
+    g.clear();
+    const life = (V.growTime + V.lingerTime + V.fadeTime) * 1000;
+    this.vapes = this.vapes.filter((v) => now - v.born < life);
+    const half = (V.halfAngleDeg * Math.PI) / 180;
+    let used = 0;
+    const puff = (variant: number, glow: boolean): Sprite => {
+      let sp = this.vapeSprites[used];
+      if (!sp) {
+        sp = new Sprite(this.assets.getTexture('fx.puff', used % 3));
+        sp.anchor.set(0.5);
+        this.vapeSprites.push(sp);
+        this.vapeLayer.addChild(sp);
+      }
+      used++;
+      sp.texture = this.assets.getTexture('fx.puff', variant % 3);
+      sp.blendMode = glow ? 'add' : 'normal';
+      sp.visible = true;
+      return sp;
+    };
+    for (const v of this.vapes) {
+      const age = (now - v.born) / 1000;
+      const k = Math.min(1, age / V.growTime);
+      const ext = v.r * (1 - (1 - k) * (1 - k));
+      const fade = Math.max(0, Math.min(1, (V.growTime + V.lingerTime + V.fadeTime - age) / V.fadeTime));
+      const dx = Math.cos(v.a);
+      const dy = Math.sin(v.a);
+      // Puffs packed along the cone (more of them where it's wider).
+      const n = Math.ceil(v.r / 16);
+      for (let i = 0; i < n; i++) {
+        const h1 = Math.sin(i * 12.9898 + v.born * 0.0013) * 43758.5453;
+        const r1 = h1 - Math.floor(h1);
+        const h2 = Math.sin(i * 78.233 + v.born * 0.0007) * 12345.6789;
+        const r2 = h2 - Math.floor(h2);
+        const u = Math.pow((i + r1 * 0.8) / n, 0.9);
+        const base = u * v.r;
+        if (base > ext) continue;
+        // When the front passed this spot: the puff swells from there.
+        const reached = V.growTime * (1 - Math.sqrt(Math.max(0, 1 - base / v.r)));
+        const since = Math.max(0, age - reached);
+        const grow = 1 - Math.exp(-since * 5);
+        // It keeps rolling outward a little and curls side to side.
+        const d = base + since * (14 + 18 * u);
+        const width = Math.tan(half) * Math.max(d, 30);
+        const side = (r2 * 2 - 1) * width * 0.7 + Math.sin(age * (0.8 + r1) + i * 1.9) * width * 0.22;
+        const px = v.x + dx * d - dy * side;
+        const py = v.y + dy * d + dx * side;
+        const falloff = 1 - 0.7 * u;
+        const size = ((14 + width * 0.9) / 48) * (0.55 + 0.45 * grow) * (1 + since * 0.05);
+        const body = puff(i, false);
+        body.position.set(px, py);
+        body.scale.set(size);
+        body.rotation = r1 * 6.28 + age * (r2 - 0.5) * 0.8;
+        body.tint = i % 4 === 0 ? 0xf2e6a0 : i % 3 === 0 ? 0xc8b040 : 0xdccb5a;
+        body.alpha = 0.34 * falloff * fade * (0.4 + 0.6 * grow);
+        if (i % 2 === 0) {
+          const glow = puff(i + 1, true);
+          glow.position.set(px + Math.sin(age * 1.7 + i) * 4, py + Math.cos(age * 1.3 + i) * 4);
+          glow.scale.set(size * 0.7);
+          glow.rotation = -body.rotation;
+          glow.tint = 0xfff0a0;
+          glow.alpha = 0.16 * falloff * fade * grow;
+        }
+      }
+      // A faint shimmer of droplets catching the light.
+      for (let i = 0; i < Math.ceil(v.r / 40); i++) {
+        const h = Math.sin(i * 43.17 + v.born * 0.002) * 9631.7;
+        const r = h - Math.floor(h);
+        const d = ((i + 0.5) / Math.ceil(v.r / 40)) * v.r + age * 20;
+        if (d > ext) continue;
+        const side = (r * 2 - 1) * Math.tan(half) * d * 0.8;
+        const tw = 0.5 + 0.5 * Math.sin(age * 6 + i * 2.3);
+        g.circle(v.x + dx * d - dy * side, v.y + dy * d + dx * side, 1.2 + r).fill({ color: 0xfffbd0, alpha: 0.5 * tw * fade * (1 - d / v.r) });
+      }
+    }
+    for (let i = used; i < this.vapeSprites.length; i++) this.vapeSprites[i].visible = false;
   }
 
   /** New scent points: x, y, kind (0 scent, 1 blood), age in tenths of a second, owner. */
@@ -180,6 +276,8 @@ export class Overlays {
       const pulse = 0.5 + 0.5 * Math.sin(now / 180);
       g.circle(a.x, a.y, 22 + pulse * 6).stroke({ width: 3, color: 0xff3a5a, alpha: 0.55 + pulse * 0.3 });
     }
+
+    this.drawVapes(now);
 
     // Scent: smoke wisps. Blood: red puffs that swell, drift and slowly fade away.
     this.scent = this.scent.filter((s) => now - s.born < SCENT_LIFE);

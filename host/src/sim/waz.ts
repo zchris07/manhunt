@@ -70,11 +70,13 @@ export class Waz implements NpcTarget {
   }
 
   /** Zach's machete or lunge: three and he's slain; until then he bolts. */
-  hit(h: SimPlayer): void {
+  hit(h: SimPlayer, harm = true): void {
     if (!this.alive) return;
-    h.stats.hits++;
-    this.hurtT = 0.35;
-    this.hp--;
+    if (harm) {
+      h.stats.hits++;
+      this.hurtT = 0.35;
+      this.hp--;
+    }
     if (this.hp <= 0) {
       this.slay(h);
       return;

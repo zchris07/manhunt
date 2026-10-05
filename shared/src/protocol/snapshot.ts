@@ -79,6 +79,10 @@ export interface SelfState {
   fovMul: number;
   /** Survivor: mini-shield bar, 0 to 1 (a full extra bar). */
   shield: number;
+  /** Survivor: seconds left dizzy from Penjamin, and of its darkness. Zach: Penjamin cooldown. */
+  vapeT: number;
+  darkT: number;
+  vapeCd: number;
 }
 
 /**
@@ -156,6 +160,9 @@ export function emptySelf(id = 0): SelfState {
     bookT: 0,
     fovMul: 1,
     shield: 0,
+    vapeT: 0,
+    darkT: 0,
+    vapeCd: 0,
   };
 }
 
@@ -242,6 +249,7 @@ export const PlasmaFlag = {
   Hurt: 16,
   Blind: 32,
   Punching: 64,
+  Dead: 128,
 } as const;
 
 /**
@@ -460,6 +468,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
   w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
+  w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd));
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -531,6 +540,9 @@ function readSelf(r: ByteReader): SelfState {
   s.bookT = r.u16() / 10;
   s.fovMul = r.u16() / 1000;
   s.shield = r.u8() / 255;
+  s.vapeT = r.u16() / 10;
+  s.darkT = r.u16() / 10;
+  s.vapeCd = r.u16() / 10;
   return s;
 }
 
