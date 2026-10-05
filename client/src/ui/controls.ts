@@ -20,7 +20,7 @@ export const HUNTER_CONTROLS: [string, string][] = [
   ['Left mouse', 'Machete (hold to charge)'],
   ['Right mouse', 'Lunge'],
   ['F', 'Soundcloud Burst'],
-  ['Q', 'Hemp Battery'],
+  ['Q', 'Hemp Battery (hold)'],
   ['Space', 'Penjamin (vape gas)'],
   ['E', 'Interact'],
   ['M', 'Map'],

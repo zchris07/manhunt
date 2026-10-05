@@ -150,6 +150,14 @@ export interface MapParams {
   stakes: number;
 }
 
+/** A creepy note lying in the world: static, can't be picked up, and `id` picks its picture. */
+export interface NoteDef {
+  id: number;
+  x: number;
+  y: number;
+  angle: number;
+}
+
 export interface MapData {
   params: MapParams;
   width: number;
@@ -175,6 +183,7 @@ export interface MapData {
   hidingSpots: HidingSpotDef[];
   loot: LootSpawnDef[];
   stakes: StakeDef[];
+  notes: NoteDef[];
   barricades: BarricadeDef[];
   doors: DoorDef[];
   gate: GateDef;

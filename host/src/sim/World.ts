@@ -11,6 +11,7 @@ import {
   Rng,
   TICK_DT,
   hunterHealthMul,
+  hunterStakeMul,
   newMoveState,
   resolveOverlaps,
   stepMovement,
@@ -431,7 +432,7 @@ export class World {
     const role = p.role === 'hunter' ? 'hunter' : 'survivor';
     const fromX = p.move.x;
     const fromY = p.move.y;
-    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) : 1), carrying: p.carrying > 0 }, this.geo, TICK_DT);
+    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) * hunterStakeMul(p.stakeBuff) : 1), carrying: p.carrying > 0 }, this.geo, TICK_DT);
     p.gait = p.move.mode === MoveMode.Locked ? Gait.Idle : gait;
     if (p.role === 'hunter') {
       const lunging = p.move.lungeT > 0 || (p.wasLunging && Math.hypot(p.move.x - fromX, p.move.y - fromY) > 0);

@@ -200,6 +200,7 @@ export class MapRenderer {
       this.low.add(this.sprite(id, 0, h.x, h.y, h.kind === 'barrel' ? 0.85 : 1, rot), h.x, h.y);
     }
     for (const st of m.stakes) this.low.add(this.sprite('obj.stake', 0, st.x, st.y, 1, (st.x + st.y) % 6.28), st.x, st.y);
+    for (const n of m.notes) this.low.add(this.sprite('obj.note', 0, n.x, n.y, 1, n.angle), n.x, n.y);
   }
 
   /**

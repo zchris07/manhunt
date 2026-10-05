@@ -18,6 +18,7 @@ import {
   type LootKind,
   type LootSpawnDef,
   type MapData,
+  type NoteDef,
   type MapParams,
   type Rect,
   type RockDef,
@@ -782,6 +783,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     hidingSpots: hidingSpots.filter((h) => h.kind === 'grass' || !nearEntrance(h.x, h.y, ENTRANCE_CLEAR)).map((h, id) => ({ id, ...h })),
     loot: [],
     stakes: stakes.map((s, id) => ({ id, ...s })),
+    notes: [],
     barricades,
     doors,
     gate: { ...wh.gate, dyn: gateDyn },
@@ -861,6 +863,32 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       }
       if (placed) break;
     }
+  }
+  // Notes: one creepy photo each, left beside the paths where anyone can find them. They use
+  // their own random stream so nothing else on the map shifts.
+  {
+    const nr = rng.fork(10);
+    const notes: NoteDef[] = [];
+    for (let tries = 0; tries < 4000 && notes.length < BALANCE.notes.count; tries++) {
+      const path = paths[nr.int(0, paths.length - 1)];
+      const n = path.points.length / 2;
+      if (n < 2) continue;
+      const i = nr.int(0, n - 2);
+      const t = nr.range(0, 1);
+      const px = path.points[i * 2] + (path.points[i * 2 + 2] - path.points[i * 2]) * t;
+      const py = path.points[i * 2 + 1] + (path.points[i * 2 + 3] - path.points[i * 2 + 1]) * t;
+      const a = Math.atan2(path.points[i * 2 + 3] - path.points[i * 2 + 1], path.points[i * 2 + 2] - path.points[i * 2]) + (nr.chance(0.5) ? 1 : -1) * Math.PI / 2;
+      const off = path.width / 2 + nr.range(30, 70);
+      const x = px + Math.cos(a) * off;
+      const y = py + Math.sin(a) * off;
+      if (x < 300 || y < 300 || x > W - 300 || y > W - 300) continue;
+      if (overlapsCollider(world.geo, x, y, 28) || !lakeClear(x, y, 60) || inRect(warehouse, x, y, 40)) continue;
+      if (Math.hypot(spawn.x - x, spawn.y - y) < 500 || Math.hypot(hunterClearing.x - x, hunterClearing.y - y) < 500) continue;
+      if (notes.some((q) => Math.hypot(q.x - x, q.y - y) < BALANCE.notes.spacing)) continue;
+      if (loot.some((l) => Math.hypot(l.x - x, l.y - y) < 90) || Math.hypot(ambulance.x - x, ambulance.y - y) < 260) continue;
+      notes.push({ id: notes.length, x, y, angle: nr.range(0, Math.PI * 2) });
+    }
+    partial.notes = notes;
   }
   partial.loot = loot;
   partial.surface = buildSurface(partial);

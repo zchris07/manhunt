@@ -118,6 +118,15 @@ export class Hud {
   /** A picture flashed over the screen (book hit, slaying Waz). */
   private readonly flash: HTMLElement;
   private flashTimer = 0;
+  /** A note (an old photo on yellowed paper), full screen until clicked away. */
+  private readonly noteView: HTMLElement;
+  private readonly onNoteKey = (e: KeyboardEvent): void => {
+    if (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.hideNote();
+    }
+  };
   private editor: HTMLElement | null = null;
 
   constructor(
@@ -147,6 +156,13 @@ export class Hud {
     parent.appendChild(this.scare);
     this.flash = el('div', 'scare flash', '<img alt="">');
     parent.appendChild(this.flash);
+    this.noteView = el('div', 'note-view', '<div class="note-paper"><img alt=""><i class="note-stains"></i><i class="note-burn"></i></div><div class="note-hint">click to put it down</div>');
+    this.noteView.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.hideNote();
+    });
+    parent.appendChild(this.noteView);
     // Testing mode: a button for every stun and flash effect, played on yourself.
     this.fxPanel = el('div', 'fx-panel', '<div class="fx-title">TEST EFFECTS</div>');
     for (const [fx, label] of FX_BUTTONS) {
@@ -165,6 +181,23 @@ export class Hud {
   private readonly fxPanel: HTMLElement;
 
   /** Covers the screen with a manifest image for `ms`, fading in and out over `fadeMs`. */
+  /** Reading a note: its picture, filtered to look like an old print, fills the screen. */
+  showNote(n: number): void {
+    const url = this.assets.imageUrl(`ui.note.${n}`);
+    if (!url) return;
+    const v = this.noteView;
+    v.querySelector('img')!.src = url;
+    // Each note lies a little differently on the table.
+    (v.querySelector('.note-paper') as HTMLElement).style.setProperty('--tilt', `${((n * 37) % 5) - 2.2}deg`);
+    v.classList.add('on');
+    window.addEventListener('keydown', this.onNoteKey, true);
+  }
+
+  hideNote(): void {
+    this.noteView.classList.remove('on');
+    window.removeEventListener('keydown', this.onNoteKey, true);
+  }
+
   flashImage(imageId: string, ms: number, fadeMs: number, cls = ''): void {
     const url = this.assets.imageUrl(imageId);
     if (!url) return;
@@ -356,7 +389,7 @@ export class Hud {
       machete.icon.classList.add('rot');
       slot('RMB', 'Lunge', '', 'ability lunge');
       slot('F', 'Soundcloud Burst', '', 'ability burst');
-      slot('Q', 'Hemp Battery', 'item.hemp', 'ability');
+      slot('Q', 'Hemp Battery (hold)', 'item.hemp', 'ability');
       slot('Space', 'Penjamin', '', 'ability vape');
     }
   }
@@ -420,7 +453,7 @@ export class Hud {
           (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
-          (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempT.toFixed(1)}s`}</div>` : '') +
+          (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempLeft.toFixed(1)}s`}</div>` : '') +
           (self.gassed ? '<div class="purple">IN GALAXY GAS: slowed</div>' : '') +
           (self.immuneT > 0 && self.stunT <= 0 ? `<div class="dim">Stun immune ${self.immuneT.toFixed(1)}s</div>` : '');
       } else {
@@ -536,7 +569,7 @@ export class Hud {
       set(this.slots[1], { on: charges > 0, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
       set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
       set(this.slots[4], { on: self.vapeCd <= 0, count: self.vapeCd > 0 ? `${Math.ceil(self.vapeCd)}s` : '', cd: self.vapeCd / H.vape.cooldown });
-      set(this.slots[3], { on: self.hemp > 0 || self.hempT > 0, count: self.hemp === 2 ? '∞' : self.hempT > 0 ? `${Math.ceil(self.hempT)}s` : '', active: self.hempT > 0, hidden: self.hemp === 0 && self.hempT <= 0 });
+      set(this.slots[3], { on: self.hemp > 0, count: self.hemp === 2 ? '∞' : self.hemp > 0 ? `${Math.ceil(self.hempLeft)}s` : '', meter: self.hemp === 1 ? self.hempLeft / H.hemp.duration : null, active: self.hempT > 0, hidden: self.hemp === 0 });
     }
   }
 
@@ -578,6 +611,8 @@ export class Hud {
     this.editor?.remove();
     this.scare.remove();
     this.flash.remove();
+    this.hideNote();
+    this.noteView.remove();
     this.root.remove();
   }
 }

@@ -194,7 +194,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     }
     speed = (sprint ? H.sprint : H.walk) * ctx.hunterSpeedMul;
     if (ctx.carrying) speed *= H.carrySpeedMul;
-    if (s.hempT > 0) speed *= H.hemp.speedMul;
+    if (s.hempT > 0 && cmd.buttons & Btn.Ability) speed *= H.hemp.speedMul;
     if (s.slowT > 0) speed *= s.slowMul;
     // Climbing through a smashed window is slow.
     if (geo.inBrokenWindow(s.x, s.y, radius + 4)) speed *= H.windowClimbMul;

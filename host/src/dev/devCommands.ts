@@ -1,4 +1,4 @@
-import { Health, ITEM_KIND_MAX, ItemKind, resolveOverlaps } from '@manhunt/shared';
+import { BALANCE, Health, ITEM_KIND_MAX, ItemKind, resolveOverlaps } from '@manhunt/shared';
 import { addItem } from '../sim/inventory';
 import type { World } from '../sim/World';
 
@@ -17,6 +17,16 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       if (q) {
         p.move.x = q.move.x + (args[1] ?? 40);
         p.move.y = q.move.y + (args[2] ?? 0);
+        resolveOverlaps(w.geo, p.move, p.radius);
+      }
+      break;
+    }
+    case 'note': {
+      // Stand beside note n (testing).
+      const n = w.map.notes[args[0] ?? 0];
+      if (n) {
+        p.move.x = n.x + 30;
+        p.move.y = n.y;
         resolveOverlaps(w.geo, p.move, p.radius);
       }
       break;
@@ -43,6 +53,7 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       break;
     case 'hemp':
       p.hemp = 1;
+      p.hempLeft = BALANCE.hunter.hemp.duration;
       break;
     case 'sexton': {
       // Bring Sexton next to this player.

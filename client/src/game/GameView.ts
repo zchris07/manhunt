@@ -2,6 +2,7 @@ import { Container, Graphics, type Application } from 'pixi.js';
 import {
   Action,
   BALANCE,
+  DEG,
   Btn,
   EF,
   EntityKind,
@@ -89,6 +90,8 @@ export class GameView {
   private sentReach = 0;
   private sentReachAt = 0;
   private xrayK = 0;
+  /** The see-through light being faded is the Hemp Battery's: it fades out as slowly as it fades in. */
+  private xrayHemp = false;
   private lastReveal = 0;
   private doorVersion = -1;
   private swingUntil = 0;
@@ -117,6 +120,15 @@ export class GameView {
     this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow);
     this.entities.bubbleCheck = (x, y) => Math.hypot(x - this.renderPos.x, y - this.renderPos.y) < 360 && m.mw.geo.hasLineOfSight(this.renderPos.x, this.renderPos.y, x, y);
     o.app.stage.addChild(this.viewport, this.senses);
+
+    // Decode the flash pictures now so they fade in smoothly the first time, not pop in late.
+    for (const id of ['ui.wazSlain', ...Array.from({ length: BALANCE.items.book.images }, (_, i) => `ui.book.${i}`)]) {
+      const url = o.assets.imageUrl(id);
+      if (!url) continue;
+      const im = new Image();
+      im.src = url;
+      void im.decode().catch(() => undefined);
+    }
 
     this.vision = new VisionRenderer(o.app.screen.width, o.app.screen.height);
     this.vision.attach(this.viewport, this.entityViewport);
@@ -187,6 +199,12 @@ export class GameView {
     const s = this.self;
     const fov = s && !this.spectating() ? s.fovMul || 1 : 1;
     return (1 + (HEMP_ZOOM - 1) * e) / fov;
+  }
+
+  /** The Grapes of Wrath and slaying Waz flash a picture the same way: the same length, fading in and out alike. */
+  private flashPicture(imageId: string, cls = ''): void {
+    const ms = BALANCE.items.flashTime * 1000;
+    this.hud.flashImage(imageId, ms, ms * BALANCE.items.flashFade, cls);
   }
 
   private buildCmd(): Omit<InputCmd, 'seq'> {
@@ -356,8 +374,7 @@ export class GameView {
       }
       case 'book': {
         // The Grapes of Wrath hit Zach: a picture over his whole screen.
-        const F = BALANCE.items.flashTime * 1000;
-        this.hud.flashImage(`ui.book.${e.img}`, F, F * 0.3, 'book');
+        this.flashPicture(`ui.book.${e.img}`, 'book');
         this.shake = Math.max(this.shake, 16);
         break;
       }
@@ -368,8 +385,11 @@ export class GameView {
       case 'vape':
         this.overlays.addVape(e.x, e.y, e.a, e.r, now);
         break;
+      case 'note':
+        this.hud.showNote(e.n);
+        break;
       case 'wazSlain':
-        this.hud.flashImage('ui.wazSlain', BALANCE.items.flashTime * 1000, BALANCE.items.flashTime * 300);
+        this.flashPicture('ui.wazSlain');
         a.oneShot('boom', 1);
         break;
       case 'jarvis':
@@ -572,14 +592,19 @@ export class GameView {
         xray: 0,
       };
     }
-    // See-through light fades in over 0.75 s and out in 1/6 s; the Hemp Battery zooms out over 1 s.
-    this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt / BALANCE.xray.fadeOut);
+    // See-through light fades in over 0.75 s and out in 1/6 s; the Hemp Battery zooms out in and out 50% faster than 1 s, and fades out as slowly as in.
+    if (xrayOn) this.xrayHemp = hemp;
+    const xrayOut = this.xrayHemp ? BALANCE.xray.fadeIn : BALANCE.xray.fadeOut;
+    this.xrayK = xrayOn ? Math.min(1, this.xrayK + dt / BALANCE.xray.fadeIn) : Math.max(0, this.xrayK - dt / xrayOut);
     viewer.xray = this.xrayK;
     // Penjamin: the beam narrows and the dark goes pitch black, easing in and out.
     const VP = BALANCE.hunter.vape;
     const darkOn = !spect && s.role === 0 && s.darkT > 0;
+    // Standing in the gas (Penjamin's linger sets this to its top value): its sound loops, fading in and out.
+    this.o.audio.gasLoop(!spect && s.role === 0 && s.vapeT > VP.afterTime - 0.15, 'penjamin', { volume: 0.9 });
     this.darkK = darkOn ? Math.min(1, this.darkK + dt / VP.darkEase) : Math.max(0, this.darkK - dt / VP.darkEase);
-    this.zoomK = hemp && viewer.hunter ? Math.min(1, this.zoomK + dt) : Math.max(0, this.zoomK - dt);
+    const zr = dt * BALANCE.hunter.hemp.zoomRate;
+    this.zoomK = hemp && viewer.hunter ? Math.min(1, this.zoomK + zr) : Math.max(0, this.zoomK - zr);
 
     const ws = snap.worldState;
     this.syncProps(ws);
@@ -661,9 +686,9 @@ export class GameView {
         static: true,
       });
     }
-    // Zach: tell the host how far his screen reaches (to its farthest corner, with the camera's
-    // look-ahead), so Penjamin's gas always runs past the edge of it.
-    if (this.roleIsHunter && !spect) {
+    // Tell the host how far this screen reaches (to its farthest corner, with the camera's look-ahead):
+    // Penjamin's gas runs past the edge of Zach's, and teammates glow for survivors within theirs.
+    if (!spect && s.role !== 2) {
       const reach = Math.round(Math.hypot(vw, vh) / 2 + 260 * 0.22);
       if (Math.abs(reach - this.sentReach) > this.sentReach * 0.03 && now - this.sentReachAt > 250) {
         this.sentReach = reach;
@@ -671,7 +696,21 @@ export class GameView {
         c.send({ t: 'view', r: reach });
       }
     }
+    // Teammates glow faintly: a soft light about each (lit on the ground only where you can see)
+    // and a small bright body disc that shows the teammate through the fog. Downed and staked
+    // survivors also see where each teammate's torch is pointing.
+    const TL = BALANCE.survivor.allyLight;
+    const allies = viewer.hunter ? [] : ents.filter((e) => e.kind === EntityKind.Player && (e.state & EF.Hunter) === 0 && e.id !== (spect ? s.spectating : s.id));
+    for (const e of allies) lights.push({ key: `ally${e.id}`, x: e.x, y: e.y, radius: TL.radius, intensity: TL.intensity, static: false });
     const sources = this.sources.build(viewer, lights, Math.hypot(vw, vh) / 2);
+    for (const e of allies) sources.own.push({ poly: VisionSources.disc(e.x, e.y, TL.body), ox: e.x, oy: e.y, range: TL.body, intensity: TL.bodyIntensity });
+    const seesCones = !spect && s.role === 0 && (s.health === Health.Downed || s.health === Health.Staked);
+    const sv = BALANCE.survivor.vision;
+    this.overlays.setAllyCones(
+      seesCones
+        ? allies.map((e) => this.sources.cone(e.x, e.y, e.facing, sv.coneHalfAngleDeg * DEG * (e.state & EF.Goggles ? BALANCE.items.goggles.coneMul : 1), Math.min(sv.range, Math.hypot(vw, vh) / 2 * 1.05)))
+        : [],
+    );
     sources.reveal = ws.reveal;
     this.vision.renderMask(this.o.app.renderer, cam.x, cam.y, sources, z);
 

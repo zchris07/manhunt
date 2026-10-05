@@ -333,6 +333,10 @@ export function stakeSurvivor(w: World, h: SimPlayer, q: SimPlayer, stakeId: num
   q.stakeCount++;
   q.stakedBy = h.id;
   h.stats.stakes++;
+  // Every survivor staked buffs Zach for good: faster, and he sees further.
+  h.stakeBuff++;
+  h.fovMul *= 1 + BALANCE.hunter.stakeBuff;
+  w.emit([h.id], { k: 'item', text: `Staked ${q.name}: +${Math.round(BALANCE.hunter.stakeBuff * 100)}% speed and view` });
   const stake = w.map.stakes[stakeId];
   if (q.stakeCount >= 2) {
     q.move.x = stake.x;

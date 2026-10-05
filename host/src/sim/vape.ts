@@ -54,7 +54,12 @@ export function tryVape(w: World, h: SimPlayer, aim: number): void {
 
 export function spawnVape(w: World, h: SimPlayer, aim: number): void {
   const range = Math.max(V.minView, Math.min(V.maxView, h.viewReach || V.defaultView)) * V.reachMul;
-  const v: VapeCloud = { id: w.allocEntityId(), x: h.move.x, y: h.move.y, a: aim, range, t0: w.time, by: h.id, provoked: new Set() };
+  spawnVapeAt(w, h.move.x, h.move.y, aim, range, h.id);
+}
+
+/** A cloud from any spot (testing mode rolls one at a survivor from afar). */
+export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number): void {
+  const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set() };
   w.vapes.push(v);
   w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range) });
 }

@@ -100,6 +100,16 @@ export class VisionSources {
     return { own, los, lights: lightPolys, xray };
   }
 
+  /** A wall-clipped cone polygon (origin first), e.g. a teammate's flashlight. */
+  cone(x: number, y: number, dir: number, halfAngle: number, range: number): number[] {
+    return this.vis.compute({ x, y, dir, halfAngle, range }, []);
+  }
+
+  /** A filled disc polygon. */
+  static disc(x: number, y: number, r: number): number[] {
+    return conePolygon(x, y, 0, Math.PI, r);
+  }
+
   get mapData(): MapData {
     return this.map;
   }

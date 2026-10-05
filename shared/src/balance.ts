@@ -71,6 +71,12 @@ export const BALANCE = {
     hitHasteTime: 1.8,
     vision: { coneHalfAngleDeg: 50, range: BEAM_RANGE, proximity: 95 },
     downedVisionMul: 0.6,
+    /**
+     * Teammates on your screen carry a faint light (and are seen by it): `radius` of ground glow
+     * at `intensity`, and a small `body` disc that shows the teammate itself. Downed and staked
+     * survivors also see where every teammate's flashlight points (`coneAlpha`).
+     */
+    allyLight: { radius: 150, intensity: 0.3, body: 40, bodyIntensity: 0.55, coneAlpha: 0.11 },
     /** How far away others notice you moving (bots and hiding only; there is no audio for it). */
     noise: { idle: 0, crouch: 45, walk: 170, run: 430 },
     wiggleTime: 16,
@@ -147,7 +153,9 @@ export const BALANCE = {
      * he's put down (not counting Plasma) takes `downPenalty` more, permanently, up to
      * `downPenaltyMax`.
      */
-    health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 240, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
+    health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 360, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
+    /** Every survivor he puts on a stake buffs his move speed and field of view this much, for good. */
+    stakeBuff: 0.05,
     /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /**
@@ -182,8 +190,8 @@ export const BALANCE = {
       /** How fast the narrowing and darkening ease in and out (client), seconds. */
       darkEase: 0.6,
     },
-    /** Hemp Battery (Q, dropped by Sexton Science). */
-    hemp: { duration: 8, zoomOut: 1.2, speedMul: 1.1 },
+    /** Hemp Battery (hold Q, dropped by Sexton Science): `duration` s of use in all; the zoom is `zoomRate` times as fast as 1 s. */
+    hemp: { duration: 16, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
     /** Speed multiplier while climbing through a smashed window (one swipe smashes it). */
     windowClimbMul: 0.35,
     breakBarricadeTime: 2.2,
@@ -229,6 +237,8 @@ export const BALANCE = {
     shield: { drinkTime: 2, amount: 0.25, max: 1 },
     /** The picture a Grapes of Wrath hit or slaying Waz flashes up: fades in and out within this. */
     flashTime: 0.8,
+    /** Share of `flashTime` each of the fade in and the fade out takes. */
+    flashFade: 0.3,
     /** Bottles fly on until they hit a wall, Zach or an NPC. `zachDamage` is in Zach's hp. */
     bottle: { speed: 760, stun: 1.4, hitRadius: 10, damage: 0.2, zachDamage: 5 },
     /**
@@ -243,7 +253,7 @@ export const BALANCE = {
      * something solid or someone (windows shatter and let it through). Each pellet takes
      * `pelletDamage` of a survivor's health; any pellet on Zach stuns him and blasts him back.
      */
-    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 0.8, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
+    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 2.1, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
     /** Jaden's P250, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
     pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10 },
     /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
@@ -507,8 +517,12 @@ export const BALANCE = {
     stakeStageTime: 60,
   },
 
+  /** Notes: creepy photos lying in the world, `count` of them at least `spacing` apart. */
+  notes: { count: 4, spacing: 900 },
+
   /** Interaction reach (centre-to-centre distance). */
   reach: {
+    note: 64,
     teammate: 70,
     generator: 78,
     gate: 58,
@@ -620,6 +634,11 @@ export const TICK_DT = 1 / BALANCE.net.tickHz;
  * Zach's speed multiplier from his health: 10% slower for every 25% of the bar gone, and 5%
  * slower for good per time he's been put down (at most 20%).
  */
+/** Zach's permanent speed bonus from the survivors he has staked. */
+export function hunterStakeMul(stakes: number): number {
+  return 1 + stakes * BALANCE.hunter.stakeBuff;
+}
+
 export function hunterHealthMul(hp: number, downs: number): number {
   const Hh = BALANCE.hunter.health;
   const steps = Math.floor((1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep + 1e-6);

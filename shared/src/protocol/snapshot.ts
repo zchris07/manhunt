@@ -83,6 +83,10 @@ export interface SelfState {
   vapeT: number;
   darkT: number;
   vapeCd: number;
+  /** Zach: seconds of Hemp Battery left (held Q drains it). */
+  hempLeft: number;
+  /** Zach: survivors staked so far (+5% speed and view each). */
+  stakeBuff: number;
 }
 
 /**
@@ -163,6 +167,8 @@ export function emptySelf(id = 0): SelfState {
     vapeT: 0,
     darkT: 0,
     vapeCd: 0,
+    hempLeft: 0,
+    stakeBuff: 0,
   };
 }
 
@@ -468,7 +474,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
   w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
-  w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd));
+  w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd)).u16(tenths(s.hempLeft)).u8(Math.min(255, s.stakeBuff));
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -543,6 +549,8 @@ function readSelf(r: ByteReader): SelfState {
   s.vapeT = r.u16() / 10;
   s.darkT = r.u16() / 10;
   s.vapeCd = r.u16() / 10;
+  s.hempLeft = r.u16() / 10;
+  s.stakeBuff = r.u8();
   return s;
 }
 

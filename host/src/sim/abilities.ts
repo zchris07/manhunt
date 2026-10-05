@@ -1,4 +1,4 @@
-import { BALANCE, Health, burstSag } from '@manhunt/shared';
+import { BALANCE, Btn, Health, burstSag } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 
@@ -21,18 +21,27 @@ export function tryBurst(w: World, h: SimPlayer, aim: number): void {
   w.emit('all', { k: 'burst', x: Math.round(h.move.x), y: Math.round(h.move.y), a: aim });
 }
 
-/** Hemp Battery (Q): wider view, light through walls and a speed boost for a few seconds. */
-export function tryHemp(w: World, h: SimPlayer): void {
-  if (h.hemp <= 0) return;
-  if (h.hemp === 2 && h.move.hempT > 0) {
-    // Testing mode: Q toggles the infinite battery off again.
-    h.move.hempT = 0;
-    return;
+/**
+ * Hemp Battery (hold Q): wider view, light through walls and a speed boost for as long as Q is
+ * held, until its `duration` seconds of charge run out. `hempT` is only ever 0 or a short
+ * grace, so the buffs are on exactly while it's in use.
+ */
+function updateHemp(w: World, h: SimPlayer, dt: number): void {
+  const holding = (h.lastCmd.buttons & Btn.Ability) !== 0;
+  const live = h.hemp === 2 || h.hempLeft > 0;
+  const on = h.hemp > 0 && live && holding && h.health !== Health.Downed && h.health !== Health.Eliminated;
+  const was = h.move.hempT > 0;
+  h.move.hempT = on ? H.hemp.grace : 0;
+  if (!on) return;
+  if (!was) w.emit('all', { k: 'hemp', by: h.id });
+  if (h.hemp === 1) {
+    h.hempLeft = Math.max(0, h.hempLeft - dt);
+    if (h.hempLeft <= 0) {
+      h.hemp = 0;
+      h.move.hempT = 0;
+      w.emit([h.id], { k: 'item', text: 'Hemp Battery is spent' });
+    }
   }
-  if (h.move.hempT > 0) return;
-  h.move.hempT = H.hemp.duration;
-  if (h.hemp === 1) h.hemp = 0;
-  w.emit('all', { k: 'hemp', by: h.id });
 }
 
 /**
@@ -75,8 +84,14 @@ export function updateAbilities(w: World, dt: number): void {
     if (h.role === 'survivor' && w.testMode && sendNow) sendScent(w, h);
     if (h.role !== 'hunter') continue;
     h.burstCd = Math.max(0, h.burstCd - dt);
-    // Testing mode: the battery never runs down while it's on.
-    if (h.hemp === 2 && h.move.hempT > 0) h.move.hempT = H.hemp.duration;
+    // Testing mode: Zach's abilities never cool down.
+    if (w.testMode) {
+      h.burstCd = 0;
+      h.vapeCd = 0;
+      h.move.lungeCharges = H.lunge.charges;
+      h.move.lungeRecharge = 0;
+    }
+    updateHemp(w, h, dt);
     // The scent is always on.
     if (sendNow && h.health !== Health.Eliminated) sendScent(w, h);
   }

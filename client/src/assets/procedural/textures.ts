@@ -1244,6 +1244,41 @@ export const barrel: CanvasGen = () => {
   return c;
 };
 
+/** A crumpled, yellowed sheet lying on the ground, with a dark photo smudge and a corner of ink. */
+export const note: CanvasGen = () => {
+  const [c, ctx] = canvas(56);
+  shadow(ctx, 30, 32, 17, 12, 0.35);
+  ctx.save();
+  ctx.translate(28, 28);
+  ctx.rotate(-0.18);
+  ctx.beginPath();
+  ctx.moveTo(-15, -11);
+  ctx.lineTo(13, -13);
+  ctx.lineTo(16, 10);
+  ctx.lineTo(-12, 13);
+  ctx.closePath();
+  fillInk(ctx, '#d8c897', 1.2);
+  // Stains and folds.
+  ctx.fillStyle = 'rgba(120,80,30,0.25)';
+  ellipse(ctx, 5, 4, 7, 5, 0.4);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,60,30,0.35)';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(-14, 0);
+  ctx.lineTo(15, -1);
+  ctx.moveTo(0, -12);
+  ctx.lineTo(1, 12);
+  ctx.stroke();
+  // The photo itself, a dark rectangle gone grey.
+  ctx.fillStyle = 'rgba(40,34,28,0.75)';
+  ctx.fillRect(-9, -7, 15, 11);
+  ctx.fillStyle = 'rgba(190,170,130,0.5)';
+  ctx.fillRect(-7, -5, 11, 7);
+  ctx.restore();
+  return c;
+};
+
 export const stake: CanvasGen = () => {
   const [c, ctx] = canvas(76);
   shadow(ctx, 42, 42, 28, 18, 0.35);
@@ -1853,6 +1888,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   bed,
   barrel,
   stake,
+  note,
   gate,
   barricade,
   door,

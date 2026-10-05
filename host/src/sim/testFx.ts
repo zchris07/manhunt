@@ -3,7 +3,7 @@ import type { SimPlayer } from './player';
 import type { World } from './World';
 import { bookHit, stunHunter } from './items';
 import { downHunter } from './combat';
-import { spawnVape, vapeSurvivor } from './vape';
+import { spawnVape, spawnVapeAt } from './vape';
 
 const I = BALANCE.items;
 
@@ -60,7 +60,7 @@ export function playTestFx(w: World, p: SimPlayer, fx: TestFx): void {
     case 'vape':
       // Zach: a cloud from where he stands; a survivor: caught in one, point blank.
       if (zach) spawnVape(w, p, p.facing);
-      else vapeSurvivor(p, 1);
+      else spawnVapeAt(w, p.move.x - Math.cos(p.facing) * 420, p.move.y - Math.sin(p.facing) * 420, p.facing, 900, 0);
       break;
     case 'down':
       // Zach knocked out cold (as by Plasma: no lasting slowdown); a survivor flinches.
