@@ -23,28 +23,19 @@ function lane(): { w: World; d: Driver; h: SimPlayer; s: SimPlayer; c: { x: numb
 }
 
 describe('machete timing', () => {
-  it('a whiff recovers in 0.2 s; a landed hit locks the machete for 0.8 s', () => {
+  it('there is no cooldown between swings, whiff or hit', () => {
     const { d, h, s } = lane();
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(secs(A.windup));
-    expect(A.missCooldown).toBe(0.2);
-    expect(h.attackCd).toBeGreaterThan(0);
-    expect(h.attackCd).toBeLessThanOrEqual(0.2);
-    d.run(secs(0.2));
+    expect(A.missCooldown).toBe(0);
     expect(h.attackCd).toBe(0);
 
     place(s, h.move.x + 60, h.move.y);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(5, (p) => (p === h ? { aim: 0 } : undefined));
     expect(s.hp).toBeCloseTo(2 / 3, 3);
-    expect(A.hitCooldown).toBe(0.8);
-    expect(h.attackCd).toBeGreaterThan(0.5);
-    // Too soon: nothing happens.
-    place(s, h.move.x + 60, h.move.y);
-    d.tap(h.id, Btn.Primary, { aim: 0 });
-    d.run(5, (p) => (p === h ? { aim: 0 } : undefined));
-    expect(s.hp).toBeCloseTo(2 / 3, 3);
-    d.run(secs(0.8));
+    expect(A.hitCooldown).toBe(0);
+    expect(h.attackCd).toBe(0);
     place(s, h.move.x + 60, h.move.y);
     d.tap(h.id, Btn.Primary, { aim: 0 });
     d.run(6, (p) => (p === h ? { aim: 0 } : undefined));

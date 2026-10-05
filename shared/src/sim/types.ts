@@ -125,7 +125,7 @@ export const PROMPT_LABELS: Record<number, string> = {
   21: 'Press E to open the door',
   22: 'Press E to close the door',
   23: 'Press E to talk to Sexton Science',
-  24: 'Press E to take the Hemp Battery',
+  24: 'Press E to take the Hemp Beam',
   27: 'Press E to talk to Chris Zelley',
   28: 'Press E to talk to Marc Cortez',
   29: 'Press E to talk to Plasma.TTV',
@@ -160,15 +160,17 @@ export const ItemKind = {
   BeastBar: 9,
   /** Mini shield: drink it (2 s) for a quarter bar of shield. */
   Shield: 10,
+  /** The 0.50 cal sniper rifle. */
+  Sniper: 11,
 } as const;
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
-export const ITEM_KIND_MAX = 10;
+export const ITEM_KIND_MAX = 11;
 export const INV_SLOTS = 8;
 /** Golden pump flag in a slot or drop byte (item kinds fit in the low 4 bits). */
 export const GOLDEN_BIT = 16;
 /** A survivor's entity `aux`: dizzy in Penjamin gas. */
 export const DIZZY_BIT = 32;
-export const isWeapon = (k: number): boolean => k === ItemKind.Shotgun || k === ItemKind.Pistol;
+export const isWeapon = (k: number): boolean => k === ItemKind.Shotgun || k === ItemKind.Pistol || k === ItemKind.Sniper;
 export const ITEM_NAMES: Record<number, string> = {
   1: 'Bottle',
   2: 'Night vision goggles',
@@ -180,6 +182,7 @@ export const ITEM_NAMES: Record<number, string> = {
   8: 'P250',
   9: 'Mr Beast bar',
   10: 'Mini shield',
+  11: '0.50 cal',
 };
 /** A slot's display name (a golden shotgun is Plasma's golden pump). */
 export const slotName = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'Golden pump' : (ITEM_NAMES[kind] ?? ''));

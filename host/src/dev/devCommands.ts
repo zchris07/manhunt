@@ -51,9 +51,9 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
     case 'jarvis':
       p.jarvis = 1;
       break;
+    case 'beam':
     case 'hemp':
-      p.hemp = 1;
-      p.hempLeft = BALANCE.hunter.hemp.duration;
+      p.beamCharges = BALANCE.hunter.beam.charges;
       break;
     case 'sexton': {
       // Bring Sexton next to this player.

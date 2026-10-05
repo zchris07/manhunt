@@ -1,4 +1,4 @@
-import { BALANCE, Btn, Health, burstSag } from '@manhunt/shared';
+import { BALANCE, Health, burstSag } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { World } from './World';
 
@@ -15,33 +15,49 @@ function hunterAudience(w: World, h: SimPlayer): number[] {
  * jump-scared: their screen is covered for a few seconds.
  */
 export function tryBurst(w: World, h: SimPlayer, aim: number): void {
-  if (h.burstCd > 0) return;
+  if (h.burstCd > 0 || !abilitiesOn(h)) return;
   h.burstCd = H.burst.cooldown;
   w.bursts.push({ x: h.move.x, y: h.move.y, dx: Math.cos(aim), dy: Math.sin(aim), t0: w.time, by: h.id, hit: new Set() });
   w.emit('all', { k: 'burst', x: Math.round(h.move.x), y: Math.round(h.move.y), a: aim });
 }
 
+/** Zach's abilities are all switched off while the Grapes of Wrath has him (and with him knocked out). */
+export function abilitiesOn(h: SimPlayer): boolean {
+  return h.role === 'hunter' && h.abilityLockT <= 0 && h.health !== Health.Eliminated && h.knockT <= 0;
+}
+
 /**
- * Hemp Battery (hold Q): wider view, light through walls and a speed boost for as long as Q is
- * held, until its `duration` seconds of charge run out. `hempT` is only ever 0 or a short
- * grace, so the buffs are on exactly while it's in use.
+ * Hemp Battery (Q): switches it on or off. On, it gives a wider view, light through walls and a
+ * speed boost while its charge lasts (see `updateHemp`); drained dry it's locked for a few seconds.
  */
-function updateHemp(w: World, h: SimPlayer, dt: number): void {
-  const holding = (h.lastCmd.buttons & Btn.Ability) !== 0;
-  const live = h.hemp === 2 || h.hempLeft > 0;
-  const on = h.hemp > 0 && live && holding && h.health !== Health.Downed && h.health !== Health.Eliminated;
-  const was = h.move.hempT > 0;
-  h.move.hempT = on ? H.hemp.grace : 0;
-  if (!on) return;
-  if (!was) w.emit('all', { k: 'hemp', by: h.id });
-  if (h.hemp === 1) {
-    h.hempLeft = Math.max(0, h.hempLeft - dt);
-    if (h.hempLeft <= 0) {
-      h.hemp = 0;
-      h.move.hempT = 0;
-      w.emit([h.id], { k: 'item', text: 'Hemp Battery is spent' });
-    }
+export function tryHemp(w: World, h: SimPlayer): void {
+  if (!abilitiesOn(h)) return;
+  if (h.hempOn) {
+    h.hempOn = false;
+    return;
   }
+  if (h.hempLock > 0 || (h.hemp !== 2 && h.hempLeft <= 0)) return;
+  h.hempOn = true;
+  w.emit('all', { k: 'hemp', by: h.id });
+}
+
+/** Drains the charge while it's on, refills it while it's off; `hempT` is 0 or a short grace, so the buffs match use exactly. */
+function updateHemp(w: World, h: SimPlayer, dt: number): void {
+  const HB = H.hemp;
+  h.hempLock = Math.max(0, h.hempLock - dt);
+  if (h.hempOn && !abilitiesOn(h)) h.hempOn = false;
+  if (h.hempOn) {
+    // Testing mode: the battery never runs down.
+    if (!w.testMode && h.hemp !== 2) h.hempLeft = Math.max(0, h.hempLeft - dt);
+    if (h.hempLeft <= 0) {
+      h.hempOn = false;
+      h.hempLock = HB.lockout;
+      w.emit([h.id], { k: 'item', text: 'Hemp Battery drained' });
+    }
+  } else {
+    h.hempLeft = Math.min(HB.duration, h.hempLeft + (dt * HB.duration) / HB.recover);
+  }
+  h.move.hempT = h.hempOn ? HB.grace : 0;
 }
 
 /**
@@ -88,9 +104,11 @@ export function updateAbilities(w: World, dt: number): void {
     if (w.testMode) {
       h.burstCd = 0;
       h.vapeCd = 0;
-      h.move.lungeCharges = H.lunge.charges;
+      h.move.lungeCharges = H.lunge.charges + h.jadenBonus * H.jadenSlain.lunge;
+      h.hempLock = 0;
       h.move.lungeRecharge = 0;
     }
+    h.abilityLockT = Math.max(0, h.abilityLockT - dt);
     updateHemp(w, h, dt);
     // The scent is always on.
     if (sendNow && h.health !== Health.Eliminated) sendScent(w, h);

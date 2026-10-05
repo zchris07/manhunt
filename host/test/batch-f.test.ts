@@ -23,29 +23,6 @@ function quiet(w: World): void {
 const seen = (w: World, viewer: SimPlayer, who: SimPlayer): boolean =>
   buildView(w, viewer).entities.some((e) => e.kind === EntityKind.Player && e.id === who.id);
 
-describe('Hemp Battery is held, not toggled', () => {
-  it('drains only while Q is held and its buffs are on only then', () => {
-    const w = makeWorld({ survivors: 1 });
-    quiet(w);
-    const d = new Driver(w);
-    const h = w.players.get(1)!;
-    h.hemp = 1;
-    h.hempLeft = BALANCE.hunter.hemp.duration;
-    expect(BALANCE.hunter.hemp.duration).toBe(16);
-    d.hold(h.id, Btn.Ability, 2);
-    expect(h.move.hempT).toBeGreaterThan(0);
-    expect(h.hempLeft).toBeCloseTo(14, 0);
-    d.run(2);
-    expect(h.move.hempT).toBe(0);
-    const left = h.hempLeft;
-    d.run(secs(3));
-    expect(h.hempLeft).toBe(left);
-    d.hold(h.id, Btn.Ability, 20);
-    expect(h.hemp).toBe(0);
-    expect(h.hempLeft).toBe(0);
-  });
-});
-
 describe('testing mode', () => {
   it("Zach's abilities never cool down", () => {
     const w = makeWorld({ survivors: 1, testMode: true });
@@ -224,11 +201,9 @@ describe('hemp battery sprint and staked regen', () => {
       const d = new Driver(w);
       const h = w.players.get(1)!;
       place(h, 3000, 3000);
-      if (hemp) {
-        h.hemp = 2;
-      }
+      if (hemp) d.tap(h.id, Btn.Ability);
       const before = h.move.stamina;
-      d.hold(h.id, Btn.Run | Btn.Ability, 1, { moveX: 1, moveY: 0 });
+      d.hold(h.id, Btn.Run, 1, { moveX: 1, moveY: 0 });
       return before - h.move.stamina;
     };
     expect(run(true) / run(false)).toBeCloseTo(0.8, 1);

@@ -28,6 +28,7 @@ const ITEM_TEX: Record<number, string> = {
   [ItemKind.Pistol]: 'item.pistol',
   [ItemKind.BeastBar]: 'item.beastBar',
   [ItemKind.Shield]: 'item.shield',
+  [ItemKind.Sniper]: 'item.sniper',
 };
 const itemTex = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'item.goldenPump' : ITEM_TEX[kind]);
 export const LOOT_TEX: Record<string, string> = {
@@ -40,6 +41,7 @@ export const LOOT_TEX: Record<string, string> = {
   book: 'item.book',
   beastbar: 'item.beastBar',
   shield: 'item.shield',
+  sniper: 'item.sniper',
 };
 
 /** Walk cycle: legs swing under the body in the direction of travel. */
@@ -591,6 +593,8 @@ export class EntityLayer {
   private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
   /** Sexton's Hemp Beam (redrawn every frame while it fires). */
   private readonly beam = new Graphics();
+  /** Sniper lasers: above the vision mask, so everyone sees them in the dark. */
+  private readonly laser = new Graphics();
   private lastTime = 0;
   private readonly positions = new Map<number, { x: number; y: number }>();
 
@@ -641,7 +645,7 @@ export class EntityLayer {
     this.objectives.addChild(lever);
     this.beam.blendMode = 'add';
     this.root.addChild(this.objectives, this.ground, this.wakes, this.gens, this.markers, this.effects, this.beam);
-    this.overlay.addChild(this.meters);
+    this.overlay.addChild(this.laser, this.meters);
   }
 
   /** A generator started (or not): swap its art and light its lamp. */
@@ -737,6 +741,7 @@ export class EntityLayer {
     let jadenSeen = false;
     let wazSeen = false;
     this.beam.clear();
+    this.laser.clear();
     for (const e of ents) {
       if (e.kind === EntityKind.Player) {
         if (self && e.id === self.id) continue;
@@ -763,7 +768,8 @@ export class EntityLayer {
         wazSeen = true;
         this.drawWaz(e, dt, time);
       } else if (e.kind === EntityKind.Beam) {
-        this.drawBeam(e, time);
+        if (e.state & 1) this.drawLaser(e, time);
+        else this.drawBeam(e, time);
       } else {
         this.drawThing(e, time);
         seen.add(e.id);
@@ -1213,6 +1219,20 @@ export class EntityLayer {
   }
 
   /** Sexton's Hemp Beam: a white-hot line with a soft glow that sparks where it hits. */
+  /** A raised 0.50 cal's laser: a faint red line that runs on and on, with a dot at the muzzle. */
+  private drawLaser(e: InterpEntity, time: number): void {
+    const g = this.laser;
+    const len = e.extra * 24;
+    const dx = Math.cos(e.facing);
+    const dy = Math.sin(e.facing);
+    const sx = e.x + dx * 16;
+    const sy = e.y + dy * 16;
+    const flick = 0.85 + 0.15 * Math.sin(time * 31 + e.id);
+    g.moveTo(sx, sy).lineTo(e.x + dx * len, e.y + dy * len).stroke({ width: 3, color: 0xff1a1a, alpha: 0.08 * flick });
+    g.moveTo(sx, sy).lineTo(e.x + dx * len, e.y + dy * len).stroke({ width: 1, color: 0xff4040, alpha: 0.32 * flick });
+    g.circle(sx, sy, 2.2).fill({ color: 0xff5050, alpha: 0.9 });
+  }
+
   private drawBeam(e: InterpEntity, time: number): void {
     const g = this.beam;
     const len = e.extra * 8;

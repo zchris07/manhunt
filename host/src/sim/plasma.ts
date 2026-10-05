@@ -122,6 +122,16 @@ export class Plasma implements NpcTarget {
     this.attacked(h, P.slashStun, power);
   }
 
+  /** A 0.50 cal round: it slays him in one shot, but only in beast form (otherwise it just sets him off). */
+  snipe(by: SimPlayer): void {
+    if (!this.alive) return;
+    if (this.beast && this.mode !== 'transform') {
+      if (by.role === 'hunter') this.zachHits = P.zachHits;
+      else this.survivorHits = P.survivorHits;
+      this.die(by);
+    } else this.attacked(by, 0, 0);
+  }
+
   /** Penjamin: it sets him off like an attack, but doesn't hurt him. */
   provoke(by: SimPlayer): void {
     this.attacked(by, 0, 0);

@@ -47,8 +47,9 @@ export function vapeCoverage(v: VapeCloud, extent: number, x: number, y: number,
 
 /** Penjamin (Space): a cone of vape gas toward the cursor, reaching past the edge of his screen. */
 export function tryVape(w: World, h: SimPlayer, aim: number): void {
-  if (h.vapeCd > 0 || h.role !== 'hunter') return;
-  h.vapeCd = V.cooldown;
+  if (h.vapeCharges <= 0 || h.role !== 'hunter' || h.abilityLockT > 0 || h.knockT > 0) return;
+  h.vapeCharges--;
+  if (h.vapeCd <= 0) h.vapeCd = V.cooldown;
   spawnVape(w, h, aim);
 }
 
@@ -67,7 +68,9 @@ export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: 
 /** Puts a survivor under the vape's effects at a given strength (0 = the far end, 1 = point blank). */
 export function vapeSurvivor(p: SimPlayer, near: number): void {
   const k = Math.max(0, Math.min(1, near));
-  p.vapeSlow = Math.max(p.vapeT > 0 ? p.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+  // The strongest slow it got holds while they're in the gas (and `slowAfter` s after); closer to the source raises it.
+  p.vapeSlow = Math.max(p.vapeSlowT > 0 ? p.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+  p.vapeSlowT = V.slowAfter;
   p.vapeDps = Math.max(p.vapeT > 0 ? p.vapeDps : 0, V.dpsFar + (V.dps - V.dpsFar) * k);
   p.vapeT = V.afterTime;
   p.darkT = V.darkAfter;
@@ -75,7 +78,18 @@ export function vapeSurvivor(p: SimPlayer, near: number): void {
 
 export function updateVapes(w: World, dt: number): void {
   for (const p of w.order) {
-    if (p.role === 'hunter') p.vapeCd = Math.max(0, p.vapeCd - dt);
+    if (p.role !== 'hunter') continue;
+    // Charges come back one at a time, like the lunge's.
+    if (w.testMode) {
+      p.vapeCharges = V.charges;
+      p.vapeCd = 0;
+    } else if (p.vapeCharges < V.charges) {
+      p.vapeCd -= dt;
+      if (p.vapeCd <= 0) {
+        p.vapeCharges++;
+        p.vapeCd = p.vapeCharges < V.charges ? p.vapeCd + V.cooldown : 0;
+      }
+    } else p.vapeCd = 0;
   }
   w.vapes = w.vapes.filter((v) => w.time - v.t0 < LIFE);
   for (const v of w.vapes) {
@@ -107,10 +121,13 @@ export function updateVapes(w: World, dt: number): void {
   for (const p of w.order) {
     if (p.role !== 'survivor') continue;
     p.darkT = Math.max(0, p.darkT - dt);
+    if (p.vapeSlowT > 0) {
+      p.vapeSlowT = Math.max(0, p.vapeSlowT - dt);
+      p.move.slowT = Math.max(p.move.slowT, 0.1);
+      p.move.slowMul = Math.min(p.move.slowMul, 1 - p.vapeSlow);
+    }
     if (p.vapeT <= 0) continue;
     p.vapeT = Math.max(0, p.vapeT - dt);
-    p.move.slowT = Math.max(p.move.slowT, 0.1);
-    p.move.slowMul = Math.min(p.move.slowMul, 1 - p.vapeSlow);
     hurtSurvivor(w, p, p.vapeDps * dt, null, 'gas');
   }
 }

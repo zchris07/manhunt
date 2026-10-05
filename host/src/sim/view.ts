@@ -20,6 +20,7 @@ import {
 import type { SimPlayer } from './player';
 import type { World } from './World';
 import { selected } from './inventory';
+import { laserHolder } from './sniper';
 
 export interface PlayerView {
   self: SelfState;
@@ -177,6 +178,13 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.vapeCd = p.vapeCd;
   s.hempLeft = p.hempLeft;
   s.stakeBuff = p.stakeBuff;
+  s.hempLock = p.hempLock;
+  s.beamCharges = p.beamCharges;
+  s.beamCd = p.beamCd;
+  s.beamT = p.beamT;
+  s.vapeCharges = p.vapeCharges;
+  s.abilityLockT = p.abilityLockT;
+  s.jadenBonus = p.jadenBonus;
   return s;
 }
 
@@ -244,6 +252,17 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     // still only drawn inside your own light).
     for (const sh of [w.shane, w.jaden]) if (Math.hypot(sh.x - v.move.x, sh.y - v.move.y) <= npcR) entities.push(sh.record());
     // His Hemp Beam glows: everyone nearby gets it.
+    // A raised 0.50 cal shows a faint red laser to everyone, wherever they are (state 1 = laser; extra = length / 24).
+    for (const z of w.order) {
+      if (!z.laserId || !laserHolder(z)) continue;
+      entities.push(quantizeEntity(z.laserId, EntityKind.Beam, z.move.x, z.move.y, z.facing, 1, 0, Math.round(BALANCE.items.sniper.laserMax / 24)));
+    }
+    // Zach's Hemp Beam glows the same way.
+    for (const z of w.order) {
+      if (z.role !== 'hunter' || z.beamT <= 0 || !z.beamId) continue;
+      if (Math.hypot(z.move.x - v.move.x, z.move.y - v.move.y) > R + BALANCE.sexton.defense.beamRange) continue;
+      entities.push(quantizeEntity(z.beamId, EntityKind.Beam, z.move.x, z.move.y, z.beamAng, 0, Math.round(Math.min(1, 1 - z.beamT / BALANCE.sexton.defense.beamTime) * 255), Math.round(z.beamLen / 8)));
+    }
     if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
       entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));
     }

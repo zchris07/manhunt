@@ -38,6 +38,23 @@ import { MiniMap } from './MiniMap';
 import { lightFlicker } from '../render/flicker';
 
 const STEP_MS = TICK_DT * 1000;
+const HEMP_KEY = 'manhunt.hempAnnounced';
+const hempAnnounced = (): boolean => {
+  try {
+    return localStorage.getItem(HEMP_KEY) === '1';
+  } catch {
+    return hempAnnouncedThisSession;
+  }
+};
+let hempAnnouncedThisSession = false;
+const markHempAnnounced = (): void => {
+  hempAnnouncedThisSession = true;
+  try {
+    localStorage.setItem(HEMP_KEY, '1');
+  } catch {
+    /* private mode: it just lasts the session */
+  }
+};
 const HEMP_ZOOM = 1 / BALANCE.hunter.hemp.zoomOut;
 
 export interface GameViewOptions {
@@ -222,12 +239,13 @@ export class GameView {
       if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
       if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
       if (inp.isDown('Space') || L('Space')) b |= Btn.Vape;
+      if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Beam;
       // Hold left click to charge the swipe, release to strike.
       const s = this.self;
       const now = performance.now();
       const C = BALANCE.hunter.attack.charge;
       // With the golden pump there's no machete to charge.
-      const ready = !!s && s.pump <= 0 && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
+      const ready = !!s && s.pump <= 0 && s.beamT <= 0 && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
       if (!inp.buttons[0]) this.chargeLock = false;
       if (this.chargeStart && now - this.chargeStart >= C.autoRelease * 1000) {
         // Held too long: the swing goes off by itself; let go to charge again.
@@ -382,6 +400,10 @@ export class GameView {
         a.oneShot('boom', Math.max(0.15, near(e.x, e.y, 1400)));
         this.particles.burst(e.x, e.y, 18, { speed: 160, life: 0.5, tint: 0xe8dcc0, size: 1.1 });
         break;
+      case 'snipe':
+        this.overlays.addSnipe(e.x, e.y, e.a, now);
+        this.shake = Math.max(this.shake, 8);
+        break;
       case 'vape':
         this.overlays.addVape(e.x, e.y, e.a, e.r, now);
         break;
@@ -405,9 +427,13 @@ export class GameView {
         if (e.alerted) this.hud.center('SHANE JEANS HAS BEEN ALERTED', 3000);
         break;
       case 'hemp':
-        if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
-        else this.hud.feed('Zach used a Hemp Battery');
-        a.announce('Hemp battery activated');
+        // Only the very first time it's used (ever): the text and the voice, never again.
+        if (!hempAnnounced()) {
+          if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
+          else this.hud.feed('Zach used a Hemp Battery');
+          a.announce('Hemp battery activated');
+          markHempAnnounced();
+        }
         break;
       case 'sexton':
         this.entities.say(e.say, this.time, 'sexton');
@@ -654,12 +680,11 @@ export class GameView {
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
     if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });
-    const beam = ents.find((e) => e.kind === EntityKind.Beam);
-    if (beam) {
+    for (const beam of ents.filter((e) => e.kind === EntityKind.Beam && !(e.state & 1))) {
       const BL = BALANCE.sexton.defense.light;
       const len = beam.extra * 8;
       for (const f of [0.15, 0.55, 0.97]) {
-        lights.push({ key: `beam${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
+        lights.push({ key: `beam${beam.id}_${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
       }
     }
     // Sexton, Chris, Plasma and Waz carry a faint light too.

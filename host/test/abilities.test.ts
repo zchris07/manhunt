@@ -117,21 +117,21 @@ describe('survivor items (stun, never kill)', () => {
     expect(w.bottles.length).toBe(0);
   });
 
-  it('the shotgun stuns and shoves Zach back, then reloads for 2 s; three shells per gun', () => {
+  it('the shotgun stuns and shoves Zach back, then reloads for 2 s; six shells per gun', () => {
     const { d, h, s, c } = duel(200);
     give(s, ItemKind.Shotgun);
     use(d, s, ItemKind.Shotgun);
     expect(h.stunT).toBeGreaterThan(0);
     d.run(secs(0.5));
     expect(h.move.x - c.x).toBeGreaterThan(240);
-    expect(s.inv[0].amt[0]).toBe(2);
+    expect(s.inv[0].amt[0]).toBe(5);
     expect(s.reloadT).toBeGreaterThan(1);
     use(d, s, ItemKind.Shotgun);
-    expect(s.inv[0].amt[0]).toBe(2);
-    d.run(secs(I.shotgun.reload));
-    use(d, s, ItemKind.Shotgun);
-    d.run(secs(I.shotgun.reload));
-    use(d, s, ItemKind.Shotgun);
+    expect(s.inv[0].amt[0]).toBe(5);
+    for (let i = 0; i < 5; i++) {
+      d.run(secs(I.shotgun.reload));
+      use(d, s, ItemKind.Shotgun);
+    }
     expect(countOf(s, ItemKind.Shotgun)).toBe(0);
   });
 
@@ -275,32 +275,46 @@ describe("Zach's kit", () => {
     expect(pts.length / 4).toBeGreaterThan(5);
   });
 
-  it('Hemp Battery: picked up where Sexton fell, held with Q for x-ray light and speed until its 16 s run out', () => {
-    const { w, d, h, s } = duel(300);
+  it('where Sexton fell Zach finds the Hemp Beam: three charges for R', () => {
+    const { w, d, h } = duel(300);
     w.hempDrop = { id: w.allocEntityId(), x: h.move.x + 20, y: h.move.y };
     d.run(2);
     expect(h.prompt).toBe(Prompt.TakeHemp);
     d.tap(h.id, Btn.Interact);
-    expect(h.hemp).toBe(1);
+    expect(h.beamCharges).toBe(H.beam.charges);
     expect(w.hempDrop).toBeNull();
+  });
+
+  it('the Hemp Battery is in his kit: toggled with Q, 10 s of use, 40 s to refill, locked 5 s when drained dry', () => {
+    const { w, d, h, s } = duel(300);
     expect(h.hempLeft).toBe(H.hemp.duration);
-    d.hold(h.id, Btn.Ability, 1);
+    expect(H.hemp).toMatchObject({ duration: 10, recover: 40, lockout: 5 });
+    d.tap(h.id, Btn.Ability);
+    expect(h.hempOn).toBe(true);
     expect(h.move.hempT).toBeGreaterThan(0);
-    expect(h.hempLeft).toBeCloseTo(H.hemp.duration - 1, 0);
     expect(w.events.some((e) => e.e.k === 'hemp' && e.to.includes(s.id))).toBe(true);
     expect(visionFor(w, h).xray).toBe(true);
-    // Let go and it stops at once (and the charge is kept); hold again and it carries on.
-    d.run(2);
+    d.run(secs(3));
+    expect(h.hempLeft).toBeCloseTo(7, 0);
+    // Q again turns it off, and it refills while it's off.
+    d.tap(h.id, Btn.Ability);
+    expect(h.hempOn).toBe(false);
     expect(h.move.hempT).toBe(0);
     expect(visionFor(w, h).xray).toBe(false);
-    const kept = h.hempLeft;
-    d.run(secs(2));
-    expect(h.hempLeft).toBe(kept);
-    d.hold(h.id, Btn.Ability, H.hemp.duration + 1);
-    expect(h.hemp).toBe(0);
-    expect(h.move.hempT).toBe(0);
-    d.hold(h.id, Btn.Ability, 1);
-    expect(h.move.hempT).toBe(0);
+    const low = h.hempLeft;
+    d.run(secs(4));
+    expect(h.hempLeft - low).toBeCloseTo((4 * H.hemp.duration) / H.hemp.recover, 0);
+    // On until it runs dry: off by itself, locked for 5 s, then it can go again.
+    d.tap(h.id, Btn.Ability);
+    d.run(secs(H.hemp.duration + 0.5));
+    expect(h.hempOn).toBe(false);
+    expect(h.hempLeft).toBeLessThan(1);
+    expect(h.hempLock).toBeGreaterThan(0);
+    d.tap(h.id, Btn.Ability);
+    expect(h.hempOn).toBe(false);
+    d.run(secs(H.hemp.lockout));
+    d.tap(h.id, Btn.Ability);
+    expect(h.hempOn).toBe(true);
   });
 
   it('x-ray light (hemp or goggles) sees through walls inside the cone', () => {

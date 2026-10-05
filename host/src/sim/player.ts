@@ -1,4 +1,5 @@
 import {
+  BALANCE,
   Action,
   Gait,
   Health,
@@ -115,8 +116,28 @@ export interface SimPlayer {
   burstCd: number;
   /** Hemp Battery: 0 none, 1 carried, 2 infinite (testing mode). */
   hemp: number;
-  /** Seconds of Hemp Battery use left. */
+  /** Seconds of Hemp Battery use left, whether it's switched on, and its lockout after running dry. */
   hempLeft: number;
+  hempOn: boolean;
+  hempLock: number;
+  /** Hemp Beam (R): charges, cooldown, channel time left, its direction and length, entity id and what it already hit. */
+  beamCharges: number;
+  beamCd: number;
+  beamT: number;
+  beamAng: number;
+  beamLen: number;
+  beamId: number;
+  readonly beamHit: Set<string>;
+  /** Penjamin charges (the cooldown `vapeCd` is the time to the next one). */
+  vapeCharges: number;
+  /** Seconds left of the Penjamin slow. */
+  vapeSlowT: number;
+  /** Zach: the Grapes of Wrath switches his abilities off for this long. */
+  abilityLockT: number;
+  /** Zach: slew Jaden Nguyen (one more lunge charge, longer reach). */
+  jadenBonus: number;
+  /** A survivor's sniper laser entity id. */
+  laserId: number;
 
   noise: number;
   prompt: Prompt;
@@ -210,7 +231,21 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     wasLunging: false,
     burstCd: 0,
     hemp: 0,
-    hempLeft: 0,
+    hempLeft: BALANCE.hunter.hemp.duration,
+    hempOn: false,
+    hempLock: 0,
+    beamCharges: 0,
+    beamCd: 0,
+    beamT: 0,
+    beamAng: 0,
+    beamLen: 0,
+    beamId: 0,
+    beamHit: new Set<string>(),
+    vapeCharges: BALANCE.hunter.vape.charges,
+    vapeSlowT: 0,
+    abilityLockT: 0,
+    jadenBonus: 0,
+    laserId: 0,
     noise: 0,
     prompt: Prompt.None,
     promptTarget: -1,

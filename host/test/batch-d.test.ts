@@ -163,15 +163,17 @@ describe("Zach's 100 hp", () => {
 });
 
 describe('The Grapes of Wrath', () => {
-  it('four spawn; thrown like a bottle, it stuns him for 3 s, flashes a picture (0.8 s) and booms', () => {
+  it('four spawn; thrown like a bottle, it stuns him for 2.5 s, flashes a picture (0.8 s) and booms', () => {
     const { w, d, h, s } = arena(250);
     expect(w.map.loot.filter((l) => l.item === 'book').length).toBe(4);
     give(w, s, ItemKind.Book);
     use(d, s, ItemKind.Book);
     expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Bottle && e.state === 1)).toBe(true);
     d.run(secs(0.5));
-    // Stunned for exactly 3 s (whatever the lobby's stun scaling), less the flight time.
-    expect(h.stunT).toBeGreaterThan(2.5);
+    // Stunned for 2.5 s (whatever the lobby's stun scaling), less the flight time.
+    expect(h.stunT).toBeGreaterThan(1.8);
+    // And every ability is off for 6 s.
+    expect(h.abilityLockT).toBeGreaterThan(BALANCE.hunter.bookAbilityLock - 1);
     expect(h.stunT).toBeLessThanOrEqual(I.book.stun);
     expect(h.hp * ZH.max).toBeCloseTo(95, 0);
     const book = w.events.find((e) => e.e.k === 'book');

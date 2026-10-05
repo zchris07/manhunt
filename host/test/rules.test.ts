@@ -28,7 +28,7 @@ describe('health states and the machete swipe', () => {
     expect(s.health).toBe(Health.Wounded);
     expect(s.hp).toBeCloseTo(2 / 3, 3);
     expect(s.move.hasteT).toBeGreaterThan(0);
-    expect(h.attackCd).toBeGreaterThan(0);
+    expect(h.attackCd).toBe(0);
     for (const left of [1 / 3, 0]) {
       place(s, h.move.x + 60, h.move.y);
       d.run(secs(BALANCE.hunter.attack.hitCooldown) + 2, (p) => (p.id === h.id ? { aim: 0 } : undefined));
@@ -315,16 +315,16 @@ describe('objectives and win conditions', () => {
       d.run(2);
       expect(a.prompt).toBe(Prompt.Repair);
       const t0 = w.time;
-      // Both repair; answer every skill check correctly.
+      // Both repair (there are no skill checks: just hold).
       let guard = 0;
       while (!w.gens[gi].repaired && guard++ < 30 * 200) {
-        for (const p of [a, b]) p.skill = null;
         d.run(1, (p) => (p === a || p === b ? { buttons: Btn.Interact } : undefined));
       }
       const took = w.time - t0;
       expect(w.gens[gi].repaired).toBe(true);
-      // Two survivors repair faster than one would (coop multiplier 1.7).
-      expect(took).toBeLessThan(w.balance.repairTime / 1.5);
+      // Two survivors repair 25% faster than one would.
+      expect(took).toBeLessThan(w.balance.repairTime / 1.2);
+      expect(took).toBeGreaterThan(w.balance.repairTime / 1.3);
       d.run(2);
     }
     expect(w.gate.powered).toBe(true);
@@ -371,7 +371,7 @@ describe('objectives and win conditions', () => {
     expect(w.result?.reason).toMatch(/time/i);
   });
 
-  it('a missed skill check regresses the generator with a visible blow-up', () => {
+  it('generators have no timing minigame: nothing is ever issued while repairing', () => {
     const w = makeWorld({ survivors: 1 });
     parkSexton(w);
     const d = new Driver(w);
@@ -380,15 +380,10 @@ describe('objectives and win conditions', () => {
     place(s, g.x + 60, g.y);
     place(w.players.get(1)!, 100, 100);
     d.run(2);
-    let guard = 0;
-    while (!s.skill && guard++ < 3000) d.run(1, (p) => (p === s ? { buttons: Btn.Interact } : undefined));
-    expect(s.skill).not.toBeNull();
-    const before = w.gens[0].progress;
-    // Never answer: the host times it out as a miss.
-    d.run(130, (p) => (p === s ? { buttons: Btn.Interact } : undefined));
-    expect(w.events.map((e) => e.e.k)).toContain('skillResult');
-    expect(w.gens[0].progress).toBeLessThan(before + 0.08);
-    expect(w.events.some((e) => e.e.k === 'noise' && e.e.s === 'gen_explode')).toBe(true);
+    d.run(600, (p) => (p === s ? { buttons: Btn.Interact } : undefined));
+    expect(s.skill).toBeNull();
+    expect(w.events.some((e) => e.e.k === 'skill')).toBe(false);
+    expect(w.gens[0].progress).toBeGreaterThan(0.1);
   });
 
   it('the hunter can damage a generator, which then regresses', () => {

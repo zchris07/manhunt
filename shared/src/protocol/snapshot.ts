@@ -87,6 +87,14 @@ export interface SelfState {
   hempLeft: number;
   /** Zach: survivors staked so far (+5% speed and view each). */
   stakeBuff: number;
+  /** Zach: Hemp Battery lockout (s), Hemp Beam charges, cooldown and channel time left, Penjamin charges, abilities-off time, and Jaden-slain bonus (0/1). */
+  hempLock: number;
+  beamCharges: number;
+  beamCd: number;
+  beamT: number;
+  vapeCharges: number;
+  abilityLockT: number;
+  jadenBonus: number;
 }
 
 /**
@@ -169,6 +177,13 @@ export function emptySelf(id = 0): SelfState {
     vapeCd: 0,
     hempLeft: 0,
     stakeBuff: 0,
+    hempLock: 0,
+    beamCharges: 0,
+    beamCd: 0,
+    beamT: 0,
+    vapeCharges: 0,
+    abilityLockT: 0,
+    jadenBonus: 0,
   };
 }
 
@@ -476,6 +491,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(unit(s.noise)).u8(s.spectating);
   w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
   w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd)).u16(tenths(s.hempLeft)).u8(Math.min(255, s.stakeBuff));
+  w.u16(tenths(s.hempLock)).u8(s.beamCharges).u16(tenths(s.beamCd)).u16(tenths(s.beamT)).u8(s.vapeCharges).u16(tenths(s.abilityLockT)).u8(s.jadenBonus);
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -552,6 +568,13 @@ function readSelf(r: ByteReader): SelfState {
   s.vapeCd = r.u16() / 10;
   s.hempLeft = r.u16() / 10;
   s.stakeBuff = r.u8();
+  s.hempLock = r.u16() / 10;
+  s.beamCharges = r.u8();
+  s.beamCd = r.u16() / 10;
+  s.beamT = r.u16() / 10;
+  s.vapeCharges = r.u8();
+  s.abilityLockT = r.u16() / 10;
+  s.jadenBonus = r.u8();
   return s;
 }
 

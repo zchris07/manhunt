@@ -9,7 +9,7 @@ export const SURVIVOR_CONTROLS: [string, string][] = [
   ['G', 'Drop item'],
   ['Tab', 'Arrange inventory'],
   ['Q', 'JARVIS'],
-  ['Space', 'Barricade · skill check · hold breath'],
+  ['Space', 'Barricade · hold breath'],
   ['M', 'Map'],
 ];
 
@@ -20,7 +20,8 @@ export const HUNTER_CONTROLS: [string, string][] = [
   ['Left mouse', 'Machete (hold to charge)'],
   ['Right mouse', 'Lunge'],
   ['F', 'Soundcloud Burst'],
-  ['Q', 'Hemp Battery (hold)'],
+  ['Q', 'Hemp Battery (toggle)'],
+  ['R', 'Hemp Beam (once you have it)'],
   ['Space', 'Penjamin (vape gas)'],
   ['E', 'Interact'],
   ['M', 'Map'],

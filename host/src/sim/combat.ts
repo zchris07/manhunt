@@ -59,7 +59,7 @@ function hittable(q: SimPlayer): boolean {
 /** True if (x,y) with radius r is inside the swipe in front of the hunter. */
 function inSwipe(h: SimPlayer, x: number, y: number, r: number): boolean {
   const C = H.attack.charge;
-  const reach = H.attack.range * (h.heavy ? C.rangeMul : 1) + BALANCE.net.hunterHitTolerance;
+  const reach = H.attack.range * (h.heavy ? C.rangeMul : 1) * (h.jadenBonus ? H.jadenSlain.rangeMul : 1) + BALANCE.net.hunterHitTolerance;
   const d = Math.hypot(x - h.move.x, y - h.move.y) - r;
   if (d > reach) return false;
   if (d <= h.radius) return true;

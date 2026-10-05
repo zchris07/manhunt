@@ -27,6 +27,8 @@ import { updateInteractions, handlePresses, computePrompts, exitHiding } from '.
 import { lungeContact, restoreSurvivor, updateCombat } from './combat';
 import { updateItems } from './items';
 import { updateAbilities } from './abilities';
+import { updateBeams } from './zachBeam';
+import { updateSnipes, type Bullet } from './sniper';
 import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
@@ -154,6 +156,7 @@ export class World {
   drops: Drop[] = [];
   gases: Gas[] = [];
   bursts: Burst[] = [];
+  snipes: Bullet[] = [];
   vapes: VapeCloud[] = [];
   trails: TrailRecord[] = [];
   trailSeq = 1;
@@ -239,6 +242,7 @@ export class World {
       p.jarvis = 3;
     } else if (p.role === 'hunter') {
       p.hemp = 2;
+      p.beamCharges = BALANCE.hunter.beam.charges;
     }
   }
 
@@ -379,6 +383,8 @@ export class World {
     updateCombat(this, dt);
     updateItems(this, dt);
     updateAbilities(this, dt);
+    updateBeams(this, dt);
+    updateSnipes(this, dt);
     updateVapes(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
@@ -432,7 +438,7 @@ export class World {
     const role = p.role === 'hunter' ? 'hunter' : 'survivor';
     const fromX = p.move.x;
     const fromY = p.move.y;
-    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) * hunterStakeMul(p.stakeBuff) : 1), carrying: p.carrying > 0 }, this.geo, TICK_DT);
+    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) * hunterStakeMul(p.stakeBuff) : 1), carrying: p.carrying > 0, lungeBonus: p.jadenBonus * BALANCE.hunter.jadenSlain.lunge, abilitiesLocked: p.abilityLockT > 0 }, this.geo, TICK_DT);
     p.gait = p.move.mode === MoveMode.Locked ? Gait.Idle : gait;
     if (p.role === 'hunter') {
       const lunging = p.move.lungeT > 0 || (p.wasLunging && Math.hypot(p.move.x - fromX, p.move.y - fromY) > 0);

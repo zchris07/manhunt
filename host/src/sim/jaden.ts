@@ -87,6 +87,11 @@ export class Jaden extends Shane {
     this.provoke(by);
   }
 
+  /** A 0.50 cal round: one shot slays him. */
+  snipe(by: SimPlayer): void {
+    if (this.alive) this.die(by);
+  }
+
   /** Attacked or gassed with Penjamin, by anyone: he turns on them at once. */
   provoke(by: SimPlayer): void {
     if (!this.alive || (this.mode === 'chase' && this.target === by.id)) return;
@@ -113,6 +118,12 @@ export class Jaden extends Shane {
     this.meter.clear();
     placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Pistol, golden: false, amount: BALANCE.items.pistol.shots }, this.x + Math.cos(this.facing) * 22, this.y + Math.sin(this.facing) * 22);
     w.feed(`${by.name} took Jaden Nguyen down. His pistol is on the ground`);
+    if (by.role === 'hunter' && by.jadenBonus === 0) {
+      // Slaying him makes Zach better for good: one more lunge charge and a longer reach.
+      by.jadenBonus = 1;
+      by.move.lungeCharges += BALANCE.hunter.jadenSlain.lunge;
+      w.emit([by.id], { k: 'item', text: 'Slew Jaden: +1 lunge charge, +20% melee reach' });
+    }
   }
 
   protected override alert(p: SimPlayer): void {

@@ -98,6 +98,8 @@ export type GameEvent =
    * A shotgun blast from (x,y): `p` holds each pellet's angle (milliradians) and tracer length;
    * `hit` if any pellet hit a person; `gold` for a golden pump.
    */
+  /** A 0.50 cal round leaves (x,y) along `a`: everyone sees the streak fly. */
+  | { k: 'snipe'; x: number; y: number; a: number }
   | { k: 'shot'; x: number; y: number; p: number[]; hit: boolean; gold: boolean }
   /** Soundcloud Burst wave launched from (x,y) at angle a. */
   | { k: 'burst'; x: number; y: number; a: number }

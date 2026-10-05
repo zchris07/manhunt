@@ -178,8 +178,8 @@ describe('Chris Zelley and the ambulance', () => {
     swipeAt();
     expect(w.chris.hp).toBe(1);
     expect(w.chris.mode).toBe('flee');
-    // Any landed hit locks the machete for 0.8 s.
-    expect(h.attackCd).toBeGreaterThan(0.4);
+    // There is no cooldown between swings.
+    expect(h.attackCd).toBe(0);
     d.run(secs(BALANCE.hunter.attack.hitCooldown));
     swipeAt();
     expect(w.chris.alive).toBe(false);
