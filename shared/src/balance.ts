@@ -156,6 +156,8 @@ export const BALANCE = {
     health: { max: 100, downTime: 10, recoverFraction: 0.5, regenTime: 360, speedStep: 0.25, speedPerStep: 0.1, downPenalty: 0.05, downPenaltyMax: 0.2 },
     /** Every survivor he puts on a stake buffs his move speed and field of view this much, for good. */
     stakeBuff: 0.05,
+    /** Each survivor staked also speeds his health regeneration by this much. */
+    stakeRegen: 0.05,
     /** Scent trail (always on): survivors walking, running or bleeding leave scent. */
     scent: { radius: 1300, sendEvery: 0.5 },
     /**
@@ -191,7 +193,7 @@ export const BALANCE = {
       darkEase: 0.6,
     },
     /** Hemp Battery (hold Q, dropped by Sexton Science): `duration` s of use in all; the zoom is `zoomRate` times as fast as 1 s. */
-    hemp: { duration: 16, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
+    hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 16, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
     /** Speed multiplier while climbing through a smashed window (one swipe smashes it). */
     windowClimbMul: 0.35,
     breakBarricadeTime: 2.2,
@@ -376,6 +378,10 @@ export const BALANCE = {
     loseRadius: 600,
     stun: 1.2,
     hp: 3,
+    /** Zach's machete: each hit shoves him back `kb` px and stuns him `meleeStun` s; `zachHp` points kill him (light 1, heavy 2). */
+    zachHp: 6,
+    kb: 46,
+    meleeStun: 0.2,
     bottlesToShake: 2,
     fleeTime: 4,
     cooldown: 12,

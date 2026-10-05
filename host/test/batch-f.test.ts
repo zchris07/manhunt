@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, Btn, EntityKind, Health, Prompt, hunterStakeMul } from '@manhunt/shared';
+import { BALANCE, Btn, EntityKind, Health, ItemKind, JadenFlag, Prompt, hunterStakeMul } from '@manhunt/shared';
 import { Driver, clearLane, makeWorld, parkChris, parkSexton, parkShane, place } from './worldHelpers';
 import { buildView } from '../src/sim/view';
 import { stakeSurvivor } from '../src/sim/combat';
 import { playTestFx } from '../src/sim/testFx';
-import { stunHunter } from '../src/sim/items';
+import { pickUpDrop, stunHunter } from '../src/sim/items';
 import type { World } from '../src/sim/World';
 import type { SimPlayer } from '../src/sim/player';
 
@@ -167,5 +167,84 @@ describe('notes', () => {
       expect(w.events.some((e) => e.e.k === 'note' && e.e.n === 2 && e.to.includes(p.id))).toBe(true);
     }
     expect(w.map.notes.length).toBe(BALANCE.notes.count);
+  });
+});
+
+describe('Jaden and Zach melee', () => {
+  it('six light hits (or three heavy) kill him; each flinches, shoves and stuns him 0.2 s', () => {
+    const w = makeWorld({ survivors: 1 });
+    quiet(w);
+    const h = w.players.get(1)!;
+    const j = w.jaden;
+    place(h, 3000, 3000);
+    j.x = 3040;
+    j.y = 3000;
+    j.slashHit(h, 1);
+    expect(j.stunT).toBeCloseTo(BALANCE.jaden.meleeStun, 3);
+    expect(j.x).toBeGreaterThan(3040 + 20);
+    expect(j.record().state & JadenFlag.Hurt).toBeTruthy();
+    for (let i = 0; i < 4; i++) j.slashHit(h, 1);
+    expect(j.alive).toBe(true);
+    j.slashHit(h, 1);
+    expect(j.alive).toBe(false);
+    expect(w.drops.some((d) => d.kind === ItemKind.Pistol)).toBe(true);
+  });
+
+  it('three heavy swipes kill him', () => {
+    const w = makeWorld({ survivors: 1 });
+    quiet(w);
+    const h = w.players.get(1)!;
+    place(h, 3000, 3000);
+    w.jaden.x = 3040;
+    w.jaden.y = 3000;
+    for (let i = 0; i < 3; i++) w.jaden.slashHit(h, 2);
+    expect(w.jaden.alive).toBe(false);
+  });
+
+  it("Zach can't pick up the P250", () => {
+    const w = makeWorld({ survivors: 1 });
+    quiet(w);
+    const h = w.players.get(1)!;
+    place(h, 3000, 3000);
+    w.jaden.x = 3040;
+    w.jaden.y = 3000;
+    for (let i = 0; i < 6; i++) w.jaden.slashHit(h, 1);
+    const drop = w.drops.find((d) => d.kind === ItemKind.Pistol)!;
+    pickUpDrop(w, h, drop.id);
+    expect(w.drops.includes(drop)).toBe(true);
+    expect(h.inv.every((s) => s.kind !== ItemKind.Pistol)).toBe(true);
+  });
+});
+
+describe('hemp battery sprint and staked regen', () => {
+  it('while it is in use his sprint drains 20% slower and refills 20% faster', () => {
+    const run = (hemp: boolean): number => {
+      const w = makeWorld({ survivors: 1 });
+      quiet(w);
+      const d = new Driver(w);
+      const h = w.players.get(1)!;
+      place(h, 3000, 3000);
+      if (hemp) {
+        h.hemp = 2;
+      }
+      const before = h.move.stamina;
+      d.hold(h.id, Btn.Run | Btn.Ability, 1, { moveX: 1, moveY: 0 });
+      return before - h.move.stamina;
+    };
+    expect(run(true) / run(false)).toBeCloseTo(0.8, 1);
+  });
+
+  it('every staked player adds 5% to his health regeneration', () => {
+    const regen = (stakes: number): number => {
+      const w = makeWorld({ survivors: 1 });
+      quiet(w);
+      const d = new Driver(w);
+      const h = w.players.get(1)!;
+      h.hp = 0.5;
+      h.stakeBuff = stakes;
+      d.run(secs(10));
+      return h.hp - 0.5;
+    };
+    expect(regen(4) / regen(0)).toBeCloseTo(1.2, 2);
   });
 });

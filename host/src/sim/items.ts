@@ -332,6 +332,8 @@ export function pickUpDrop(w: World, p: SimPlayer, id: number): void {
   const i = w.drops.findIndex((d) => d.id === id);
   if (i < 0) return;
   const d = w.drops[i];
+  // Zach can't pick anything up off the ground (not even the P250 Jaden drops).
+  if (p.role === 'hunter') return;
   w.drops.splice(i, 1);
   addItem(w, p, d.kind, d.amount, d.golden);
   w.emit([p.id], { k: 'item', text: `Picked up: ${slotName(d.kind, d.golden)}` });

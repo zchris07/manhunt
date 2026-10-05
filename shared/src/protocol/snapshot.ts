@@ -207,6 +207,7 @@ export const JadenFlag = {
   Firing: 4,
   Dead: 8,
   Stunned: 16,
+  Hurt: 32,
 } as const;
 
 /** Waz's state bits. */

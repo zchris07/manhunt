@@ -160,7 +160,8 @@ Hits that stunned him still do. While he's up he regenerates the whole bar in 6 
 down for 10 s (he drops anyone he was carrying), then gets back up at half health. Every 25% of
 the bar gone makes him 10% slower, walking and sprinting, and every time he's put down he gets
 5% slower for good, up to 20% (being knocked out by Plasma doesn't count). Every survivor he
-puts on a stake makes him 5% faster and his view 5% wider, for good.
+puts on a stake makes him 5% faster, his view 5% wider and his health regeneration 5% faster, for good.
+While the Hemp Battery is in use his sprint drains 20% slower and refills 20% faster.
 
 Next to an NPC or an item, Zach sees its name where survivors see their prompt.
 
@@ -193,7 +194,7 @@ runs away for 4 s). He can't open doors or break barricades, and after a chase h
 alerted again for 10 s. While he's alerted you can hear his soft, quick footsteps pitter-patter
 after you.
 
-**Jaden Nguyen** (one) wanders and is alerted exactly like Shane Jeans (the same visible
+**Jaden Nguyen** (one) can be slain by Zach: 3 fully charged swipes or 6 light ones (a lunge counts as light). Each hit makes him flinch, shoves him back and stuns him for 0.2 s. Zach can't pick up the P250 he drops. He wanders and is alerted exactly like Shane Jeans (the same visible
 meter), but he has a pistol. Alerted, he says *"Back up!"*, closes to about 220 u and fires every
 0.9 s (each hit takes 12.5% of your health; a stray shot hits whoever is in the way). He stops
 when you get more than 600 u away, or once you've lost half the health you had when he started,
