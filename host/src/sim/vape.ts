@@ -18,6 +18,8 @@ export interface VapeCloud {
   by: number;
   /** NPCs it already provoked. */
   provoked: Set<string>;
+  /** Time each NPC has spent in it since its last hit. */
+  npcAcc: Map<string, number>;
 }
 
 /** How far it reaches right now (it grows out over `growTime`, easing off). */
@@ -61,7 +63,7 @@ export function spawnVape(w: World, h: SimPlayer, aim: number): void {
 
 /** A cloud from any spot (testing mode rolls one at a survivor from afar). */
 export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number, nic = false): void {
-  const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set() };
+  const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set(), npcAcc: new Map() };
   w.vapes.push(v);
   w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range), nic });
 }
@@ -93,6 +95,10 @@ export function updateVapes(w: World, dt: number): void {
     } else p.vapeCd = 0;
   }
   w.vapes = w.vapes.filter((v) => w.time - v.t0 < LIFE);
+  for (const n of [w.sexton, w.chris, w.marc, w.plasma, w.jaden, w.waz]) {
+    n.vapeSlowT = Math.max(0, n.vapeSlowT - dt);
+    if (n.vapeSlowT <= 0) n.vapeSlow = 0;
+  }
   for (const v of w.vapes) {
     const ext = vapeExtent(v, w.time);
     const by = w.players.get(v.by);
@@ -104,19 +110,38 @@ export function updateVapes(w: World, dt: number): void {
     }
     // NPCs that react to being attacked react to the gas too (it doesn't hurt them).
     if (!by) continue;
-    const npcs: [string, { x: number; y: number }, () => void][] = [
-      ['sexton', w.sexton, () => w.sexton.hit(by, false)],
-      ['chris', w.chris, () => w.chris.hit(by, false)],
-      ['marc', w.marc, () => w.marc.hit(by, false)],
-      ['plasma', w.plasma, () => w.plasma.provoke(by)],
-      ['jaden', w.jaden, () => w.jaden.provoke(by)],
-      ['waz', w.waz, () => w.waz.hit(by, false)],
-      ['chacko', w.chacko, () => w.chacko.hit(by, false)],
+    // Each reacts once as if attacked; the ones that can be hurt are also slowed (stronger nearer
+    // the source, as for survivors) and take a light machete hit every `npcHitEvery` s in it.
+    interface Slowable {
+      x: number;
+      y: number;
+      vapeSlowT: number;
+      vapeSlow: number;
+    }
+    const npcs: [string, Slowable, boolean, () => void, (() => void) | null][] = [
+      ['sexton', w.sexton, w.sexton.alive, () => w.sexton.hit(by, false), () => w.sexton.hit(by)],
+      ['chris', w.chris, w.chris.hittable, () => w.chris.hit(by, false), () => w.chris.hit(by)],
+      ['marc', w.marc, true, () => w.marc.hit(by, false), () => w.marc.hit(by)],
+      ['plasma', w.plasma, w.plasma.alive, () => w.plasma.provoke(by), () => w.plasma.slashHit(by, 1)],
+      ['jaden', w.jaden, w.jaden.alive, () => w.jaden.provoke(by), () => w.jaden.slashHit(by, 1)],
+      ['waz', w.waz, w.waz.solid, () => w.waz.hit(by, false), () => w.waz.hit(by)],
+      ['chacko', w.chacko as unknown as Slowable, w.chacko.alive, () => w.chacko.hit(by, false), null],
     ];
-    for (const [key, n, provoke] of npcs) {
-      if (v.provoked.has(key) || !inCloud(v, ext, n.x, n.y)) continue;
-      v.provoked.add(key);
-      provoke();
+    for (const [key, n, ok, provoke, hurt] of npcs) {
+      if (!ok || !inCloud(v, ext, n.x, n.y)) continue;
+      if (!v.provoked.has(key)) {
+        v.provoked.add(key);
+        provoke();
+      }
+      if (!hurt) continue;
+      const k = Math.max(0, Math.min(1, 1 - Math.hypot(n.x - v.x, n.y - v.y) / v.range));
+      n.vapeSlow = Math.max(n.vapeSlowT > 0 ? n.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+      n.vapeSlowT = 0.3;
+      const acc = (v.npcAcc.get(key) ?? 0) + dt;
+      if (acc >= V.npcHitEvery) {
+        v.npcAcc.set(key, 0);
+        hurt();
+      } else v.npcAcc.set(key, acc);
     }
   }
   // Lingering effects: slowed and choking while in it and a little after; dark a while longer.

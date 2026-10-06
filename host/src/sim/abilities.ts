@@ -140,6 +140,27 @@ export function updateAbilities(w: World, dt: number): void {
       p.scareT = B.scareTime;
       w.emit([p.id], { k: 'scare' });
     }
+    // The wave also stuns NPCs that are being aggressive: an alerted Jaden, a raging Plasma, a defending Sexton.
+    const jd = w.jaden;
+    const px = w.plasma;
+    const sx = w.sexton;
+    const npcs: [number, boolean, { x: number; y: number }, number, () => void][] = [
+      [-1, jd.alive && jd.mode === 'chase', jd, BALANCE.jaden.radius, () => (jd.stunT = Math.max(jd.stunT, B.npcStun))],
+      [-2, px.alive && px.raging, px, px.radius, () => (px.stunT = Math.max(px.stunT, B.npcStun))],
+      [-3, sx.alive && sx.defending, sx, BALANCE.sexton.radius, () => (sx.stunT = Math.max(sx.stunT, B.npcStun))],
+    ];
+    for (const [key, aggressive, n, r, stun] of npcs) {
+      if (!aggressive || b.hit.has(key)) continue;
+      const rx = n.x - b.x;
+      const ry = n.y - b.y;
+      const along = rx * b.dx + ry * b.dy;
+      const side = rx * -b.dy + ry * b.dx;
+      if (Math.abs(side) > B.width / 2 + r) continue;
+      const sag = burstSag(Math.min(Math.abs(side), B.width / 2));
+      if (along < prev - B.thickness - sag - r || along > front + sag + r) continue;
+      b.hit.add(key);
+      stun();
+    }
     return prev < maxD;
   });
 }

@@ -135,6 +135,8 @@ export const BALANCE = {
      * `width` that flies across the whole map through everything. `thickness` is its depth.
      */
     burst: {
+      /** Aggressive NPCs (an alerted Jaden, a raging Plasma, a defending Sexton) the wave passes are stunned this long. */
+      npcStun: 2.5,
       cooldown: 12,
       speed: 1700,
       width: HUNTER_WIDTH * 6,
@@ -188,6 +190,8 @@ export const BALANCE = {
       slow: 0.6,
       slowFar: 0.3,
       slowAfter: 3,
+      /** NPCs in the gas are slowed by the same falloff and take a light machete hit every `npcHitEvery` s. */
+      npcHitEvery: 1.5,
       dps: 0.05,
       dpsFar: 0.01,
       afterTime: 2,
@@ -210,6 +214,8 @@ export const BALANCE = {
       cooldown: 2,
       /** It charges for `windup` s (a sound and an animation), then hits survivors `tickRate` times a second for `tickDamage` of their full health each. */
       windup: 1,
+      /** NPCs it touches take a light machete hit every `npcHitEvery` s. */
+      npcHitEvery: 0.5,
       tickRate: 10,
       tickDamage: 0.03,
       /** The sound (heard by everyone, fading with distance from Zach). */

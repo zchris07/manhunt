@@ -17,6 +17,9 @@ type Mode = 'pace' | 'idle' | 'wander' | 'rescue' | 'work' | 'flee' | 'ascend' |
  */
 export class Chris implements NpcTarget {
   readonly id: number;
+  /** Penjamin: seconds left of its slow, and how strong (0 to 1). */
+  vapeSlowT = 0;
+  vapeSlow = 0;
   x = 0;
   y = 0;
   facing = 0;
@@ -234,6 +237,7 @@ export class Chris implements NpcTarget {
     }
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (this.vapeSlowT > 0) speed *= 1 - this.vapeSlow;
     if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;

@@ -37,8 +37,12 @@ describe('movement and sprint meters', () => {
     expect(s.stamina).toBeGreaterThan(0);
     expect(s.sprinting).toBe(1);
     run(s, SURV, 0.2, { moveX: 1, buttons: Btn.Run });
-    expect(s.stamina).toBe(0);
-    expect(s.staminaLock).toBeGreaterThan(1.3);
+    expect(s.stamina).toBeLessThan(0.2);
+    expect(s.staminaLock).toBeGreaterThan(1.1);
+    // The meter refills during the lockout too.
+    const during = s.stamina;
+    run(s, SURV, 0.5, {});
+    expect(s.stamina).toBeGreaterThan(during + 0.2);
     // Holding Shift: walking speed only, and no sprinting until the lockout passes.
     expect(run(s, SURV, 1, { moveX: 1, buttons: Btn.Run })).toBeCloseTo(BALANCE.survivor.walk, 0);
     run(s, SURV, 0.6, { moveX: 1 });
@@ -51,7 +55,7 @@ describe('movement and sprint meters', () => {
     const z = newMoveState(1000, 1000, 'hunter');
     expect(z.stamina).toBe(6);
     run(z, ZACH, 6.1, { moveX: 1, buttons: Btn.Run });
-    expect(z.stamina).toBe(0);
+    expect(z.stamina).toBeLessThan(0.2);
     run(z, ZACH, 1.5 + 6, {});
     expect(z.stamina).toBeLessThan(5);
     run(z, ZACH, 4, {});

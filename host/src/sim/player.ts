@@ -129,7 +129,8 @@ export interface SimPlayer {
   beamTick: number;
   beamFlinch: number;
   beamId: number;
-  readonly beamHit: Set<string>;
+  /** NPCs the beam is touching, and when each last took a hit. */
+  readonly beamHit: Map<string, number>;
   /** Penjamin charges (the cooldown `vapeCd` is the time to the next one). */
   vapeCharges: number;
   /** Seconds left of the Penjamin slow. */
@@ -246,7 +247,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     beamTick: 0,
     beamFlinch: 0,
     beamId: 0,
-    beamHit: new Set<string>(),
+    beamHit: new Map<string, number>(),
     vapeCharges: BALANCE.hunter.vape.charges,
     vapeSlowT: 0,
     abilityLockT: 0,

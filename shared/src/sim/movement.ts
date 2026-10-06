@@ -157,7 +157,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   if (s.mode === MoveMode.Locked) {
     s.lungeT = 0;
     s.sprinting = 0;
-    if (s.staminaLock <= 0) s.stamina = Math.min(cap, s.stamina + refill * dt);
+    s.stamina = Math.min(cap, s.stamina + refill * dt);
     return Gait.Idle;
   }
 
@@ -174,7 +174,8 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
       s.staminaLock = BALANCE.sprintLockout;
       s.sprintBlocked = 1;
     }
-  } else if (s.staminaLock <= 0) {
+  } else {
+    // The meter refills even while sprint is locked out.
     s.stamina = Math.min(cap, s.stamina + refill * dt);
   }
   s.stamina = Math.min(s.stamina, cap);

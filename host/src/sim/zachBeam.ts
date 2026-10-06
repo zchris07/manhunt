@@ -94,7 +94,7 @@ function fire(w: World, h: SimPlayer, ticks: number): void {
       if (victim.health === Health.Downed) break;
     }
   }
-  // NPCs in its way (it doesn't stop at them): each takes it once, like a light swipe.
+  // NPCs in its way (it doesn't stop at them): each takes a light swipe's hit every half second while it touches.
   const ex = sx + dx * vt;
   const ey = sy + dy * vt;
   const touches = (x: number, y: number, r: number): boolean => pointSegDist2(x, y, sx, sy, ex, ey) <= (r + D.beamWidth / 2) ** 2;
@@ -108,8 +108,9 @@ function fire(w: World, h: SimPlayer, ticks: number): void {
     ['chacko', w.chacko.solid, w.chacko, BALANCE.chacko.radius, () => w.chacko.hit(h)],
   ];
   for (const [key, ok, n, r, hit] of npcs) {
-    if (!ok || h.beamHit.has(key) || !touches(n.x, n.y, r)) continue;
-    h.beamHit.add(key);
+    if (!ok || !touches(n.x, n.y, r)) continue;
+    if (w.time - (h.beamHit.get(key) ?? -Infinity) < HB.npcHitEvery - 1e-9) continue;
+    h.beamHit.set(key, w.time);
     hit();
   }
 }

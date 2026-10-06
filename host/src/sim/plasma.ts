@@ -21,6 +21,9 @@ type Mode = 'idle' | 'walk' | 'transform' | 'rage' | 'revert';
  */
 export class Plasma implements NpcTarget {
   readonly id: number;
+  /** Penjamin: seconds left of its slow, and how strong (0 to 1). */
+  vapeSlowT = 0;
+  vapeSlow = 0;
   x = 0;
   y = 0;
   facing = 0;
@@ -300,6 +303,7 @@ export class Plasma implements NpcTarget {
     if (this.gasT > 0) speed *= P.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (this.vapeSlowT > 0) speed *= 1 - this.vapeSlow;
     if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;

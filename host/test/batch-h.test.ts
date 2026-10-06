@@ -213,3 +213,70 @@ describe('the small ones', () => {
     expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Chacko)).toBe(true);
   });
 });
+
+describe('Zach vs aggressive NPCs', () => {
+  it('Soundcloud Burst stuns an alerted Jaden, a raging Plasma and a defending Sexton for 2.5 s', () => {
+    const w = makeWorld({ survivors: 2 });
+    quiet(w);
+    const d = new Driver(w);
+    const h = w.players.get(1)!;
+    const s = w.players.get(2)!;
+    const c = clearLane(w, 450);
+    place(h, c.x - 300, c.y);
+    place(s, 5800, 5800);
+    place(w.players.get(3)!, 5800, 200);
+    w.jaden.x = c.x;
+    w.jaden.y = c.y;
+    w.plasma.x = c.x + 100;
+    w.plasma.y = c.y;
+    // Zach provoked both, so they are after him.
+    w.jaden.provoke(h);
+    w.plasma.provoke(h);
+    d.run(secs(2.2));
+    w.jaden.stunT = 0;
+    w.jaden.x = c.x;
+    w.jaden.y = c.y;
+    w.plasma.stunT = 0;
+    w.plasma.x = c.x + 100;
+    w.plasma.y = c.y;
+    expect(w.jaden.mode).toBe('chase');
+    expect(w.plasma.raging).toBe(true);
+    d.tap(h.id, Btn.Secondary, { aim: 0 });
+    d.run(secs(0.4), (p) => (p === h ? { aim: 0 } : undefined));
+    expect(w.jaden.stunT).toBeGreaterThan(BALANCE.hunter.burst.npcStun - 0.6);
+    expect(w.plasma.stunT).toBeGreaterThan(BALANCE.hunter.burst.npcStun - 0.6);
+  });
+
+  it('Penjamin slows NPCs in the gas and hurts them as a light swipe every 1.5 s', () => {
+    const w = makeWorld({ survivors: 1 });
+    quiet(w);
+    const d = new Driver(w);
+    const h = w.players.get(1)!;
+    const c = clearLane(w, 450);
+    place(h, c.x - 300, c.y);
+    h.viewReach = 700;
+    w.sexton.x = c.x;
+    w.sexton.y = c.y;
+    const hp0 = w.sexton.hp;
+    d.tap(h.id, Btn.Vape, { aim: 0 });
+    d.run(secs(0.8));
+    expect(w.sexton.vapeSlow).toBeGreaterThan(0.25);
+    d.run(secs(1.2));
+    expect(w.sexton.hp).toBeLessThan(hp0);
+  });
+
+  it('the Hemp Beam keeps hurting an NPC it touches', () => {
+    const w = makeWorld({ survivors: 1 });
+    quiet(w);
+    const d = new Driver(w);
+    const h = w.players.get(1)!;
+    const c = clearLane(w, 450);
+    place(h, c.x - 300, c.y);
+    h.beamCharges = 1;
+    w.jaden.x = c.x;
+    w.jaden.y = c.y;
+    d.tap(h.id, Btn.Beam, { aim: 0 });
+    d.run(secs(BALANCE.hunter.beam.windup + 3.2), (p) => (p === h ? { aim: 0 } : undefined));
+    expect(w.jaden.alive).toBe(false);
+  });
+});
