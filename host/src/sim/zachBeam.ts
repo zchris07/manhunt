@@ -89,6 +89,7 @@ function fire(w: World, h: SimPlayer): void {
     ['plasma', w.plasma.alive, w.plasma, w.plasma.radius, () => w.plasma.slashHit(h, 1)],
     ['jaden', w.jaden.alive, w.jaden, BALANCE.jaden.radius, () => w.jaden.slashHit(h, 1)],
     ['waz', w.waz.solid, w.waz, BALANCE.waz.radius, () => w.waz.hit(h)],
+    ['chacko', w.chacko.solid, w.chacko, BALANCE.chacko.radius, () => w.chacko.hit(h)],
   ];
   for (const [key, ok, n, r, hit] of npcs) {
     if (!ok || h.beamHit.has(key) || !touches(n.x, n.y, r)) continue;

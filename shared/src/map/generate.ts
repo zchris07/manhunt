@@ -784,6 +784,7 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
     loot: [],
     stakes: stakes.map((s, id) => ({ id, ...s })),
     notes: [],
+    lounge: wh.lounge,
     barricades,
     doors,
     gate: { ...wh.gate, dyn: gateDyn },

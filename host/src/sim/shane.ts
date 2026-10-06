@@ -49,6 +49,8 @@ export class Shane implements NpcTarget {
   protected cooldownT = 0;
   protected fleeFrom = { x: 0, y: 0 };
   protected bottleHits = 0;
+  /** Hunting someone for Chacko's sake: no giving up until they're downed (or the hunt is called off). */
+  protected avenging = false;
   protected stuckT = 0;
   protected path: number[] = [];
   protected pathT = 0;
@@ -138,6 +140,7 @@ export class Shane implements NpcTarget {
   protected endChase(next: 'walk' | 'flee'): void {
     const S = this.S;
     this.target = 0;
+    this.avenging = false;
     this.cooldownT = S.cooldown;
     this.path = [];
     this.mode = next;
@@ -145,6 +148,7 @@ export class Shane implements NpcTarget {
   }
 
   protected alert(p: SimPlayer): void {
+    this.avenging = false;
     this.mode = 'chase';
     this.target = p.id;
     this.chaseT = this.S.chaseTime;
@@ -214,7 +218,8 @@ export class Shane implements NpcTarget {
       this.chaseT -= dt;
       // Zach coming close ends a chase, unless Zach is the one being chased (Jaden, provoked).
       const zachNear = t?.role !== 'hunter' && w.order.some((h) => h.role === 'hunter' && h.health !== Health.Eliminated && Math.hypot(h.move.x - this.x, h.move.y - this.y) < S.hunterBreakRadius);
-      if (!t || !this.eligible(t) || this.chaseT <= 0 || zachNear || Math.hypot(t.move.x - this.x, t.move.y - this.y) > S.loseRadius) {
+      const sticky = this.avenging && t?.id === this.target;
+      if (!t || !this.eligible(t) || (!sticky && (this.chaseT <= 0 || zachNear || Math.hypot(t.move.x - this.x, t.move.y - this.y) > S.loseRadius))) {
         this.endChase('walk');
         this.announce(false);
       } else {

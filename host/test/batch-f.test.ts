@@ -164,7 +164,8 @@ describe('Jaden and Zach melee', () => {
     expect(j.alive).toBe(true);
     j.slashHit(h, 1);
     expect(j.alive).toBe(false);
-    expect(w.drops.some((d) => d.kind === ItemKind.Pistol)).toBe(true);
+    // Zach can't use a pistol: nothing drops when he is the one who slew him.
+    expect(w.drops.some((d) => d.kind === ItemKind.Pistol)).toBe(false);
   });
 
   it('three heavy swipes kill him', () => {
@@ -178,18 +179,16 @@ describe('Jaden and Zach melee', () => {
     expect(w.jaden.alive).toBe(false);
   });
 
-  it("Zach can't pick up the P250", () => {
+  it("Zach can't pick up a P250 a survivor's kill left behind", () => {
     const w = makeWorld({ survivors: 1 });
     quiet(w);
     const h = w.players.get(1)!;
     place(h, 3000, 3000);
-    w.jaden.x = 3040;
-    w.jaden.y = 3000;
-    for (let i = 0; i < 6; i++) w.jaden.slashHit(h, 1);
-    const drop = w.drops.find((d) => d.kind === ItemKind.Pistol)!;
+    const drop = { id: w.allocEntityId(), x: 3010, y: 3000, kind: ItemKind.Pistol, golden: false, amount: 10 };
+    w.drops.push(drop);
     pickUpDrop(w, h, drop.id);
     expect(w.drops.includes(drop)).toBe(true);
-    expect(h.inv.every((s) => s.kind !== ItemKind.Pistol)).toBe(true);
+    expect(h.inv.every((x) => x.kind !== ItemKind.Pistol)).toBe(true);
   });
 });
 

@@ -19,7 +19,7 @@ kill him.
   (scarecrow stakes) and generators you just hold to repair. Survivors carry items; Zach has a lunge, the Soundcloud
   Burst and an always-on scent. Sexton Science wanders the map with a gift for each survivor,
   Shane Jeans tails anyone who bothers him, Jaden Nguyen shoots them, Chris Zelley waits by
-  his ambulance to save a life, and Waz takes a looksie.
+  his ambulance to save a life, Waz takes a looksie, and Chacko watches Madden on the lounge couch.
 - **Hiding:** Outlast-style lockers, wardrobes, beds, barrels and tall grass, with a slatted
   peek view and breath holding.
 - **Play like a .io game:** no accounts. Pick a name, share a 4-letter code, play.
@@ -132,7 +132,7 @@ are instant.
 | Golden pump (from Plasma.TTV) | A gold tactical shotgun: 5 shells, 1 s reload. A weapon of its own, in its own slot. |
 | P250 (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health. |
 | Doctor Pepper (8) | A red can. Fills your sprint meter at once. For 20 s it refills 1.5× faster, holds 2 s more, and you walk and run up to 15% faster, all fading over the 20 s. |
-| Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot. When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot and burns 2 hp a second while he's in it, makes Shane give up his chase, stuns Jaden, slows Sexton, and blinds and slows Plasma. |
+| Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot (the gas cloud is 35% smaller than it first was). When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot and burns 2 hp a second while he's in it, makes Shane give up his chase, stuns Jaden, slows Sexton, and blinds and slows Plasma. |
 | Duck confit (6, plus 1 by the ambulance) | Eat it to heal to full health. It no longer revives anyone. |
 | Mr Beast bar (15, plus 2 by the ambulance) | A chocolate bar. Eat it for a fifth of your health back. |
 | Mini shield (20, plus 2 by the ambulance) | A small blue shield potion. Drinking takes 2 s (moving cancels it) and adds a quarter of a health bar to a blue shield bar shown above your green health bar, up to a full extra bar (four). Any damage takes the shield first. Zach can't drink them. |
@@ -196,14 +196,14 @@ runs away for 4 s). He can't open doors or break barricades, and after a chase h
 alerted again for 10 s. While he's alerted you can hear his soft, quick footsteps pitter-patter
 after you.
 
-**Jaden Nguyen** (one) can be slain by Zach: 3 fully charged swipes or 6 light ones (a lunge counts as light). Each hit makes him flinch, shoves him back and stuns him for 0.2 s. Zach can't pick up the P250 he drops. He wanders and is alerted exactly like Shane Jeans (the same visible
+**Jaden Nguyen** (one) can be slain by Zach: 3 fully charged swipes or 6 light ones (a lunge counts as light). Each hit makes him flinch, shoves him back and stuns him for 0.2 s. Nothing drops when Zach is the one who slays him, and Zach can't pick up a P250. He wanders and is alerted exactly like Shane Jeans (the same visible
 meter), but he has a pistol. Alerted, he says *"Back up!"*, closes to about 220 u and fires every
-0.9 s (each hit takes 12.5% of your health; a stray shot hits whoever is in the way). He stops
+0.9 s (each hit takes 12.5% of a survivor's health and 8% of Zach's full bar; a stray shot hits whoever is in the way). He stops
 when you get more than 600 u away, or once you've lost half the health you had when he started,
 whichever comes first. Any survivor item (bottle, book, shotgun, pistol) or galaxy gas stuns him
 for 1.2 s, a chance to get away. Three survivor hits kill him: he drops his pistol (10 shots).
 Whoever provokes him, survivor or Zach (an item, the machete or a lunge, Zach's golden pump, or
-Penjamin), becomes his target: he goes after Zach too, 12.5 hp a shot. He trips gas traps while
+Penjamin), becomes his target: he goes after Zach too, 8 hp a shot. He trips gas traps while
 alerted.
 
 **Chris Zelley** (one) is a paramedic who paces around his **ambulance**, a 300 × 150 u
@@ -234,6 +234,15 @@ only be hurt once he's fully a beast, and he keeps two separate health bars (sho
 1, a heavy swing 2). The damage stays when he turns back human. Slain, he drops a golden pump.
 Talk to him (either side) and he says *"ggs"* and hands you a golden pump, once each.
 
+**Chacko** (one, always in the lounge: a room in the warehouse with a TV on its north wall and a
+couch facing it) sits watching Madden. Talk to him as a survivor and he gives you a Doctor Pepper
+(once each). Talk to him as Zach and he hands over **50 Nic** (once), which replaces Penjamin: the
+same ability and charges with 50% more reach (the same falloff, worked out over the longer range)
+and a blue vapor instead of yellow. One hit of any item from a survivor kills him, and then Jaden
+Nguyen and Plasma.TTV both hunt that survivor, wherever they are, until they are downed once; the
+hunt ends early if either of the two is slain, and if anyone else attacks either of them they turn
+on that player instead and go back to behaving normally. One hit from Zach (machete, lunge or beam)
+kills him too, but he explodes in a bloody blast that takes half of Zach's health.
 **Waz** (one) wanders the map with a faint light. Talk to him as a survivor and he says
 *"lemme take a looksie"*: you see 10% more of the map for good (the camera pulls back and your
 flashlight cone and the circle around you grow), once each. Zach slays him in three hits (he
@@ -241,7 +250,7 @@ bolts between them, like Sexton) and gets the same 10% boost. A survivor slays h
 single item, and sees 10% less for it. Whoever slays him gets a picture flashed across their
 screen for 0.8 s (with the vine boom), fading in and out, exactly like the Grapes of Wrath flash.
 
-**Teammates and notes.** Survivors on each other's screens emit a faint light, so teammates can
+**Zach can't swing the machete while he's down.** **Teammates and notes.** Survivors on each other's screens emit a faint light, so teammates can
 see one another through the dark (walls still block it). Downed and staked survivors also see
 every nearby teammate and the cone of their flashlight. Four **notes** (creepy old photos on
 yellowed paper) lie beside the paths; press **E** at one, as Zach or a survivor, to read it full

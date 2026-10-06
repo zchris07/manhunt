@@ -41,7 +41,7 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(BALANCE.items.shotgun.stun).toBeCloseTo(BALANCE.items.bottle.stun * 1.5, 6);
     expect(BALANCE.items.energy).toMatchObject({ duration: 20, refillMul: 1.5, bonusSec: 2 });
     expect(BALANCE.items.trap.triggerRadius).toBe(BALANCE.hunter.radius * 2 * 5);
-    expect(BALANCE.items.trap.gasRadius).toBe(BALANCE.hunter.radius * 2 * 10);
+    expect(BALANCE.items.trap.gasRadius).toBe(BALANCE.hunter.radius * 2 * 10 * 0.65);
     expect(BALANCE.items.trap.spreadTime).toBe(0.5);
     expect(BALANCE.xray.brightness).toBe(0.7);
     expect(BALANCE.world.treeKeep).toBe(0.75);

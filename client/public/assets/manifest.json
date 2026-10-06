@@ -28,6 +28,7 @@
     "char.plasma": { "procedural": "plasma" },
     "char.plasmaBeast": { "procedural": "plasmaBeast" },
     "char.waz": { "procedural": "waz" },
+    "char.chacko": { "procedural": "chacko" },
     "obj.generator": { "procedural": "generator", "variants": 2 },
     "obj.locker": { "procedural": "locker" },
     "obj.wardrobe": { "procedural": "wardrobe" },

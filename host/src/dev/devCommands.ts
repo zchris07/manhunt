@@ -82,6 +82,14 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       n.unstick();
       break;
     }
+    case 'chacko': {
+      // Stand beside Chacko on his couch.
+      const c = w.chacko;
+      p.move.x = c.x;
+      p.move.y = c.y + 52;
+      resolveOverlaps(w.geo, p.move, p.radius);
+      break;
+    }
     case 'chris': {
       // Bring Chris Zelley next to this player.
       const c = w.chris;

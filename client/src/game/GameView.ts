@@ -245,7 +245,7 @@ export class GameView {
       const now = performance.now();
       const C = BALANCE.hunter.attack.charge;
       // With the golden pump there's no machete to charge.
-      const ready = !!s && s.pump <= 0 && s.beamT <= 0 && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
+      const ready = !!s && s.pump <= 0 && s.beamT <= 0 && s.attackCd <= 0 && s.health !== Health.Downed && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
       if (!inp.buttons[0]) this.chargeLock = false;
       if (this.chargeStart && now - this.chargeStart >= C.autoRelease * 1000) {
         // Held too long: the swing goes off by itself; let go to charge again.
@@ -405,7 +405,15 @@ export class GameView {
         this.shake = Math.max(this.shake, 8);
         break;
       case 'vape':
-        this.overlays.addVape(e.x, e.y, e.a, e.r, now);
+        this.overlays.addVape(e.x, e.y, e.a, e.r, now, !!e.nic);
+        break;
+      case 'chackoBoom':
+        // A bloody explosion: a red burst, blood on the floor, a shake and a boom.
+        this.particles.burst(e.x, e.y, 70, { speed: 320, life: 0.9, tint: 0xa01414, size: 1.5 });
+        this.particles.burst(e.x, e.y, 30, { speed: 160, life: 1.2, tint: 0x5a0808, size: 2 });
+        for (let i = 0; i < 9; i++) this.overlays.addBlood(e.x + (Math.random() - 0.5) * 110, e.y + (Math.random() - 0.5) * 110);
+        this.shake = Math.max(this.shake, 22 * near(e.x, e.y, 900));
+        a.oneShot('boom', Math.max(0.2, near(e.x, e.y, 1600)));
         break;
       case 'note':
         this.hud.showNote(e.n);
@@ -693,10 +701,14 @@ export class GameView {
       ['chris', EntityKind.Chris, BALANCE.chris.light],
       ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
       ['waz', EntityKind.Waz, BALANCE.npcLight],
+      ['chacko', EntityKind.Chacko, BALANCE.chacko.light],
     ] as const) {
       const n = ents.find((e) => e.kind === kind && !(kind === EntityKind.Plasma && e.state & PlasmaFlag.Dead));
       if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });
     }
+    // The lounge TV flickers a cold blue-green over the room.
+    const tvL = map.lounge.tv;
+    lights.push({ key: 'tv', x: tvL.x, y: tvL.y + 26, radius: 210, intensity: 0.5 + 0.12 * Math.sin(this.time * 7.3) * Math.sin(this.time * 2.1), static: false });
     // Chris Zelley's ambulance glows faintly on both sides (he carries his own faint light too).
     const amb = map.ambulance;
     const AL = BALANCE.chris.ambulance;

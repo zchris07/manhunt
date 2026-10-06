@@ -295,7 +295,7 @@ export const BALANCE = {
      */
     energy: { duration: 20, refillMul: 1.5, bonusSec: 2, speedMul: 0.15 },
     /** Galaxy gas trap: triggers within 5 Zach-widths, gas covers 10 Zach-widths. */
-    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5, zachDps: 2 },
+    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10 * 0.65, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5, zachDps: 2 },
     /** After a stun ends Zach can't be stunned again for this long (no chain-stuns). */
     stunImmunity: 2.5,
     barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
@@ -416,7 +416,9 @@ export const BALANCE = {
       range: 420,
       keep: 220,
       cooldown: 0.9,
+      /** A survivor loses this fraction of their health a shot; Zach loses `zachDamage` of his full bar. */
       damage: 0.125,
+      zachDamage: 0.08,
       spreadDeg: 5,
       /** He stops once his target has lost this fraction of the health they had when he started. */
       stopAfter: 0.5,
@@ -496,6 +498,23 @@ export const BALANCE = {
     fovBonus: 0.1,
     fovPenalty: 0.1,
     line: 'lemme take a looksie',
+  },
+
+  /**
+   * Chacko: sits on the lounge couch watching Madden. A survivor who talks to him gets a Doctor
+   * Pepper (once each); Zach gets '50 Nic' (Penjamin, `nicRangeMul` times the reach, blue). One hit
+   * from any item kills him: slain by a survivor, Jaden Nguyen and Plasma.TTV hunt that survivor
+   * until they're downed once; slain by Zach, he explodes for `explosion` of Zach's full health.
+   */
+  chacko: {
+    radius: 14,
+    reach: 70,
+    explosion: 0.5,
+    nicRangeMul: 1.5,
+    light: { radius: 130, intensity: 0.3 },
+    lineSurvivor: 'Take a Dr Pepper, bro. Madden is on.',
+    lineZach: "Here. 50 Nic. Don't tell anyone.",
+    lineHit: 'Not during the game!',
   },
 
   /** Every NPC carries a faint light (client only). Shane, Jaden and Marc have their own, below. */

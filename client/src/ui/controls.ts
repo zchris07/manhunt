@@ -22,7 +22,7 @@ export const HUNTER_CONTROLS: [string, string][] = [
   ['F', 'Soundcloud Burst'],
   ['Q', 'Hemp Battery (toggle)'],
   ['R', 'Hemp Beam (once you have it)'],
-  ['Space', 'Penjamin (vape gas)'],
+  ['Space', 'Penjamin (vape gas; 50 Nic once Chacko gives it)'],
   ['E', 'Interact'],
   ['M', 'Map'],
 ];

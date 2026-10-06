@@ -54,15 +54,16 @@ export function tryVape(w: World, h: SimPlayer, aim: number): void {
 }
 
 export function spawnVape(w: World, h: SimPlayer, aim: number): void {
-  const range = Math.max(V.minView, Math.min(V.maxView, h.viewReach || V.defaultView)) * V.reachMul;
-  spawnVapeAt(w, h.move.x, h.move.y, aim, range, h.id);
+  // 50 Nic (from Chacko) is Penjamin with half again the reach; the same falloff over the longer range.
+  const range = Math.max(V.minView, Math.min(V.maxView, h.viewReach || V.defaultView)) * V.reachMul * (h.nic ? BALANCE.chacko.nicRangeMul : 1);
+  spawnVapeAt(w, h.move.x, h.move.y, aim, range, h.id, h.nic);
 }
 
 /** A cloud from any spot (testing mode rolls one at a survivor from afar). */
-export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number): void {
+export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number, nic = false): void {
   const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set() };
   w.vapes.push(v);
-  w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range) });
+  w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range), nic });
 }
 
 /** Puts a survivor under the vape's effects at a given strength (0 = the far end, 1 = point blank). */
@@ -110,6 +111,7 @@ export function updateVapes(w: World, dt: number): void {
       ['plasma', w.plasma, () => w.plasma.provoke(by)],
       ['jaden', w.jaden, () => w.jaden.provoke(by)],
       ['waz', w.waz, () => w.waz.hit(by, false)],
+      ['chacko', w.chacko, () => w.chacko.hit(by, false)],
     ];
     for (const [key, n, provoke] of npcs) {
       if (v.provoked.has(key) || !inCloud(v, ext, n.x, n.y)) continue;

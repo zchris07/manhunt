@@ -51,7 +51,7 @@ export class Overlays {
   private snipes: { x: number; y: number; a: number; born: number }[] = [];
   private readonly vapeLayer = new Container();
   private readonly vapeSprites: Sprite[] = [];
-  private vapes: { x: number; y: number; a: number; r: number; born: number }[] = [];
+  private vapes: { x: number; y: number; a: number; r: number; born: number; nic: boolean }[] = [];
 
   constructor(
     private readonly assets: AssetManager,
@@ -104,8 +104,8 @@ export class Overlays {
   }
 
   /** Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */
-  addVape(x: number, y: number, a: number, r: number, now: number): void {
-    this.vapes.push({ x, y, a, r, born: now });
+  addVape(x: number, y: number, a: number, r: number, now: number, nic = false): void {
+    this.vapes.push({ x, y, a, r, born: now, nic });
   }
 
   /**
@@ -169,14 +169,14 @@ export class Overlays {
         body.position.set(px, py);
         body.scale.set(size);
         body.rotation = r1 * 6.28 + age * (r2 - 0.5) * 0.8;
-        body.tint = i % 4 === 0 ? 0xf2e6a0 : i % 3 === 0 ? 0xc8b040 : 0xdccb5a;
+        body.tint = v.nic ? (i % 4 === 0 ? 0xa6dcff : i % 3 === 0 ? 0x4a9ae0 : 0x72bcf0) : i % 4 === 0 ? 0xf2e6a0 : i % 3 === 0 ? 0xc8b040 : 0xdccb5a;
         body.alpha = 0.34 * falloff * fade * (0.4 + 0.6 * grow);
         if (i % 2 === 0) {
           const glow = puff(i + 1, true);
           glow.position.set(px + Math.sin(age * 1.7 + i) * 4, py + Math.cos(age * 1.3 + i) * 4);
           glow.scale.set(size * 0.7);
           glow.rotation = -body.rotation;
-          glow.tint = 0xfff0a0;
+          glow.tint = v.nic ? 0xb8e6ff : 0xfff0a0;
           glow.alpha = 0.16 * falloff * fade * grow;
         }
       }
@@ -188,7 +188,7 @@ export class Overlays {
         if (d > ext) continue;
         const side = (r * 2 - 1) * Math.tan(half) * d * 0.8;
         const tw = 0.5 + 0.5 * Math.sin(age * 6 + i * 2.3);
-        g.circle(v.x + dx * d - dy * side, v.y + dy * d + dx * side, 1.2 + r).fill({ color: 0xfffbd0, alpha: 0.5 * tw * fade * (1 - d / v.r) });
+        g.circle(v.x + dx * d - dy * side, v.y + dy * d + dx * side, 1.2 + r).fill({ color: v.nic ? 0xd8f0ff : 0xfffbd0, alpha: 0.5 * tw * fade * (1 - d / v.r) });
       }
     }
     for (let i = used; i < this.vapeSprites.length; i++) this.vapeSprites[i].visible = false;

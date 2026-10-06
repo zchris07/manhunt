@@ -579,6 +579,8 @@ export class Hud {
       const maxLunge = H.lunge.charges + self.jadenBonus * BALANCE.hunter.jadenSlain.lunge;
       set(this.slots[1], { on: charges > 0 && !locked, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, maxLunge - charges))}`, cd: charges < maxLunge ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
       set(this.slots[2], { on: self.burstCd <= 0 && !locked, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
+      this.slots[4].name.textContent = self.nic ? '50 Nic' : 'Penjamin';
+      this.slots[4].root.classList.toggle('nic', !!self.nic);
       set(this.slots[4], { on: self.vapeCharges > 0 && !locked, count: `${'●'.repeat(self.vapeCharges)}${'○'.repeat(Math.max(0, H.vape.charges - self.vapeCharges))}`, cd: self.vapeCharges < H.vape.charges ? self.vapeCd / H.vape.cooldown : 0 });
       const infinite = self.hemp === 2;
       set(this.slots[3], {

@@ -80,6 +80,7 @@ function nameNear(w: World, p: SimPlayer): void {
     w.plasma,
     w.jaden.alive ? w.jaden : null,
     w.waz.solid ? w.waz : null,
+    w.chacko.solid ? w.chacko : null,
   ];
   let best = -1;
   let bd: number = R.npcName;
@@ -178,6 +179,7 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   if (p.prompt === Prompt.None && w.marc.canTalk(p)) set(Prompt.TalkMarc, 0);
   if (p.prompt === Prompt.None && w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
   if (p.prompt === Prompt.None && w.waz.canTalk(p)) set(Prompt.TalkWaz, 0);
+  if (p.prompt === Prompt.None && w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
   if (p.prompt === Prompt.None) {
     const ni = nearestIndex(w.map.notes, x, y, R.note, () => true);
     if (ni >= 0) set(Prompt.ReadNote, ni);
@@ -236,6 +238,7 @@ function hunterPrompts(w: World, p: SimPlayer): void {
     }
     if (target) set(Prompt.PickUp, target.id);
     else if (w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
+    else if (w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
     else if (nearestIndex(w.map.notes, x, y, R.note, () => true) >= 0) set(Prompt.ReadNote, nearestIndex(w.map.notes, x, y, R.note, () => true));
     else if (w.hempDrop && Math.hypot(w.hempDrop.x - x, w.hempDrop.y - y) < R.pickup) set(Prompt.TakeHemp, 0);
     else {
@@ -303,6 +306,9 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         break;
       case Prompt.TalkPlasma:
         w.plasma.talk(p);
+        break;
+      case Prompt.TalkChacko:
+        w.chacko.talk(p);
         break;
       case Prompt.ReadNote:
         w.emit([p.id], { k: 'note', n: p.promptTarget });
@@ -387,6 +393,9 @@ function survivorInteract(w: World, p: SimPlayer): void {
       break;
     case Prompt.TalkWaz:
       w.waz.talk(p);
+      break;
+    case Prompt.TalkChacko:
+      w.chacko.talk(p);
       break;
     case Prompt.ReadNote:
       w.emit([p.id], { k: 'note', n: p.promptTarget });

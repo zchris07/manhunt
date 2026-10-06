@@ -87,6 +87,17 @@ export class Jaden extends Shane {
     this.provoke(by);
   }
 
+  /** Chacko was slain by `p`: he hunts them wherever they are, shooting until they're downed. */
+  avenge(p: SimPlayer): void {
+    if (!this.alive || !this.targetable(p)) return;
+    this.alert(p);
+    this.avenging = true;
+  }
+
+  stopAvenging(): void {
+    this.avenging = false;
+  }
+
   /** A 0.50 cal round: one shot slays him. */
   snipe(by: SimPlayer): void {
     if (this.alive) this.die(by);
@@ -116,8 +127,9 @@ export class Jaden extends Shane {
     this.hurtT = 0;
     if (this.mode === 'chase') this.endChase('walk');
     this.meter.clear();
-    placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Pistol, golden: false, amount: BALANCE.items.pistol.shots }, this.x + Math.cos(this.facing) * 22, this.y + Math.sin(this.facing) * 22);
-    w.feed(`${by.name} took Jaden Nguyen down. His pistol is on the ground`);
+    // Zach can't use a pistol: when he slays Jaden nothing drops.
+    if (by.role !== 'hunter') placeDrop(w, { id: w.allocEntityId(), x: this.x, y: this.y, kind: ItemKind.Pistol, golden: false, amount: BALANCE.items.pistol.shots }, this.x + Math.cos(this.facing) * 22, this.y + Math.sin(this.facing) * 22);
+    w.feed(`${by.name} took Jaden Nguyen down${by.role === 'hunter' ? '' : '. His pistol is on the ground'}`);
     if (by.role === 'hunter' && by.jadenBonus === 0) {
       // Slaying him makes Zach better for good: one more lunge charge and a longer reach.
       by.jadenBonus = 1;
@@ -196,11 +208,11 @@ export class Jaden extends Shane {
     w.noise(this.x, this.y, 900, 'shot');
     if (!hit) return;
     const before = hit.hp;
-    if (hit.role === 'hunter') hurtHunter(w, hit, G.damage * BALANCE.hunter.health.max, null, 'bullet');
+    if (hit.role === 'hunter') hurtHunter(w, hit, G.zachDamage * BALANCE.hunter.health.max, null, 'bullet');
     else hurtSurvivor(w, hit, G.damage, null, 'bullet');
     if (hit !== t) return;
     this.dealt += before - hit.hp;
-    if (this.dealt >= this.startHp * G.stopAfter - 1e-6 || t.health === Health.Downed || t.knockT > 0) {
+    if ((!this.avenging && this.dealt >= this.startHp * G.stopAfter - 1e-6) || t.health === Health.Downed || t.knockT > 0) {
       w.feed(`Jaden Nguyen let ${t.name} go`);
       this.endChase('walk');
     }

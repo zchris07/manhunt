@@ -1,3 +1,5 @@
+import type { LoungeDef } from './warehouse';
+
 export type Surface = 'forest' | 'dirt' | 'grass' | 'concrete' | 'wood' | 'water';
 export const SURFACES: readonly Surface[] = ['forest', 'dirt', 'grass', 'concrete', 'wood', 'water'];
 
@@ -184,6 +186,8 @@ export interface MapData {
   loot: LootSpawnDef[];
   stakes: StakeDef[];
   notes: NoteDef[];
+  /** The lounge room: furniture, and the couch where Chacko sits. */
+  lounge: LoungeDef;
   barricades: BarricadeDef[];
   doors: DoorDef[];
   gate: GateDef;

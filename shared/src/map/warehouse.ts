@@ -23,6 +23,23 @@ export interface DoorSpot {
   open: boolean;
 }
 
+/** A furniture block (centre, size, rotation of its long side). */
+export interface FurnitureDef {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  angle: number;
+}
+
+/** The lounge room template: the room, a TV against its north wall, a couch facing it, and Chacko's seat. */
+export interface LoungeDef {
+  room: Rect;
+  tv: FurnitureDef;
+  couch: FurnitureDef;
+  seat: Spot;
+}
+
 export interface WarehouseResult {
   walls: WallSeg[];
   barricadeSpots: OpeningSpot[];
@@ -35,6 +52,8 @@ export interface WarehouseResult {
   stakeSpots: Spot[];
   lampSpots: Spot[];
   gate: { x: number; y: number; angle: number; length: number; leverX: number; leverY: number };
+  /** The lounge: a room that is always there, with a couch facing a TV where Chacko sits. */
+  lounge: LoungeDef;
   /** Points just outside each exterior entrance, for path generation. */
   entrances: (Spot & { side: 'n' | 's' | 'e' | 'w' })[];
 }
@@ -353,25 +372,36 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
       racks.push({ x: cx + 92, y: cy - L / 2, w: 36, h: L });
     }
   }
+  // The lounge: the biggest room that isn't a generator room (at least 2x2 cells if there is one).
+  let loungeIdx = -1;
+  for (const { rr, i } of roomOrder) {
+    if (genRooms.has(i) || rr.w < 2 || rr.h < 2) continue;
+    loungeIdx = i;
+    break;
+  }
+  if (loungeIdx < 0) loungeIdx = roomOrder.find(({ i }) => !genRooms.has(i))?.i ?? roomOrder[roomOrder.length - 1].i;
   const barrels: Spot[] = [];
   const stakeSpots: Spot[] = [];
   rooms.forEach((rr, i) => {
     if (genRooms.has(i)) return;
     const cx = x0 + (rr.x + rr.w / 2) * C;
     const cy = y0 + (rr.y + rr.h / 2) * C;
+    const lounge = i === loungeIdx;
     if (rng.chance(0.65)) {
-      if (rr.w >= rr.h) {
+      if (lounge) {
+        // Furniture goes in here instead of racks and barrels.
+      } else if (rr.w >= rr.h) {
         const L = Math.min(140, rr.w * C - 110);
         racks.push({ x: cx - L / 2, y: cy - 18, w: L, h: 36 });
       } else {
         const L = Math.min(140, rr.h * C - 110);
         racks.push({ x: cx - 18, y: cy - L / 2, w: 36, h: L });
       }
-      barrels.push({ x: x0 + rr.x * C + 34, y: y0 + rr.y * C + 34 });
-    } else {
+      if (!lounge) barrels.push({ x: x0 + rr.x * C + 34, y: y0 + rr.y * C + 34 });
+    } else if (!lounge) {
       barrels.push({ x: cx, y: cy });
     }
-    if (rr.w * rr.h >= 4 && rng.chance(0.4)) stakeSpots.push({ x: x0 + (rr.x + rr.w) * C - 40, y: y0 + (rr.y + rr.h) * C - 40 });
+    if (rr.w * rr.h >= 4 && rng.chance(0.4) && !lounge) stakeSpots.push({ x: x0 + (rr.x + rr.w) * C - 40, y: y0 + (rr.y + rr.h) * C - 40 });
   });
   for (const rk of racks) {
     walls.push({ ax: rk.x, ay: rk.y, bx: rk.x + rk.w, by: rk.y, kind: 'rack', vision: true, move: true });
@@ -416,17 +446,43 @@ export function generateWarehouse(rng: Rng, x0: number, y0: number, size: number
   }
   if (!stakeSpots.length) stakeSpots.push(cellCenter(N - 1, rng.int(0, N - 1)));
 
+  // Furnish the lounge: a TV on the north wall and a couch facing it. The couch is a back and two
+  // arms (the seat stays open so Chacko can be reached and hit); nothing else lands in this room.
+  const lr = rooms[loungeIdx];
+  const room0: Rect = { x: x0 + lr.x * C, y: y0 + lr.y * C, w: lr.w * C, h: lr.h * C };
+  const lcx = room0.x + room0.w / 2;
+  const tv: FurnitureDef = { x: lcx, y: room0.y + 22, w: 56, h: 14, angle: 0 };
+  const couchY = room0.y + Math.min(room0.h - 52, 150);
+  const couch: FurnitureDef = { x: lcx, y: couchY, w: 104, h: 38, angle: 0 };
+  const block = (rx: number, ry: number, rw: number, rh: number): void => {
+    const edges: [number, number, number, number][] = [
+      [rx, ry, rx + rw, ry],
+      [rx + rw, ry, rx + rw, ry + rh],
+      [rx + rw, ry + rh, rx, ry + rh],
+      [rx, ry + rh, rx, ry],
+    ];
+    for (const [ax, ay, bx, by] of edges) walls.push({ ax, ay, bx, by, kind: 'rack', vision: false, move: true });
+  };
+  block(tv.x - tv.w / 2, tv.y - tv.h / 2, tv.w, tv.h);
+  block(couch.x - couch.w / 2, couch.y + couch.h / 2 - 9, couch.w, 9);
+  block(couch.x - couch.w / 2, couch.y - couch.h / 2, 10, couch.h);
+  block(couch.x + couch.w / 2 - 10, couch.y - couch.h / 2, 10, couch.h);
+  const inLounge = (p: Spot, pad = 0): boolean => p.x > room0.x - pad && p.x < room0.x + room0.w + pad && p.y > room0.y - pad && p.y < room0.y + room0.h + pad;
+  const keep = <T extends Spot>(list: T[]): T[] => list.filter((p) => !inLounge(p, 10));
+  const lounge: LoungeDef = { room: room0, tv, couch, seat: { x: lcx, y: couchY - 2 } };
+
   return {
     walls,
-    barricadeSpots,
+    barricadeSpots: barricadeSpots.filter((b) => !inLounge(b, -2)),
     doors,
     lockers,
     barrels,
     racks,
     generatorSpots,
-    lootSpots,
-    stakeSpots,
-    lampSpots,
+    lootSpots: keep(lootSpots),
+    stakeSpots: keep(stakeSpots),
+    lampSpots: keep(lampSpots),
+    lounge,
     gate: { x: gx, y: y0, angle: 0, length: C, leverX: gx + C / 2 - 24, leverY: y0 + 30 },
     entrances,
   };

@@ -1019,6 +1019,17 @@ export const jaden: CanvasGen = () => {
   return c;
 };
 
+const CHACKO_LOOK: Look = { skin: '#b9825a', hair: '#161212', style: 'short', shirt: '#176a4a', pants: '#2a2e3a', shoes: '#d8d8d8' };
+
+/** Chacko: a green football jersey, arms forward holding a controller. */
+export const chacko: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, CHACKO_LOOK, 30, 32, 1, { armsForward: true });
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(26, 28, 3, 8);
+  return c;
+};
+
 /** Waz: brown skin, black hair, a green shirt. */
 export const waz: CanvasGen = () => {
   const [c, ctx] = canvas(64);
@@ -1909,6 +1920,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   barrel,
   stake,
   note,
+  chacko,
   gate,
   barricade,
   door,

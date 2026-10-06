@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, DIZZY_BIT, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, DIZZY_BIT, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, ChackoFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -445,7 +445,7 @@ class PlayerSprite {
   }
 }
 
-type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden' | 'waz';
+type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden' | 'waz' | 'chacko';
 
 interface Bubble {
   root: Container;
@@ -588,6 +588,7 @@ export class EntityLayer {
   private marc: NpcSprite | null = null;
   private jaden: { npc: NpcSprite; gun: Graphics; mark: Text } | null = null;
   private waz: NpcSprite | null = null;
+  private chacko: NpcSprite | null = null;
   /** Shane's and Jaden's alert meters over their heads (above the vision mask: everyone sees them build). */
   private readonly meters = new Graphics();
   private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
@@ -740,6 +741,7 @@ export class EntityLayer {
     let plasmaSeen = false;
     let jadenSeen = false;
     let wazSeen = false;
+    let chackoSeen = false;
     this.beam.clear();
     this.laser.clear();
     for (const e of ents) {
@@ -764,6 +766,9 @@ export class EntityLayer {
       } else if (e.kind === EntityKind.Plasma) {
         plasmaSeen = true;
         this.drawPlasma(e, dt, time);
+      } else if (e.kind === EntityKind.Chacko) {
+        chackoSeen = true;
+        this.drawChacko(e, dt, time);
       } else if (e.kind === EntityKind.Waz) {
         wazSeen = true;
         this.drawWaz(e, dt, time);
@@ -783,6 +788,7 @@ export class EntityLayer {
     if (this.plasma) this.plasma.man.root.visible = plasmaSeen;
     if (this.jaden) this.jaden.npc.root.visible = jadenSeen;
     if (this.waz) this.waz.root.visible = wazSeen;
+    if (this.chacko) this.chacko.root.visible = chackoSeen;
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
     this.drawWakes(ents, self, time, dt);
@@ -797,7 +803,7 @@ export class EntityLayer {
     // Dialogue bubble pops in above whoever is speaking.
     if (this.bubble) {
       const b = this.bubble;
-      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : b.who === 'waz' ? this.waz : this.sexton;
+      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : b.who === 'waz' ? this.waz : b.who === 'chacko' ? this.chacko : this.sexton;
       if (time > b.until || !speaker) {
         b.root.destroy({ children: true });
         this.bubble = null;
@@ -885,6 +891,7 @@ export class EntityLayer {
       [EntityKind.Plasma]: 4,
       [EntityKind.Jaden]: 5,
       [EntityKind.Waz]: 6,
+      [EntityKind.Chacko]: 7,
     };
     const live = new Set<number>();
     const mg = this.meters;
@@ -934,7 +941,7 @@ export class EntityLayer {
     g.clear();
     const people: { id: number; x: number; y: number }[] = [];
     for (const e of ents) {
-      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden || e.kind === EntityKind.Waz) {
+      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden || e.kind === EntityKind.Waz || e.kind === EntityKind.Chacko) {
         if (self && e.id === self.id) continue;
         people.push(e);
       }
@@ -1303,6 +1310,35 @@ export class EntityLayer {
       gun.poly([fx, y0 - 5, fx + 12, y0, fx, y0 + 5, fx + 4, y0]).fill({ color: 0xffe08a, alpha: 0.95 });
       gun.circle(fx + 3, y0, 4).fill({ color: 0xffffff, alpha: 0.9 });
     }
+  }
+
+  /** Chacko: sits on the couch with a controller, eyes on the TV; flinches when hit; a gory mess when he's gone. */
+  private drawChacko(e: InterpEntity, dt: number, time: number): void {
+    this.chacko ??= new NpcSprite(this.assets, 'char.chacko', 24, this.root);
+    const n = this.chacko;
+    n.step(e, dt, 34, 150);
+    n.fx.clear();
+    n.legs.visible = false;
+    const dead = (e.state & ChackoFlag.Dead) !== 0;
+    n.body.visible = !dead;
+    n.body.rotation = e.facing;
+    if (dead) {
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.4;
+        const r = 5 + (i % 4) * 7;
+        n.fx.circle(Math.cos(a) * r, Math.sin(a) * r, 5 + (i % 3) * 3).fill({ color: i % 2 ? 0x8a0c0c : 0x5a0707, alpha: 0.85 });
+      }
+      return;
+    }
+    const hurt = (e.state & ChackoFlag.Hurt) !== 0;
+    n.body.tint = hurt && Math.sin(time * 40) > 0 ? 0xff7a6a : 0xffffff;
+    n.body.position.set(hurt ? Math.sin(time * 60) * 2 : 0, 0);
+    // The controller in both hands, thumbs going.
+    const a = e.facing;
+    const cx = Math.cos(a) * 15;
+    const cy = Math.sin(a) * 15;
+    n.fx.roundRect(cx - 4, cy - 3, 8, 6, 2).fill({ color: 0x1c1c22 }).stroke({ width: 1, color: INK });
+    if (Math.sin(time * 9) > 0.6) n.fx.circle(cx + 1, cy, 1.2).fill({ color: 0xff5a4a });
   }
 
   /** Waz: wanders; flinches and bolts when Zach hits him; looks you over when you talk to him. */

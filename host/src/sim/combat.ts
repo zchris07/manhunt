@@ -11,7 +11,7 @@ function canSwing(h: SimPlayer): boolean {
 
 /** A charge in progress survives a lunge hit that lands mid-combo. */
 function canKeepCharging(h: SimPlayer): boolean {
-  return !h.carrying && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0;
+  return !h.carrying && h.attackWindup <= 0 && h.action === Action.None && h.stunT <= 0 && h.knockT <= 0;
 }
 
 /** Left click pressed: start charging a swing (released in updateCombat). */
@@ -101,6 +101,10 @@ function resolveAttack(w: World, h: SimPlayer): void {
   } else if (w.jaden.alive && inSwipe(h, w.jaden.x, w.jaden.y, BALANCE.jaden.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.jaden.x, w.jaden.y)) {
     // Six points (3 heavy swipes, or 6 light) kill him; each hit shoves him back and stuns him briefly.
     w.jaden.slashHit(h, power);
+    hit = true;
+  } else if (w.chacko.solid && inSwipe(h, w.chacko.x, w.chacko.y, BALANCE.chacko.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.chacko.x, w.chacko.y)) {
+    // One hit and he blows up.
+    w.chacko.hit(h);
     hit = true;
   } else if (w.waz.solid && inSwipe(h, w.waz.x, w.waz.y, BALANCE.waz.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.waz.x, w.waz.y)) {
     w.waz.hit(h);
@@ -216,6 +220,12 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
     lungeLanded(h);
     return;
   }
+  const ch = w.chacko;
+  if (ch.solid && pointSegDist2(ch.x, ch.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.chacko.radius) ** 2) {
+    ch.hit(h);
+    lungeLanded(h);
+    return;
+  }
   const wz = w.waz;
   if (wz.solid && pointSegDist2(wz.x, wz.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.waz.radius) ** 2) {
     wz.hit(h);
@@ -233,7 +243,7 @@ function lungeLanded(h: SimPlayer): void {
   h.move.slowMul = H.attack.hitSlowMul;
 }
 
-export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet';
+export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet' | 'blast';
 
 /**
  * Takes `amount` hp (out of his 100) off Zach. At zero he goes down for a while; Plasma's
@@ -244,8 +254,8 @@ export function hurtHunter(w: World, h: SimPlayer, amount: number, by: SimPlayer
   h.hp = Math.max(0, h.hp - amount / H.health.max);
   if (kind !== 'gas') w.emit('all', { k: 'hit', victim: h.id, by: by?.id ?? 0, x: Math.round(h.move.x), y: Math.round(h.move.y), w: kind });
   if (h.hp > 1e-4) return;
-  downHunter(w, h, kind !== 'punch');
-  w.feed(kind === 'punch' ? `Plasma.TTV knocked ${h.name} out` : by ? `${by.name} put ${h.name} down` : `${h.name} went down`);
+  downHunter(w, h, kind !== 'punch' && kind !== 'blast');
+  w.feed(kind === 'blast' ? `${h.name} was blown apart` : kind === 'punch' ? `Plasma.TTV knocked ${h.name} out` : by ? `${by.name} put ${h.name} down` : `${h.name} went down`);
 }
 
 /** Zach is down: everything he was doing stops, and he drops whoever he carried. */
@@ -254,6 +264,7 @@ export function downHunter(w: World, h: SimPlayer, counts: boolean): void {
   h.knockT = H.health.downTime;
   h.chargeT = -1;
   h.attackWindup = 0;
+  h.swingT = 0;
   h.move.lungeT = 0;
   if (h.action !== Action.None) w.cancelAction(h);
   if (h.carrying) dropCarried(w, h);

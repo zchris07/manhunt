@@ -103,6 +103,7 @@ export const Prompt = {
   NameDrop: 34,
   TalkWaz: 35,
   ReadNote: 36,
+  TalkChacko: 37,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -133,10 +134,11 @@ export const PROMPT_LABELS: Record<number, string> = {
   31: 'Press E to pick up',
   35: 'Press E to talk to Waz',
   36: 'Press E to read the note',
+  37: 'Press E to talk to Chacko',
 };
 
 /** NPC names, indexed by the NameNpc prompt target. */
-export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen', 'Waz'];
+export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen', 'Waz', 'Chacko'];
 
 /**
  * Survivor items. Everything goes in one of the `INV_SLOTS` free slots: identical items
@@ -207,6 +209,8 @@ export const EntityKind = {
   Jaden: 12,
   /** Waz: state = WazFlag. */
   Waz: 13,
+  /** Chacko: state = ChackoFlag. */
+  Chacko: 14,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

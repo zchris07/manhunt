@@ -136,6 +136,8 @@ export interface SimPlayer {
   abilityLockT: number;
   /** Zach: slew Jaden Nguyen (one more lunge charge, longer reach). */
   jadenBonus: number;
+  /** Zach: he has '50 Nic' (from Chacko) in place of Penjamin. */
+  nic: boolean;
   /** A survivor's sniper laser entity id. */
   laserId: number;
 
@@ -246,6 +248,7 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     abilityLockT: 0,
     jadenBonus: 0,
     laserId: 0,
+    nic: false,
     noise: 0,
     prompt: Prompt.None,
     promptTarget: -1,

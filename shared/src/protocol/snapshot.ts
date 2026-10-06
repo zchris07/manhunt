@@ -95,6 +95,8 @@ export interface SelfState {
   vapeCharges: number;
   abilityLockT: number;
   jadenBonus: number;
+  /** Zach: he has '50 Nic' in place of Penjamin. */
+  nic: number;
 }
 
 /**
@@ -184,6 +186,7 @@ export function emptySelf(id = 0): SelfState {
     vapeCharges: 0,
     abilityLockT: 0,
     jadenBonus: 0,
+    nic: 0,
   };
 }
 
@@ -228,6 +231,13 @@ export const JadenFlag = {
 /** Waz's state bits. */
 export const WazFlag = {
   Fleeing: 1,
+  Hurt: 2,
+  Talking: 4,
+} as const;
+
+/** Chacko's state bits. */
+export const ChackoFlag = {
+  Dead: 1,
   Hurt: 2,
   Talking: 4,
 } as const;
@@ -491,7 +501,7 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(unit(s.noise)).u8(s.spectating);
   w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
   w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd)).u16(tenths(s.hempLeft)).u8(Math.min(255, s.stakeBuff));
-  w.u16(tenths(s.hempLock)).u8(s.beamCharges).u16(tenths(s.beamCd)).u16(tenths(s.beamT)).u8(s.vapeCharges).u16(tenths(s.abilityLockT)).u8(s.jadenBonus);
+  w.u16(tenths(s.hempLock)).u8(s.beamCharges).u16(tenths(s.beamCd)).u16(tenths(s.beamT)).u8(s.vapeCharges).u16(tenths(s.abilityLockT)).u8(s.jadenBonus).u8(s.nic);
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -575,6 +585,7 @@ function readSelf(r: ByteReader): SelfState {
   s.vapeCharges = r.u8();
   s.abilityLockT = r.u16() / 10;
   s.jadenBonus = r.u8();
+  s.nic = r.u8();
   return s;
 }
 
