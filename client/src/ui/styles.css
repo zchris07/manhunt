@@ -1789,6 +1789,12 @@ kbd,
     rgba(8, 8, 7, 0.82) !important;
 }
 
+.slot.vape.nic {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(90, 170, 240, 0.34), transparent 65%),
+    rgba(8, 8, 7, 0.82) !important;
+}
+
 .slot.vape {
   background:
     radial-gradient(ellipse at 50% 45%, rgba(232, 216, 74, 0.32), transparent 65%),

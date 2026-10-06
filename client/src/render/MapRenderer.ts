@@ -177,6 +177,26 @@ export class MapRenderer {
       }
       this.low.add(g, r.x + r.w / 2, r.y + r.h / 2);
     }
+    // The lounge: a TV on the north wall (its screen glowing) and a worn couch facing it.
+    {
+      const L = m.lounge;
+      const tv = new Graphics();
+      this.shadowRect(tv, L.tv.x - L.tv.w / 2, L.tv.y - L.tv.h / 2, L.tv.w, L.tv.h, 2);
+      tv.roundRect(L.tv.x - L.tv.w / 2, L.tv.y - L.tv.h / 2, L.tv.w, L.tv.h, 2).fill({ color: 0x14161a });
+      tv.rect(L.tv.x - L.tv.w / 2 + 3, L.tv.y - L.tv.h / 2 + 7, L.tv.w - 6, 5).fill({ color: 0x5cd8a0, alpha: 0.9 });
+      this.low.add(tv, L.tv.x, L.tv.y);
+      const c = new Graphics();
+      const cx = L.couch.x - L.couch.w / 2;
+      const cy = L.couch.y - L.couch.h / 2;
+      this.shadowRect(c, cx, cy, L.couch.w, L.couch.h, 6);
+      c.roundRect(cx, cy, L.couch.w, L.couch.h, 6).fill({ color: 0x3a2c2a });
+      // Back (south), arms, and two worn seat cushions.
+      c.roundRect(cx, cy + L.couch.h - 11, L.couch.w, 11, 4).fill({ color: 0x2a1e1c });
+      c.roundRect(cx, cy, 11, L.couch.h, 4).fill({ color: 0x2a1e1c });
+      c.roundRect(cx + L.couch.w - 11, cy, 11, L.couch.h, 4).fill({ color: 0x2a1e1c });
+      for (const k of [0, 1]) c.roundRect(cx + 14 + k * 40, cy + 4, 36, L.couch.h - 17, 5).fill({ color: 0x4a3836 });
+      this.low.add(c, L.couch.x, L.couch.y);
+    }
     // Wrecked cars: rusted shells seen from above.
     for (const w of m.wrecks) {
       const g = new Graphics();

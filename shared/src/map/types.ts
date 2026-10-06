@@ -1,3 +1,5 @@
+import type { LoungeDef } from './warehouse';
+
 export type Surface = 'forest' | 'dirt' | 'grass' | 'concrete' | 'wood' | 'water';
 export const SURFACES: readonly Surface[] = ['forest', 'dirt', 'grass', 'concrete', 'wood', 'water'];
 
@@ -58,8 +60,8 @@ export interface HidingSpotDef {
   exitY: number;
 }
 
-export type LootKind = 'bottle' | 'goggles' | 'confit' | 'shotgun' | 'energy' | 'trap' | 'book' | 'beastbar' | 'shield';
-export const LOOT_KINDS: readonly LootKind[] = ['goggles', 'shotgun', 'confit', 'energy', 'trap', 'bottle', 'book', 'beastbar', 'shield'];
+export type LootKind = 'bottle' | 'goggles' | 'confit' | 'shotgun' | 'energy' | 'trap' | 'book' | 'beastbar' | 'shield' | 'sniper';
+export const LOOT_KINDS: readonly LootKind[] = ['goggles', 'shotgun', 'confit', 'energy', 'trap', 'bottle', 'book', 'beastbar', 'shield', 'sniper'];
 
 export interface LootSpawnDef {
   id: number;
@@ -184,6 +186,8 @@ export interface MapData {
   loot: LootSpawnDef[];
   stakes: StakeDef[];
   notes: NoteDef[];
+  /** The lounge room: furniture, and the couch where Chacko sits. */
+  lounge: LoungeDef;
   barricades: BarricadeDef[];
   doors: DoorDef[];
   gate: GateDef;

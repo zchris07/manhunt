@@ -21,6 +21,9 @@ type Mode = 'idle' | 'walk' | 'transform' | 'rage' | 'revert';
  */
 export class Plasma implements NpcTarget {
   readonly id: number;
+  /** Penjamin: seconds left of its slow, and how strong (0 to 1). */
+  vapeSlowT = 0;
+  vapeSlow = 0;
   x = 0;
   y = 0;
   facing = 0;
@@ -43,6 +46,8 @@ export class Plasma implements NpcTarget {
   private heading = 0;
   private stuckT = 0;
   private escapeT = 0;
+  /** Hunting someone for Chacko's sake: no giving up, no turning back, until they're downed. */
+  private avenging = false;
   /** Seconds since he transformed (he turns back after `rageTime`). */
   private rageT = 0;
   private punchCd = 0;
@@ -122,6 +127,30 @@ export class Plasma implements NpcTarget {
     this.attacked(h, P.slashStun, power);
   }
 
+  /** Chacko was slain by `p`: GAMER RAGE at them, wherever they are, until they're downed. */
+  avenge(p: SimPlayer): void {
+    if (!this.alive || !this.huntable(p)) return;
+    if (!this.beast) this.attacked(p, 0, 0);
+    this.target = p.id;
+    this.rageT = 0;
+    this.escapeT = 0;
+    this.avenging = true;
+  }
+
+  stopAvenging(): void {
+    this.avenging = false;
+  }
+
+  /** A 0.50 cal round: it slays him in one shot, but only in beast form (otherwise it just sets him off). */
+  snipe(by: SimPlayer): void {
+    if (!this.alive) return;
+    if (this.beast && this.mode !== 'transform') {
+      if (by.role === 'hunter') this.zachHits = P.zachHits;
+      else this.survivorHits = P.survivorHits;
+      this.die(by);
+    } else this.attacked(by, 0, 0);
+  }
+
   /** Penjamin: it sets him off like an attack, but doesn't hurt him. */
   provoke(by: SimPlayer): void {
     this.attacked(by, 0, 0);
@@ -131,6 +160,13 @@ export class Plasma implements NpcTarget {
     if (!this.alive) return;
     this.hurtT = damage > 0 ? 0.3 : this.hurtT;
     if (this.beast) {
+      // Someone else attacking while he hunts for Chacko draws him off to them (and ends the vendetta).
+      if (this.avenging && by.id !== this.target && this.huntable(by)) {
+        this.avenging = false;
+        this.target = by.id;
+        this.rageT = 0;
+        this.escapeT = 0;
+      }
       // Already raging: it stuns him (and he flinches). In beast form he can be hurt.
       if (stun > 0) this.stunT = Math.max(this.stunT, stun);
       // Only the beast can be hurt (not while he's still changing).
@@ -191,6 +227,7 @@ export class Plasma implements NpcTarget {
   }
 
   private calmDown(): void {
+    this.avenging = false;
     this.mode = 'revert';
     this.modeT = 1;
     this.target = 0;
@@ -219,7 +256,7 @@ export class Plasma implements NpcTarget {
     let speed = 0;
     if (this.raging) {
       this.rageT += dt;
-      if (this.rageT >= P.rageTime) {
+      if (this.rageT >= P.rageTime && !this.avenging) {
         this.calmDown();
         return;
       }
@@ -266,6 +303,7 @@ export class Plasma implements NpcTarget {
     if (this.gasT > 0) speed *= P.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (this.vapeSlowT > 0) speed *= 1 - this.vapeSlow;
     if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;
@@ -292,7 +330,7 @@ export class Plasma implements NpcTarget {
     const d = Math.hypot(t.move.x - this.x, t.move.y - this.y);
     // Out of reach or out of sight counts toward escaping him; 10 s and he gives up.
     const lost = this.gasT > 0 || d > P.loseRadius || !w.geo.hasLineOfSight(this.x, this.y, t.move.x, t.move.y);
-    this.escapeT = lost ? this.escapeT + dt : 0;
+    this.escapeT = lost && !this.avenging ? this.escapeT + dt : 0;
     if (this.escapeT >= P.escapeTime) {
       w.feed(`${t.name} got away from Plasma.TTV`);
       this.calmDown();

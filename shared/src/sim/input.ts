@@ -15,7 +15,7 @@ export const Btn = {
   Secondary: 1 << 4,
   /** Space: slam a barricade, hold breath while hidden. */
   Space: 1 << 5,
-  /** Q: JARVIS (survivors) or the Hemp Battery (Zach). */
+  /** Q: JARVIS (survivors) or toggle the Hemp Battery (Zach). */
   Ability: 1 << 6,
   /** F: Zach's lunge. */
   Lunge: 1 << 7,
@@ -23,6 +23,8 @@ export const Btn = {
   Drop: 1 << 8,
   /** Space (Zach): Penjamin. */
   Vape: 1 << 9,
+  /** R (Zach): channel the Hemp Beam. */
+  Beam: 1 << 10,
 } as const;
 
 export interface InputCmd {

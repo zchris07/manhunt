@@ -33,7 +33,7 @@ function lane(): { w: World; d: Driver; h: SimPlayer; s: SimPlayer; m: SimPlayer
 const vape = (d: Driver, h: SimPlayer, aim = 0): void => d.tap(h.id, Btn.Vape, { aim });
 
 describe('Penjamin', () => {
-  it('reaches 1.1x the distance to the corner of his screen, growing out over 0.6 s, on a 20 s cooldown', () => {
+  it('reaches 1.1x the distance to the corner of his screen, growing out over 0.6 s, with two charges and a 25 s cooldown', () => {
     const { w, d, h } = lane();
     vape(d, h);
     expect(w.vapes.length).toBe(1);
@@ -43,8 +43,14 @@ describe('Penjamin', () => {
     expect(vapeExtent(v, v.t0 + 0.3)).toBeGreaterThan(v.range * 0.5);
     expect(vapeExtent(v, v.t0 + V.growTime)).toBeCloseTo(v.range, 5);
     expect(h.vapeCd).toBeGreaterThan(V.cooldown - 0.2);
+    expect(h.vapeCharges).toBe(1);
     vape(d, h);
-    expect(w.vapes.length).toBe(1);
+    expect(w.vapes.length).toBe(2);
+    expect(h.vapeCharges).toBe(0);
+    vape(d, h);
+    expect(w.vapes.length).toBe(2);
+    d.run(secs(V.cooldown + 0.5));
+    expect(h.vapeCharges).toBe(1);
     expect(w.events.some((e) => e.e.k === 'vape' && e.to.includes(h.id))).toBe(true);
   });
 
@@ -70,7 +76,7 @@ describe('Penjamin', () => {
     place(s, h.move.x + 1100 * 0.98, h.move.y);
     vape(d, h);
     d.run(secs(1));
-    expect(s.vapeSlow).toBeLessThan(0.02);
+    expect(s.vapeSlow).toBeCloseTo(V.slowFar, 1);
     expect(s.vapeDps).toBeLessThan(0.015);
     // Walk out of it (well off to the side).
     place(s, h.move.x + 400, h.move.y + 600);

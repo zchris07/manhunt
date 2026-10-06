@@ -23,29 +23,6 @@ function quiet(w: World): void {
 const seen = (w: World, viewer: SimPlayer, who: SimPlayer): boolean =>
   buildView(w, viewer).entities.some((e) => e.kind === EntityKind.Player && e.id === who.id);
 
-describe('Hemp Battery is held, not toggled', () => {
-  it('drains only while Q is held and its buffs are on only then', () => {
-    const w = makeWorld({ survivors: 1 });
-    quiet(w);
-    const d = new Driver(w);
-    const h = w.players.get(1)!;
-    h.hemp = 1;
-    h.hempLeft = BALANCE.hunter.hemp.duration;
-    expect(BALANCE.hunter.hemp.duration).toBe(16);
-    d.hold(h.id, Btn.Ability, 2);
-    expect(h.move.hempT).toBeGreaterThan(0);
-    expect(h.hempLeft).toBeCloseTo(14, 0);
-    d.run(2);
-    expect(h.move.hempT).toBe(0);
-    const left = h.hempLeft;
-    d.run(secs(3));
-    expect(h.hempLeft).toBe(left);
-    d.hold(h.id, Btn.Ability, 20);
-    expect(h.hemp).toBe(0);
-    expect(h.hempLeft).toBe(0);
-  });
-});
-
 describe('testing mode', () => {
   it("Zach's abilities never cool down", () => {
     const w = makeWorld({ survivors: 1, testMode: true });
@@ -187,7 +164,8 @@ describe('Jaden and Zach melee', () => {
     expect(j.alive).toBe(true);
     j.slashHit(h, 1);
     expect(j.alive).toBe(false);
-    expect(w.drops.some((d) => d.kind === ItemKind.Pistol)).toBe(true);
+    // Zach can't use a pistol: nothing drops when he is the one who slew him.
+    expect(w.drops.some((d) => d.kind === ItemKind.Pistol)).toBe(false);
   });
 
   it('three heavy swipes kill him', () => {
@@ -201,18 +179,16 @@ describe('Jaden and Zach melee', () => {
     expect(w.jaden.alive).toBe(false);
   });
 
-  it("Zach can't pick up the P250", () => {
+  it("Zach can't pick up a P250 a survivor's kill left behind", () => {
     const w = makeWorld({ survivors: 1 });
     quiet(w);
     const h = w.players.get(1)!;
     place(h, 3000, 3000);
-    w.jaden.x = 3040;
-    w.jaden.y = 3000;
-    for (let i = 0; i < 6; i++) w.jaden.slashHit(h, 1);
-    const drop = w.drops.find((d) => d.kind === ItemKind.Pistol)!;
+    const drop = { id: w.allocEntityId(), x: 3010, y: 3000, kind: ItemKind.Pistol, golden: false, amount: 10 };
+    w.drops.push(drop);
     pickUpDrop(w, h, drop.id);
     expect(w.drops.includes(drop)).toBe(true);
-    expect(h.inv.every((s) => s.kind !== ItemKind.Pistol)).toBe(true);
+    expect(h.inv.every((x) => x.kind !== ItemKind.Pistol)).toBe(true);
   });
 });
 
@@ -224,11 +200,9 @@ describe('hemp battery sprint and staked regen', () => {
       const d = new Driver(w);
       const h = w.players.get(1)!;
       place(h, 3000, 3000);
-      if (hemp) {
-        h.hemp = 2;
-      }
+      if (hemp) d.tap(h.id, Btn.Ability);
       const before = h.move.stamina;
-      d.hold(h.id, Btn.Run | Btn.Ability, 1, { moveX: 1, moveY: 0 });
+      d.hold(h.id, Btn.Run, 1, { moveX: 1, moveY: 0 });
       return before - h.move.stamina;
     };
     expect(run(true) / run(false)).toBeCloseTo(0.8, 1);

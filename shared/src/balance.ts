@@ -108,9 +108,9 @@ export const BALANCE = {
       /** Length of the visible swing animation. */
       swingTime: 0.32,
       /** Any landed hit (swipe or lunge, on anyone) locks the machete this long; a whiff only `missCooldown`. */
-      hitCooldown: 0.8,
+      hitCooldown: 0,
       hitSlowMul: 0.45,
-      missCooldown: 0.2,
+      missCooldown: 0,
       missSlowMul: 0.7,
       /** Two melee hits break a dropped barricade or a door. */
       barricadeHits: 2,
@@ -135,6 +135,8 @@ export const BALANCE = {
      * `width` that flies across the whole map through everything. `thickness` is its depth.
      */
     burst: {
+      /** Aggressive NPCs (an alerted Jaden, a raging Plasma, a defending Sexton) the wave passes are stunned this long. */
+      npcStun: 2.5,
       cooldown: 12,
       speed: 1700,
       width: HUNTER_WIDTH * 6,
@@ -171,7 +173,9 @@ export const BALANCE = {
      * in it and `darkAfter` s more.
      */
     vape: {
-      cooldown: 20,
+      /** Two charges, like the lunge: each takes `cooldown` s to come back. */
+      charges: 2,
+      cooldown: 25,
       halfAngleDeg: 10,
       reachMul: 1.1,
       /** Used if the client hasn't told the host how big its screen is. */
@@ -182,8 +186,12 @@ export const BALANCE = {
       lingerTime: 4,
       fadeTime: 1,
       coverage: 0.5,
-      slow: 0.2,
-      slowFar: 0.01,
+      /** Slow: `slow` point blank down to `slowFar` at the far end; the strongest it got holds while in the gas and `slowAfter` s after. */
+      slow: 0.6,
+      slowFar: 0.3,
+      slowAfter: 3,
+      /** NPCs in the gas are slowed by the same falloff and take a light machete hit every `npcHitEvery` s. */
+      npcHitEvery: 1.5,
       dps: 0.05,
       dpsFar: 0.01,
       afterTime: 2,
@@ -192,8 +200,31 @@ export const BALANCE = {
       /** How fast the narrowing and darkening ease in and out (client), seconds. */
       darkEase: 0.6,
     },
-    /** Hemp Battery (hold Q, dropped by Sexton Science): `duration` s of use in all; the zoom is `zoomRate` times as fast as 1 s. */
-    hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 16, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
+    /**
+     * Hemp Battery (Q, toggled; part of his kit): `duration` s of use, `recover` s to refill from
+     * empty, and drained dry it can't be used for `lockout` s. The zoom is `zoomRate` times as fast as 1 s.
+     */
+    hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
+    /**
+     * Hemp Beam (R, from slaying Sexton Science): `charges` single-use charges, each channelled
+     * for as long as Sexton's own beam (after its charge-up), then `cooldown` s before the next. No melee while it charges or fires.
+     */
+    beam: {
+      charges: 3,
+      cooldown: 2,
+      /** It charges for `windup` s (a sound and an animation), then hits survivors `tickRate` times a second for `tickDamage` of their full health each. */
+      windup: 1,
+      /** NPCs it touches take a light machete hit every `npcHitEvery` s. */
+      npcHitEvery: 0.5,
+      tickRate: 10,
+      tickDamage: 0.03,
+      /** The sound (heard by everyone, fading with distance from Zach). */
+      audio: { radius: 1400, near: 200, curve: 1.5, volume: 1 },
+    },
+    /** Slaying Jaden Nguyen: one more lunge charge and `rangeMul` times the melee reach, for good. */
+    jadenSlain: { lunge: 1, rangeMul: 1.2 },
+    /** The Grapes of Wrath switches off all of Zach's abilities for this long. */
+    bookAbilityLock: 6,
     /** Speed multiplier while climbing through a smashed window (one swipe smashes it). */
     windowClimbMul: 0.35,
     breakBarricadeTime: 2.2,
@@ -227,7 +258,7 @@ export const BALANCE = {
 
   items: {
     /** Items spread over the whole map. */
-    counts: { bottle: 20, goggles: 3, confit: 6, shotgun: 2, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 },
+    counts: { sniper: 2, bottle: 20, goggles: 3, confit: 6, shotgun: 4, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 },
     /** Set out in a row beside Chris Zelley's ambulance (on top of `counts`). */
     ambulanceKit: ['shield', 'shield', 'beastbar', 'beastbar', 'confit'] as readonly ('shield' | 'beastbar' | 'confit')[],
     /** Mr Beast bar: eating it gives back this fraction of your health. */
@@ -247,7 +278,7 @@ export const BALANCE = {
      * The Grapes of Wrath: thrown like a bottle. On Zach it stuns him for `stun` s and flashes a
      * picture over his screen (for `flashTime`, whatever the stun).
      */
-    book: { speed: 700, stun: 3, hitRadius: 12, damage: 0.2, zachDamage: 5, images: 4 },
+    book: { speed: 700, stun: 2.5, hitRadius: 12, damage: 0.2, zachDamage: 5, images: 4 },
     /** Night vision goggles: hold left click to look through them. A 15 s meter that never refills. */
     goggles: { meter: 15, coneMul: 1.2 },
     /**
@@ -255,11 +286,19 @@ export const BALANCE = {
      * something solid or someone (windows shatter and let it through). Each pellet takes
      * `pelletDamage` of a survivor's health; any pellet on Zach stuns him and blasts him back.
      */
-    shotgun: { shells: 3, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 2.1, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
+    shotgun: { shells: 6, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 2.1, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
     /** Jaden's P250, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
     pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10 },
     /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
     golden: { shells: 5, reload: 1 },
+    /**
+     * The 0.50 cal (survivors only): `shots` rounds; the bullet flies at `speed` (twice the
+     * `pelletSpeed` of a shotgun pellet) through everything, with no range limit. It downs a
+     * survivor outright, takes `zachHp` of Zach's health, shoves him back (`kb*`) and stops his
+     * sprint for `sprintLock` s; it slays what can be slain, smashes glass, doors and barricades
+     * and takes `genDamage` off a generator.
+     */
+    sniper: { shots: 3, reload: 1.2, pelletSpeed: 4000, speed: 8000, zachHp: 25, kbPeak: 1100, kbDuration: 0.5, sprintLock: 3, genDamage: 0.3, hitRadius: 5, laserMax: 6000 },
     /**
      * Zach's golden pump replaces his machete until its 10 shots are spent. Each pellet takes
      * `pelletDamage`; a survivor it hits is stunned briefly and pushed away from the blast.
@@ -271,7 +310,7 @@ export const BALANCE = {
      */
     energy: { duration: 20, refillMul: 1.5, bonusSec: 2, speedMul: 0.15 },
     /** Galaxy gas trap: triggers within 5 Zach-widths, gas covers 10 Zach-widths. */
-    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5, zachDps: 2 },
+    trap: { plantTime: 2, triggerRadius: HUNTER_WIDTH * 5, gasRadius: HUNTER_WIDTH * 10 * 0.65, armTime: 1, gasTime: 7, spreadTime: 0.5, slowMul: 0.5, zachDps: 2 },
     /** After a stun ends Zach can't be stunned again for this long (no chain-stuns). */
     stunImmunity: 2.5,
     barricade: { stun: 3, slamRadius: 60, dropTime: 0.2 },
@@ -392,7 +431,9 @@ export const BALANCE = {
       range: 420,
       keep: 220,
       cooldown: 0.9,
+      /** A survivor loses this fraction of their health a shot; Zach loses `zachDamage` of his full bar. */
       damage: 0.125,
+      zachDamage: 0.08,
       spreadDeg: 5,
       /** He stops once his target has lost this fraction of the health they had when he started. */
       stopAfter: 0.5,
@@ -474,6 +515,23 @@ export const BALANCE = {
     line: 'lemme take a looksie',
   },
 
+  /**
+   * Chacko: sits on the lounge couch watching Madden. A survivor who talks to him gets a Doctor
+   * Pepper (once each); Zach gets '50 Nic' (Penjamin, `nicRangeMul` times the reach, blue). One hit
+   * from any item kills him: slain by a survivor, Jaden Nguyen and Plasma.TTV hunt that survivor
+   * until they're downed once; slain by Zach, he explodes for `explosion` of Zach's full health.
+   */
+  chacko: {
+    radius: 14,
+    reach: 70,
+    explosion: 0.5,
+    nicRangeMul: 1.5,
+    light: { radius: 130, intensity: 0.3 },
+    lineSurvivor: 'Take a Dr Pepper, bro. Madden is on.',
+    lineZach: "Here. 50 Nic. Don't tell anyone.",
+    lineHit: 'Not during the game!',
+  },
+
   /** Every NPC carries a faint light (client only). Shane, Jaden and Marc have their own, below. */
   npcLight: { radius: 120, intensity: 0.3 },
 
@@ -500,7 +558,8 @@ export const BALANCE = {
     /** Seconds for one survivor to repair a generator from 0 to 100%. */
     repairTime: 70,
     /** Speed multiplier for 1, 2, 3, 4+ survivors on the same generator. */
-    coopMul: [1, 1.7, 2.3, 2.8] as readonly number[],
+    /** Each extra survivor on the same generator adds this much repair speed. */
+    coopStep: 0.25,
     repairNoise: 520,
     regressPerSec: 0.25 / 60,
     damageRegressInstant: 0.08,

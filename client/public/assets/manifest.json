@@ -28,6 +28,7 @@
     "char.plasma": { "procedural": "plasma" },
     "char.plasmaBeast": { "procedural": "plasmaBeast" },
     "char.waz": { "procedural": "waz" },
+    "char.chacko": { "procedural": "chacko" },
     "obj.generator": { "procedural": "generator", "variants": 2 },
     "obj.locker": { "procedural": "locker" },
     "obj.wardrobe": { "procedural": "wardrobe" },
@@ -46,6 +47,7 @@
     "item.energy": { "procedural": "itemEnergy" },
     "item.book": { "procedural": "itemBook" },
     "item.pistol": { "procedural": "itemPistol" },
+    "item.sniper": { "procedural": "itemSniper" },
     "item.beastBar": { "procedural": "itemBeastBar" },
     "item.shield": { "procedural": "itemShield" },
     "item.trap": { "procedural": "itemTrap" },
@@ -64,7 +66,8 @@
     "sexton.reel": { "file": "audio/reel.mp3" },
     "shane.steps": { "procedural": "pitterPatter" },
     "boom": { "file": "audio/vine-boom.mp3" },
-    "penjamin": { "file": "audio/penjamin.mp3", "duration": 4 }
+    "penjamin": { "file": "audio/penjamin.mp3", "duration": 4 },
+    "repulsor": { "file": "audio/repulsor.mp3" }
   },
   "images": {
     "ui.scare": { "file": "images/scare.webp" },

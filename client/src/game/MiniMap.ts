@@ -18,6 +18,7 @@ const ITEM_COLORS: Record<string, string> = {
   book: '#a86ac8',
   beastbar: '#8a5a2a',
   shield: '#3aa8ff',
+  sniper: '#ff2a2a',
   trap: '#d06aff',
 };
 

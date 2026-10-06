@@ -22,6 +22,9 @@ type DefensePhase = 'retreat' | 'approach' | 'beam' | 'flee';
  */
 export class Sexton implements NpcTarget {
   readonly id: number;
+  /** Penjamin: seconds left of its slow, and how strong (0 to 1). */
+  vapeSlowT = 0;
+  vapeSlow = 0;
   /** Entity id of his Hemp Beam. */
   readonly beamId: number;
   x = 0;
@@ -259,6 +262,7 @@ export class Sexton implements NpcTarget {
     if (this.gasT > 0) speed *= D.gasSlowMul;
     this.moving = speed > 0;
     if (!this.moving) return;
+    if (this.vapeSlowT > 0) speed *= 1 - this.vapeSlow;
     if (w.geo.inWater(this.x, this.y)) speed *= BALANCE.wadeMul;
     const bx = this.x;
     const by = this.y;

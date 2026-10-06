@@ -36,6 +36,7 @@ export const ITEM_ICON: Record<number, string> = {
   [ItemKind.Pistol]: 'item.pistol',
   [ItemKind.BeastBar]: 'item.beastBar',
   [ItemKind.Shield]: 'item.shield',
+  [ItemKind.Sniper]: 'item.sniper',
 };
 const slotIcon = (s: SlotState): string => (s.kind === ItemKind.Shotgun && s.golden ? 'item.goldenPump' : (ITEM_ICON[s.kind] ?? ''));
 const EMPTY_SLOT: SlotState = { kind: 0, n: 0, golden: false, amt: 0 };
@@ -389,8 +390,9 @@ export class Hud {
       machete.icon.classList.add('rot');
       slot('RMB', 'Lunge', '', 'ability lunge');
       slot('F', 'Soundcloud Burst', '', 'ability burst');
-      slot('Q', 'Hemp Battery (hold)', 'item.hemp', 'ability');
+      slot('Q', 'Hemp Battery', 'item.hemp', 'ability');
       slot('Space', 'Penjamin', '', 'ability vape');
+      slot('R', 'Hemp Beam', 'item.hemp', 'ability beam');
     }
   }
 
@@ -453,7 +455,9 @@ export class Hud {
           (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
+          (self.abilityLockT > 0 ? `<div class="warn">ABILITIES OFF ${self.abilityLockT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempLeft.toFixed(1)}s`}</div>` : '') +
+          (self.beamT > 0 ? `<div class="ok">HEMP BEAM ${self.beamT > BALANCE.sexton.defense.beamTime ? 'CHARGING' : `${self.beamT.toFixed(1)}s`}</div>` : '') +
           (self.gassed ? '<div class="purple">IN GALAXY GAS: slowed</div>' : '') +
           (self.immuneT > 0 && self.stunT <= 0 ? `<div class="dim">Stun immune ${self.immuneT.toFixed(1)}s</div>` : '');
       } else {
@@ -542,6 +546,11 @@ export class Hud {
           count = test ? '∞' : `${sl.amt}`;
           if (i === this.inventory.selected) cd = self.reloadT / I.pistol.reload;
         }
+        if (n > 0 && sl.kind === ItemKind.Sniper) {
+          meter = test ? 1 : sl.amt / I.sniper.shots;
+          count = test ? '∞' : `${sl.amt}`;
+          if (i === this.inventory.selected) cd = self.reloadT / I.sniper.reload;
+        }
         if (test && n > 0 && !isWeapon(sl.kind)) count = '∞';
         set(s, { on: n > 0, sel: i === this.inventory.selected, count, meter, cd, active: sl.kind === ItemKind.Goggles && i === this.inventory.selected && self.gogglesOn === 1 });
         this.sizeSlot(s, n > 0);
@@ -564,12 +573,29 @@ export class Hud {
         }
       }
       if (pump) set(m0, { cd: self.reloadT / BALANCE.items.zachPump.reload, count: test ? '∞' : `${self.pump}`, meter: self.pump / BALANCE.items.zachPump.shots });
-      else set(m0, { cd: self.attackCd / H.attack.hitCooldown, count: charge !== null && charge >= H.attack.charge.heavyAt / H.attack.charge.max ? 'HEAVY' : 'hold', meter: charge, active: charge !== null });
+      else set(m0, { cd: H.attack.hitCooldown > 0 ? self.attackCd / H.attack.hitCooldown : 0, count: charge !== null && charge >= H.attack.charge.heavyAt / H.attack.charge.max ? 'HEAVY' : 'hold', meter: charge, active: charge !== null });
       const charges = self.lungeCharges;
-      set(this.slots[1], { on: charges > 0, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, H.lunge.charges - charges))}`, cd: charges < H.lunge.charges ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
-      set(this.slots[2], { on: self.burstCd <= 0, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
-      set(this.slots[4], { on: self.vapeCd <= 0, count: self.vapeCd > 0 ? `${Math.ceil(self.vapeCd)}s` : '', cd: self.vapeCd / H.vape.cooldown });
-      set(this.slots[3], { on: self.hemp > 0, count: self.hemp === 2 ? '∞' : self.hemp > 0 ? `${Math.ceil(self.hempLeft)}s` : '', meter: self.hemp === 1 ? self.hempLeft / H.hemp.duration : null, active: self.hempT > 0, hidden: self.hemp === 0 });
+      const locked = self.abilityLockT > 0;
+      const maxLunge = H.lunge.charges + self.jadenBonus * BALANCE.hunter.jadenSlain.lunge;
+      set(this.slots[1], { on: charges > 0 && !locked, count: `${'●'.repeat(charges)}${'○'.repeat(Math.max(0, maxLunge - charges))}`, cd: charges < maxLunge ? self.lungeRecharge / H.lunge.recharge : 0, active: self.lungeT > 0 });
+      set(this.slots[2], { on: self.burstCd <= 0 && !locked, count: self.burstCd > 0 ? `${Math.ceil(self.burstCd)}s` : '', cd: self.burstCd / H.burst.cooldown });
+      this.slots[4].name.textContent = self.nic ? '50 Nic' : 'Penjamin';
+      this.slots[4].root.classList.toggle('nic', !!self.nic);
+      set(this.slots[4], { on: self.vapeCharges > 0 && !locked, count: `${'●'.repeat(self.vapeCharges)}${'○'.repeat(Math.max(0, H.vape.charges - self.vapeCharges))}`, cd: self.vapeCharges < H.vape.charges ? self.vapeCd / H.vape.cooldown : 0 });
+      const infinite = self.hemp === 2;
+      set(this.slots[3], {
+        on: !locked && self.hempLock <= 0 && (infinite || self.hempLeft > 0),
+        count: infinite ? '∞' : self.hempLock > 0 ? `${Math.ceil(self.hempLock)}s` : `${Math.ceil(self.hempLeft)}s`,
+        meter: infinite ? 1 : self.hempLeft / H.hemp.duration,
+        active: self.hempT > 0,
+      });
+      set(this.slots[5], {
+        on: self.beamCharges > 0 && self.beamCd <= 0 && self.beamT <= 0 && !locked,
+        count: self.beamT > 0 ? `${self.beamT.toFixed(1)}s` : self.beamCd > 0 ? `${Math.ceil(self.beamCd)}s` : `${self.beamCharges}`,
+        cd: self.beamCd / BALANCE.hunter.beam.cooldown,
+        active: self.beamT > 0,
+        hidden: self.beamCharges <= 0 && self.beamT <= 0,
+      });
     }
   }
 
@@ -640,6 +666,7 @@ const LOOT_NAMES: Record<string, string> = {
   book: 'The Grapes of Wrath',
   beastbar: 'Mr Beast bar',
   shield: 'mini shield',
+  sniper: '0.50 cal',
 };
 
 /** Skill check: a needle sweeps a circle; press Space inside the zone. */

@@ -38,6 +38,23 @@ import { MiniMap } from './MiniMap';
 import { lightFlicker } from '../render/flicker';
 
 const STEP_MS = TICK_DT * 1000;
+const HEMP_KEY = 'manhunt.hempAnnounced';
+const hempAnnounced = (): boolean => {
+  try {
+    return localStorage.getItem(HEMP_KEY) === '1';
+  } catch {
+    return hempAnnouncedThisSession;
+  }
+};
+let hempAnnouncedThisSession = false;
+const markHempAnnounced = (): void => {
+  hempAnnouncedThisSession = true;
+  try {
+    localStorage.setItem(HEMP_KEY, '1');
+  } catch {
+    /* private mode: it just lasts the session */
+  }
+};
 const HEMP_ZOOM = 1 / BALANCE.hunter.hemp.zoomOut;
 
 export interface GameViewOptions {
@@ -90,6 +107,7 @@ export class GameView {
   private sentReach = 0;
   private sentReachAt = 0;
   private xrayK = 0;
+  private repulsorKeys = new Set<string>();
   /** The see-through light being faded is the Hemp Battery's: it fades out as slowly as it fades in. */
   private xrayHemp = false;
   private lastReveal = 0;
@@ -222,12 +240,13 @@ export class GameView {
       if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
       if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
       if (inp.isDown('Space') || L('Space')) b |= Btn.Vape;
+      if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Beam;
       // Hold left click to charge the swipe, release to strike.
       const s = this.self;
       const now = performance.now();
       const C = BALANCE.hunter.attack.charge;
       // With the golden pump there's no machete to charge.
-      const ready = !!s && s.pump <= 0 && s.attackCd <= 0 && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
+      const ready = !!s && s.pump <= 0 && s.beamT <= 0 && s.attackCd <= 0 && s.health !== Health.Downed && !s.carrying && s.stunT <= 0 && s.action === Action.None && now >= this.swingUntil;
       if (!inp.buttons[0]) this.chargeLock = false;
       if (this.chargeStart && now - this.chargeStart >= C.autoRelease * 1000) {
         // Held too long: the swing goes off by itself; let go to charge again.
@@ -382,8 +401,20 @@ export class GameView {
         a.oneShot('boom', Math.max(0.15, near(e.x, e.y, 1400)));
         this.particles.burst(e.x, e.y, 18, { speed: 160, life: 0.5, tint: 0xe8dcc0, size: 1.1 });
         break;
+      case 'snipe':
+        this.overlays.addSnipe(e.x, e.y, e.a, now);
+        this.shake = Math.max(this.shake, 8);
+        break;
       case 'vape':
-        this.overlays.addVape(e.x, e.y, e.a, e.r, now);
+        this.overlays.addVape(e.x, e.y, e.a, e.r, now, !!e.nic);
+        break;
+      case 'chackoBoom':
+        // A bloody explosion: a red burst, blood on the floor, a shake and a boom.
+        this.particles.burst(e.x, e.y, 70, { speed: 320, life: 0.9, tint: 0xa01414, size: 1.5 });
+        this.particles.burst(e.x, e.y, 30, { speed: 160, life: 1.2, tint: 0x5a0808, size: 2 });
+        for (let i = 0; i < 9; i++) this.overlays.addBlood(e.x + (Math.random() - 0.5) * 110, e.y + (Math.random() - 0.5) * 110);
+        this.shake = Math.max(this.shake, 22 * near(e.x, e.y, 900));
+        a.oneShot('boom', Math.max(0.2, near(e.x, e.y, 1600)));
         break;
       case 'note':
         this.hud.showNote(e.n);
@@ -405,9 +436,13 @@ export class GameView {
         if (e.alerted) this.hud.center('SHANE JEANS HAS BEEN ALERTED', 3000);
         break;
       case 'hemp':
-        if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
-        else this.hud.feed('Zach used a Hemp Battery');
-        a.announce('Hemp battery activated');
+        // Only the very first time it's used (ever): the text and the voice, never again.
+        if (!hempAnnounced()) {
+          if (e.by === me) this.hud.big('HEMP BATTERY ACTIVATED', 'hemp');
+          else this.hud.feed('Zach used a Hemp Battery');
+          a.announce('Hemp battery activated');
+          markHempAnnounced();
+        }
         break;
       case 'sexton':
         this.entities.say(e.say, this.time, 'sexton');
@@ -508,6 +543,17 @@ export class GameView {
     const P = BALANCE.shane.steps;
     if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
     else a.loop('shane', null);
+    // Zach's Hemp Beam hums from the moment it starts charging until it ends, fading with distance from him.
+    const R = BALANCE.hunter.beam.audio;
+    const live = new Set<string>();
+    for (const e of ents) {
+      if (e.kind !== EntityKind.Beam || !(e.state & 4)) continue;
+      const key = `repulsor${e.id}`;
+      live.add(key);
+      a.loop(key, 'repulsor', { x: e.x, y: e.y, volume: R.volume, radius: R.radius, near: R.near, curve: R.curve, fromStart: true });
+    }
+    for (const key of this.repulsorKeys) if (!live.has(key)) a.loop(key, null);
+    this.repulsorKeys = live;
   }
 
   frame(dtMs: number, now: number): void {
@@ -654,12 +700,11 @@ export class GameView {
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
     if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });
-    const beam = ents.find((e) => e.kind === EntityKind.Beam);
-    if (beam) {
+    for (const beam of ents.filter((e) => e.kind === EntityKind.Beam && (e.state & 3) === 0)) {
       const BL = BALANCE.sexton.defense.light;
       const len = beam.extra * 8;
       for (const f of [0.15, 0.55, 0.97]) {
-        lights.push({ key: `beam${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
+        lights.push({ key: `beam${beam.id}_${f}`, x: beam.x + Math.cos(beam.facing) * len * f, y: beam.y + Math.sin(beam.facing) * len * f, radius: BL.radius, intensity: BL.intensity, static: false });
       }
     }
     // Sexton, Chris, Plasma and Waz carry a faint light too.
@@ -668,10 +713,14 @@ export class GameView {
       ['chris', EntityKind.Chris, BALANCE.chris.light],
       ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
       ['waz', EntityKind.Waz, BALANCE.npcLight],
+      ['chacko', EntityKind.Chacko, BALANCE.chacko.light],
     ] as const) {
       const n = ents.find((e) => e.kind === kind && !(kind === EntityKind.Plasma && e.state & PlasmaFlag.Dead));
       if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });
     }
+    // The lounge TV flickers a cold blue-green over the room.
+    const tvL = map.lounge.tv;
+    lights.push({ key: 'tv', x: tvL.x, y: tvL.y + 26, radius: 210, intensity: 0.5 + 0.12 * Math.sin(this.time * 7.3) * Math.sin(this.time * 2.1), static: false });
     // Chris Zelley's ambulance glows faintly on both sides (he carries his own faint light too).
     const amb = map.ambulance;
     const AL = BALANCE.chris.ambulance;

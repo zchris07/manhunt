@@ -51,9 +51,9 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
     case 'jarvis':
       p.jarvis = 1;
       break;
+    case 'beam':
     case 'hemp':
-      p.hemp = 1;
-      p.hempLeft = BALANCE.hunter.hemp.duration;
+      p.beamCharges = BALANCE.hunter.beam.charges;
       break;
     case 'sexton': {
       // Bring Sexton next to this player.
@@ -80,6 +80,14 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
       n.x = p.move.x + (args[0] ?? 60);
       n.y = p.move.y + (args[1] ?? 0);
       n.unstick();
+      break;
+    }
+    case 'chacko': {
+      // Stand beside Chacko on his couch.
+      const c = w.chacko;
+      p.move.x = c.x;
+      p.move.y = c.y + 52;
+      resolveOverlaps(w.geo, p.move, p.radius);
       break;
     }
     case 'chris': {

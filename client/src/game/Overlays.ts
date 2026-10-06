@@ -47,9 +47,11 @@ export class Overlays {
   private readonly vapeG = new Graphics();
   /** Where teammates' torches point, for downed and staked survivors. */
   private readonly coneG = new Graphics();
+  private readonly snipeG = new Graphics();
+  private snipes: { x: number; y: number; a: number; born: number }[] = [];
   private readonly vapeLayer = new Container();
   private readonly vapeSprites: Sprite[] = [];
-  private vapes: { x: number; y: number; a: number; r: number; born: number }[] = [];
+  private vapes: { x: number; y: number; a: number; r: number; born: number; nic: boolean }[] = [];
 
   constructor(
     private readonly assets: AssetManager,
@@ -59,7 +61,8 @@ export class Overlays {
     this.rings.blendMode = 'add';
     this.aurora.blendMode = 'add';
     this.scentRoot.addChild(this.aurora, this.scentLayer);
-    this.senses.addChild(this.coneG, this.vapeLayer, this.vapeG, this.g, this.rings);
+    this.snipeG.blendMode = 'add';
+    this.senses.addChild(this.coneG, this.snipeG, this.vapeLayer, this.vapeG, this.g, this.rings);
   }
 
   /** Teammates' flashlight cones (wall-clipped polygons, origin first): a soft glow, strongest near the torch. Empty clears. */
@@ -80,9 +83,29 @@ export class Overlays {
     }
   }
 
+  /** A 0.50 cal round: a bright streak flying out along `a` at the bullet's speed. */
+  addSnipe(x: number, y: number, a: number, now: number): void {
+    this.snipes.push({ x, y, a, born: now });
+  }
+
+  private drawSnipes(now: number): void {
+    const g = this.snipeG;
+    g.clear();
+    const speed = BALANCE.items.sniper.speed;
+    this.snipes = this.snipes.filter((s) => (now - s.born) / 1000 * speed < 9000);
+    for (const s of this.snipes) {
+      const front = ((now - s.born) / 1000) * speed;
+      const tail = Math.max(0, front - 380);
+      const dx = Math.cos(s.a);
+      const dy = Math.sin(s.a);
+      g.moveTo(s.x + dx * tail, s.y + dy * tail).lineTo(s.x + dx * front, s.y + dy * front).stroke({ width: 5, color: 0xff6a4a, alpha: 0.25, cap: 'round' });
+      g.moveTo(s.x + dx * tail, s.y + dy * tail).lineTo(s.x + dx * front, s.y + dy * front).stroke({ width: 1.6, color: 0xfff2d0, alpha: 0.95, cap: 'round' });
+    }
+  }
+
   /** Penjamin: a cone of vape gas from (x,y) along `a`, reaching `r`. */
-  addVape(x: number, y: number, a: number, r: number, now: number): void {
-    this.vapes.push({ x, y, a, r, born: now });
+  addVape(x: number, y: number, a: number, r: number, now: number, nic = false): void {
+    this.vapes.push({ x, y, a, r, born: now, nic });
   }
 
   /**
@@ -146,14 +169,14 @@ export class Overlays {
         body.position.set(px, py);
         body.scale.set(size);
         body.rotation = r1 * 6.28 + age * (r2 - 0.5) * 0.8;
-        body.tint = i % 4 === 0 ? 0xf2e6a0 : i % 3 === 0 ? 0xc8b040 : 0xdccb5a;
+        body.tint = v.nic ? (i % 4 === 0 ? 0xa6dcff : i % 3 === 0 ? 0x4a9ae0 : 0x72bcf0) : i % 4 === 0 ? 0xf2e6a0 : i % 3 === 0 ? 0xc8b040 : 0xdccb5a;
         body.alpha = 0.34 * falloff * fade * (0.4 + 0.6 * grow);
         if (i % 2 === 0) {
           const glow = puff(i + 1, true);
           glow.position.set(px + Math.sin(age * 1.7 + i) * 4, py + Math.cos(age * 1.3 + i) * 4);
           glow.scale.set(size * 0.7);
           glow.rotation = -body.rotation;
-          glow.tint = 0xfff0a0;
+          glow.tint = v.nic ? 0xb8e6ff : 0xfff0a0;
           glow.alpha = 0.16 * falloff * fade * grow;
         }
       }
@@ -165,7 +188,7 @@ export class Overlays {
         if (d > ext) continue;
         const side = (r * 2 - 1) * Math.tan(half) * d * 0.8;
         const tw = 0.5 + 0.5 * Math.sin(age * 6 + i * 2.3);
-        g.circle(v.x + dx * d - dy * side, v.y + dy * d + dx * side, 1.2 + r).fill({ color: 0xfffbd0, alpha: 0.5 * tw * fade * (1 - d / v.r) });
+        g.circle(v.x + dx * d - dy * side, v.y + dy * d + dx * side, 1.2 + r).fill({ color: v.nic ? 0xd8f0ff : 0xfffbd0, alpha: 0.5 * tw * fade * (1 - d / v.r) });
       }
     }
     for (let i = used; i < this.vapeSprites.length; i++) this.vapeSprites[i].visible = false;
@@ -298,6 +321,7 @@ export class Overlays {
     }
 
     this.drawVapes(now);
+    this.drawSnipes(now);
 
     // Scent: smoke wisps. Blood: red puffs that swell, drift and slowly fade away.
     this.scent = this.scent.filter((s) => now - s.born < SCENT_LIFE);

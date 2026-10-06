@@ -42,6 +42,9 @@ export interface MoveState {
 export interface MoveContext {
   role: 'hunter' | 'survivor';
   hunterSpeedMul: number;
+  /** Zach: extra lunge charges (slaying Jaden) and whether his abilities are switched off (the Grapes of Wrath). */
+  lungeBonus?: number;
+  abilitiesLocked?: boolean;
   carrying: boolean;
 }
 
@@ -117,11 +120,12 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
 
   // Lunge charges come back one at a time.
   const L = BALANCE.hunter.lunge;
-  if (s.lungeCharges < L.charges) {
+  const maxCharges = L.charges + (ctx.lungeBonus ?? 0);
+  if (s.lungeCharges < maxCharges) {
     s.lungeRecharge -= dt;
     if (s.lungeRecharge <= 0) {
       s.lungeCharges++;
-      s.lungeRecharge = s.lungeCharges < L.charges ? s.lungeRecharge + L.recharge : 0;
+      s.lungeRecharge = s.lungeCharges < maxCharges ? s.lungeRecharge + L.recharge : 0;
     }
   } else {
     s.lungeRecharge = 0;
@@ -143,7 +147,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   const boostK = Math.max(0, Math.min(1, s.boostT / E.duration));
   const cap = maxStamina(role, s.boostT);
   // Zach's Hemp Battery, while it's in use: his sprint lasts longer and comes back faster.
-  const hemp = role === 'hunter' && s.hempT > 0 && (cmd.buttons & Btn.Ability) !== 0;
+  const hemp = role === 'hunter' && s.hempT > 0;
   const refill = (cfg.max / cfg.refill) * (1 + (E.refillMul - 1) * boostK) * (hemp ? BALANCE.hunter.hemp.sprintRefillMul : 1);
   s.boostT = Math.max(0, s.boostT - dt);
   if (s.staminaLock > 0) s.staminaLock = Math.max(0, s.staminaLock - dt);
@@ -153,7 +157,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   if (s.mode === MoveMode.Locked) {
     s.lungeT = 0;
     s.sprinting = 0;
-    if (s.staminaLock <= 0) s.stamina = Math.min(cap, s.stamina + refill * dt);
+    s.stamina = Math.min(cap, s.stamina + refill * dt);
     return Gait.Idle;
   }
 
@@ -170,7 +174,8 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
       s.staminaLock = BALANCE.sprintLockout;
       s.sprintBlocked = 1;
     }
-  } else if (s.staminaLock <= 0) {
+  } else {
+    // The meter refills even while sprint is locked out.
     s.stamina = Math.min(cap, s.stamina + refill * dt);
   }
   s.stamina = Math.min(s.stamina, cap);
@@ -180,7 +185,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
   let gait: Gait;
   if (role === 'hunter') {
     const H = BALANCE.hunter;
-    if (pressed & Btn.Lunge && s.lungeCharges > 0 && s.lungeT <= 0 && !ctx.carrying && s.mode === MoveMode.Normal) {
+    if (pressed & Btn.Lunge && !ctx.abilitiesLocked && s.lungeCharges > 0 && s.lungeT <= 0 && !ctx.carrying && s.mode === MoveMode.Normal) {
       s.lungeCharges--;
       if (s.lungeRecharge <= 0) s.lungeRecharge = L.recharge;
       s.lungeT = L.duration;
@@ -196,7 +201,7 @@ export function stepMovement(s: MoveState, cmd: InputCmd, ctx: MoveContext, geo:
     }
     speed = (sprint ? H.sprint : H.walk) * ctx.hunterSpeedMul;
     if (ctx.carrying) speed *= H.carrySpeedMul;
-    if (s.hempT > 0 && cmd.buttons & Btn.Ability) speed *= H.hemp.speedMul;
+    if (s.hempT > 0) speed *= H.hemp.speedMul;
     if (s.slowT > 0) speed *= s.slowMul;
     // Climbing through a smashed window is slow.
     if (geo.inBrokenWindow(s.x, s.y, radius + 4)) speed *= H.windowClimbMul;

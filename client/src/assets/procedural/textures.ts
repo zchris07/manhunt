@@ -1019,6 +1019,17 @@ export const jaden: CanvasGen = () => {
   return c;
 };
 
+const CHACKO_LOOK: Look = { skin: '#b9825a', hair: '#161212', style: 'short', shirt: '#176a4a', pants: '#2a2e3a', shoes: '#d8d8d8' };
+
+/** Chacko: a green football jersey, arms forward holding a controller. */
+export const chacko: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, CHACKO_LOOK, 30, 32, 1, { armsForward: true });
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(26, 28, 3, 8);
+  return c;
+};
+
 /** Waz: brown skin, black hair, a green shirt. */
 export const waz: CanvasGen = () => {
   const [c, ctx] = canvas(64);
@@ -1625,6 +1636,26 @@ export const itemShield = itemCanvas((ctx) => {
 });
 
 /** Jaden's P250: a compact black handgun. */
+/** The 0.50 cal: a long dark rifle with a scope and a red lens. */
+export const itemSniper = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(20, 20);
+  ctx.rotate(-0.55);
+  roundRect(ctx, -19, -2.5, 38, 5, 1.5);
+  fillInk(ctx, '#33353a');
+  roundRect(ctx, -19, -4, 11, 8, 2);
+  fillInk(ctx, '#4a3a2a');
+  roundRect(ctx, -6, -8, 15, 4.5, 2);
+  fillInk(ctx, '#1c1c20');
+  ctx.fillStyle = '#ff3030';
+  ctx.beginPath();
+  ctx.arc(9, -5.7, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(-8, -1.8, 24, 1);
+  ctx.restore();
+});
+
 export const itemPistol = itemCanvas((ctx) => {
   ctx.save();
   ctx.translate(20, 20);
@@ -1889,6 +1920,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   barrel,
   stake,
   note,
+  chacko,
   gate,
   barricade,
   door,
@@ -1900,6 +1932,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemEnergy,
   itemBook,
   itemPistol,
+  itemSniper,
   itemBeastBar,
   itemShield,
   itemTrap,

@@ -4,7 +4,8 @@ import type { World } from './World';
 import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvivor } from './combat';
 import { dropBarricade, drinkShield, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
 import { addItem } from './inventory';
-import { tryBurst, tryJarvis } from './abilities';
+import { tryBurst, tryHemp, tryJarvis } from './abilities';
+import { tryBeam } from './zachBeam';
 import { tryVape } from './vape';
 
 const R = BALANCE.reach;
@@ -65,6 +66,7 @@ export const LOOT_TO_ITEM: Record<LootKind, ItemKind> = {
   book: ItemKind.Book,
   beastbar: ItemKind.BeastBar,
   shield: ItemKind.Shield,
+  sniper: ItemKind.Sniper,
 };
 
 /** Zach next to an NPC or an item gets its name (survivors see them in their prompts). */
@@ -78,6 +80,7 @@ function nameNear(w: World, p: SimPlayer): void {
     w.plasma,
     w.jaden.alive ? w.jaden : null,
     w.waz.solid ? w.waz : null,
+    w.chacko.solid ? w.chacko : null,
   ];
   let best = -1;
   let bd: number = R.npcName;
@@ -176,6 +179,7 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   if (p.prompt === Prompt.None && w.marc.canTalk(p)) set(Prompt.TalkMarc, 0);
   if (p.prompt === Prompt.None && w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
   if (p.prompt === Prompt.None && w.waz.canTalk(p)) set(Prompt.TalkWaz, 0);
+  if (p.prompt === Prompt.None && w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
   if (p.prompt === Prompt.None) {
     const ni = nearestIndex(w.map.notes, x, y, R.note, () => true);
     if (ni >= 0) set(Prompt.ReadNote, ni);
@@ -234,6 +238,7 @@ function hunterPrompts(w: World, p: SimPlayer): void {
     }
     if (target) set(Prompt.PickUp, target.id);
     else if (w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
+    else if (w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
     else if (nearestIndex(w.map.notes, x, y, R.note, () => true) >= 0) set(Prompt.ReadNote, nearestIndex(w.map.notes, x, y, R.note, () => true));
     else if (w.hempDrop && Math.hypot(w.hempDrop.x - x, w.hempDrop.y - y) < R.pickup) set(Prompt.TakeHemp, 0);
     else {
@@ -271,9 +276,11 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
   // Plasma's golden pump replaces the machete while it has shots.
   if (p.pump > 0) {
     if (cmd.buttons & Btn.Primary) fireZachPump(w, p, cmd.aim);
-  } else if (pressed & Btn.Primary) startCharge(p);
+  } else if (pressed & Btn.Primary && p.beamT <= 0) startCharge(p);
   if (pressed & Btn.Secondary) tryBurst(w, p, cmd.aim);
   if (pressed & Btn.Vape) tryVape(w, p, cmd.aim);
+  if (pressed & Btn.Beam) tryBeam(w, p, cmd.aim);
+  if (pressed & Btn.Ability) tryHemp(w, p);
   if (p.action !== Action.None || p.attackWindup > 0) return;
   if (pressed & Btn.Interact) {
     const H = BALANCE.hunter;
@@ -300,15 +307,17 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
       case Prompt.TalkPlasma:
         w.plasma.talk(p);
         break;
+      case Prompt.TalkChacko:
+        w.chacko.talk(p);
+        break;
       case Prompt.ReadNote:
         w.emit([p.id], { k: 'note', n: p.promptTarget });
         break;
       case Prompt.TakeHemp:
         if (w.hempDrop) {
-          p.hemp = Math.max(p.hemp, 1);
-          p.hempLeft = BALANCE.hunter.hemp.duration;
+          p.beamCharges = BALANCE.hunter.beam.charges;
           w.hempDrop = null;
-          w.emit([p.id], { k: 'item', text: 'Got Hemp Battery' });
+          w.emit([p.id], { k: 'item', text: `Got the Hemp Beam: R, ${BALANCE.hunter.beam.charges} charges` });
         }
         break;
       case Prompt.OpenDoor:
@@ -384,6 +393,9 @@ function survivorInteract(w: World, p: SimPlayer): void {
       break;
     case Prompt.TalkWaz:
       w.waz.talk(p);
+      break;
+    case Prompt.TalkChacko:
+      w.chacko.talk(p);
       break;
     case Prompt.ReadNote:
       w.emit([p.id], { k: 'note', n: p.promptTarget });
@@ -531,6 +543,7 @@ const ITEM_TEXT: Record<LootKind, string> = {
   book: 'The Grapes of Wrath',
   beastbar: 'Mr Beast bar',
   shield: 'mini shield',
+  sniper: '0.50 cal',
 };
 
 export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {

@@ -27,6 +27,8 @@ import { updateInteractions, handlePresses, computePrompts, exitHiding } from '.
 import { lungeContact, restoreSurvivor, updateCombat } from './combat';
 import { updateItems } from './items';
 import { updateAbilities } from './abilities';
+import { updateBeams } from './zachBeam';
+import { updateSnipes, type Bullet } from './sniper';
 import { updateObjectives, checkWin } from './objectives';
 import { updateSenses } from './senses';
 import { Sexton, updateSexton } from './sexton';
@@ -36,6 +38,7 @@ import { Chris } from './chris';
 import { Marc } from './marc';
 import { Plasma } from './plasma';
 import { Waz } from './waz';
+import { Chacko } from './chacko';
 import { updateVapes, type VapeCloud } from './vape';
 import { addItem, emptySlot } from './inventory';
 import type { NpcTarget } from './npc';
@@ -154,6 +157,9 @@ export class World {
   drops: Drop[] = [];
   gases: Gas[] = [];
   bursts: Burst[] = [];
+  snipes: Bullet[] = [];
+  /** The survivor Jaden and Plasma are hunting for Chacko's sake (0 = nobody). */
+  vengeance = 0;
   vapes: VapeCloud[] = [];
   trails: TrailRecord[] = [];
   trailSeq = 1;
@@ -167,6 +173,7 @@ export class World {
   readonly marc: Marc;
   readonly plasma: Plasma;
   readonly waz: Waz;
+  readonly chacko: Chacko;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -215,6 +222,7 @@ export class World {
     this.plasma = new Plasma(this);
     // Last, so the NPCs above keep their seeded spawn points.
     this.waz = new Waz(this);
+    this.chacko = new Chacko(this);
   }
 
   get geo() {
@@ -239,6 +247,7 @@ export class World {
       p.jarvis = 3;
     } else if (p.role === 'hunter') {
       p.hemp = 2;
+      p.beamCharges = BALANCE.hunter.beam.charges;
     }
   }
 
@@ -379,6 +388,8 @@ export class World {
     updateCombat(this, dt);
     updateItems(this, dt);
     updateAbilities(this, dt);
+    updateBeams(this, dt);
+    updateSnipes(this, dt);
     updateVapes(this, dt);
     updateSexton(this, dt);
     this.shane.update(dt);
@@ -387,6 +398,8 @@ export class World {
     this.marc.update(dt);
     this.plasma.update(dt);
     this.waz.update(dt);
+    this.chacko.update(dt);
+    this.updateVengeance();
     updateObjectives(this, dt);
     updateSenses(this, dt);
 
@@ -432,7 +445,7 @@ export class World {
     const role = p.role === 'hunter' ? 'hunter' : 'survivor';
     const fromX = p.move.x;
     const fromY = p.move.y;
-    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) * hunterStakeMul(p.stakeBuff) : 1), carrying: p.carrying > 0 }, this.geo, TICK_DT);
+    const gait = stepMovement(p.move, cmd, { role, hunterSpeedMul: this.balance.hunterSpeedMul * (p.role === 'hunter' ? hunterHealthMul(p.hp, p.downs) * hunterStakeMul(p.stakeBuff) : 1), carrying: p.carrying > 0, lungeBonus: p.jadenBonus * BALANCE.hunter.jadenSlain.lunge, abilitiesLocked: p.abilityLockT > 0 }, this.geo, TICK_DT);
     p.gait = p.move.mode === MoveMode.Locked ? Gait.Idle : gait;
     if (p.role === 'hunter') {
       const lunging = p.move.lungeT > 0 || (p.wasLunging && Math.hypot(p.move.x - fromX, p.move.y - fromY) > 0);
@@ -497,7 +510,28 @@ export class World {
 
   /** NPCs that bottles and pellets can hit right now. */
   npcTargets(): NpcTarget[] {
-    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma, this.waz].filter((n) => n.solid);
+    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma, this.waz, this.chacko].filter((n) => n.solid);
+  }
+
+  /**
+   * Chacko was slain by a survivor: Jaden Nguyen and Plasma.TTV both go after that survivor,
+   * wherever they are, until they're downed once, or until either of the two is slain.
+   */
+  avenge(target: SimPlayer): void {
+    this.vengeance = target.id;
+    this.jaden.avenge(target);
+    this.plasma.avenge(target);
+  }
+
+  private updateVengeance(): void {
+    if (this.vengeance === 0) return;
+    const t = this.players.get(this.vengeance);
+    const downed = !t || (t.health !== Health.Healthy && t.health !== Health.Wounded);
+    if (downed || !this.jaden.alive || !this.plasma.alive) {
+      this.vengeance = 0;
+      this.jaden.stopAvenging();
+      this.plasma.stopAvenging();
+    }
   }
 
   allocEntityId(): number {

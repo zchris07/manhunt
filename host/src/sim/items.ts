@@ -4,6 +4,7 @@ import type { Drop, World } from './World';
 import { dropCarried, hurtHunter, hurtSurvivor, restoreSurvivor } from './combat';
 import type { NpcTarget } from './npc';
 import { addItem, consumeSlot, selected, takeOne, type Slot } from './inventory';
+import { fireSniper } from './sniper';
 
 const I = BALANCE.items;
 
@@ -82,6 +83,13 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       if (p.reloadT > 0) return;
       fireShotgun(w, p, cmd.aim, I.shotgun.pelletDamage, s.golden);
       p.reloadT = s.golden ? I.golden.reload : I.shotgun.reload;
+      spendRound(w, p, s);
+      break;
+    }
+    case ItemKind.Sniper: {
+      if (p.reloadT > 0) return;
+      fireSniper(w, p, cmd.aim);
+      p.reloadT = I.sniper.reload;
       spendRound(w, p, s);
       break;
     }
@@ -485,6 +493,8 @@ export function bookHit(w: World, h: SimPlayer, by: SimPlayer | undefined): void
   const B = I.book;
   h.bookT = I.flashTime;
   stunHunter(w, h, B.stun, 'book', by, true);
+  // Every ability is switched off for a while; a running Hemp Battery or Beam stops.
+  h.abilityLockT = BALANCE.hunter.bookAbilityLock;
   w.emit([h.id], { k: 'book', img: w.rng.int(0, B.images - 1) });
   w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'boom', x: Math.round(h.move.x), y: Math.round(h.move.y) });
   w.feed(`${by?.name ?? 'Someone'} threw The Grapes of Wrath at ${h.name}`);

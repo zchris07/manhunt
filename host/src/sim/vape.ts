@@ -18,6 +18,8 @@ export interface VapeCloud {
   by: number;
   /** NPCs it already provoked. */
   provoked: Set<string>;
+  /** Time each NPC has spent in it since its last hit. */
+  npcAcc: Map<string, number>;
 }
 
 /** How far it reaches right now (it grows out over `growTime`, easing off). */
@@ -47,27 +49,31 @@ export function vapeCoverage(v: VapeCloud, extent: number, x: number, y: number,
 
 /** Penjamin (Space): a cone of vape gas toward the cursor, reaching past the edge of his screen. */
 export function tryVape(w: World, h: SimPlayer, aim: number): void {
-  if (h.vapeCd > 0 || h.role !== 'hunter') return;
-  h.vapeCd = V.cooldown;
+  if (h.vapeCharges <= 0 || h.role !== 'hunter' || h.abilityLockT > 0 || h.knockT > 0) return;
+  h.vapeCharges--;
+  if (h.vapeCd <= 0) h.vapeCd = V.cooldown;
   spawnVape(w, h, aim);
 }
 
 export function spawnVape(w: World, h: SimPlayer, aim: number): void {
-  const range = Math.max(V.minView, Math.min(V.maxView, h.viewReach || V.defaultView)) * V.reachMul;
-  spawnVapeAt(w, h.move.x, h.move.y, aim, range, h.id);
+  // 50 Nic (from Chacko) is Penjamin with half again the reach; the same falloff over the longer range.
+  const range = Math.max(V.minView, Math.min(V.maxView, h.viewReach || V.defaultView)) * V.reachMul * (h.nic ? BALANCE.chacko.nicRangeMul : 1);
+  spawnVapeAt(w, h.move.x, h.move.y, aim, range, h.id, h.nic);
 }
 
 /** A cloud from any spot (testing mode rolls one at a survivor from afar). */
-export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number): void {
-  const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set() };
+export function spawnVapeAt(w: World, x: number, y: number, aim: number, range: number, by: number, nic = false): void {
+  const v: VapeCloud = { id: w.allocEntityId(), x, y, a: aim, range, t0: w.time, by, provoked: new Set(), npcAcc: new Map() };
   w.vapes.push(v);
-  w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range) });
+  w.emit(w.near(v.x, v.y, BALANCE.net.maxSensingRadius + range), { k: 'vape', x: Math.round(v.x), y: Math.round(v.y), a: aim, r: Math.round(range), nic });
 }
 
 /** Puts a survivor under the vape's effects at a given strength (0 = the far end, 1 = point blank). */
 export function vapeSurvivor(p: SimPlayer, near: number): void {
   const k = Math.max(0, Math.min(1, near));
-  p.vapeSlow = Math.max(p.vapeT > 0 ? p.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+  // The strongest slow it got holds while they're in the gas (and `slowAfter` s after); closer to the source raises it.
+  p.vapeSlow = Math.max(p.vapeSlowT > 0 ? p.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+  p.vapeSlowT = V.slowAfter;
   p.vapeDps = Math.max(p.vapeT > 0 ? p.vapeDps : 0, V.dpsFar + (V.dps - V.dpsFar) * k);
   p.vapeT = V.afterTime;
   p.darkT = V.darkAfter;
@@ -75,9 +81,24 @@ export function vapeSurvivor(p: SimPlayer, near: number): void {
 
 export function updateVapes(w: World, dt: number): void {
   for (const p of w.order) {
-    if (p.role === 'hunter') p.vapeCd = Math.max(0, p.vapeCd - dt);
+    if (p.role !== 'hunter') continue;
+    // Charges come back one at a time, like the lunge's.
+    if (w.testMode) {
+      p.vapeCharges = V.charges;
+      p.vapeCd = 0;
+    } else if (p.vapeCharges < V.charges) {
+      p.vapeCd -= dt;
+      if (p.vapeCd <= 0) {
+        p.vapeCharges++;
+        p.vapeCd = p.vapeCharges < V.charges ? p.vapeCd + V.cooldown : 0;
+      }
+    } else p.vapeCd = 0;
   }
   w.vapes = w.vapes.filter((v) => w.time - v.t0 < LIFE);
+  for (const n of [w.sexton, w.chris, w.marc, w.plasma, w.jaden, w.waz]) {
+    n.vapeSlowT = Math.max(0, n.vapeSlowT - dt);
+    if (n.vapeSlowT <= 0) n.vapeSlow = 0;
+  }
   for (const v of w.vapes) {
     const ext = vapeExtent(v, w.time);
     const by = w.players.get(v.by);
@@ -89,28 +110,51 @@ export function updateVapes(w: World, dt: number): void {
     }
     // NPCs that react to being attacked react to the gas too (it doesn't hurt them).
     if (!by) continue;
-    const npcs: [string, { x: number; y: number }, () => void][] = [
-      ['sexton', w.sexton, () => w.sexton.hit(by, false)],
-      ['chris', w.chris, () => w.chris.hit(by, false)],
-      ['marc', w.marc, () => w.marc.hit(by, false)],
-      ['plasma', w.plasma, () => w.plasma.provoke(by)],
-      ['jaden', w.jaden, () => w.jaden.provoke(by)],
-      ['waz', w.waz, () => w.waz.hit(by, false)],
+    // Each reacts once as if attacked; the ones that can be hurt are also slowed (stronger nearer
+    // the source, as for survivors) and take a light machete hit every `npcHitEvery` s in it.
+    interface Slowable {
+      x: number;
+      y: number;
+      vapeSlowT: number;
+      vapeSlow: number;
+    }
+    const npcs: [string, Slowable, boolean, () => void, (() => void) | null][] = [
+      ['sexton', w.sexton, w.sexton.alive, () => w.sexton.hit(by, false), () => w.sexton.hit(by)],
+      ['chris', w.chris, w.chris.hittable, () => w.chris.hit(by, false), () => w.chris.hit(by)],
+      ['marc', w.marc, true, () => w.marc.hit(by, false), () => w.marc.hit(by)],
+      ['plasma', w.plasma, w.plasma.alive, () => w.plasma.provoke(by), () => w.plasma.slashHit(by, 1)],
+      ['jaden', w.jaden, w.jaden.alive, () => w.jaden.provoke(by), () => w.jaden.slashHit(by, 1)],
+      ['waz', w.waz, w.waz.solid, () => w.waz.hit(by, false), () => w.waz.hit(by)],
+      ['chacko', w.chacko as unknown as Slowable, w.chacko.alive, () => w.chacko.hit(by, false), null],
     ];
-    for (const [key, n, provoke] of npcs) {
-      if (v.provoked.has(key) || !inCloud(v, ext, n.x, n.y)) continue;
-      v.provoked.add(key);
-      provoke();
+    for (const [key, n, ok, provoke, hurt] of npcs) {
+      if (!ok || !inCloud(v, ext, n.x, n.y)) continue;
+      if (!v.provoked.has(key)) {
+        v.provoked.add(key);
+        provoke();
+      }
+      if (!hurt) continue;
+      const k = Math.max(0, Math.min(1, 1 - Math.hypot(n.x - v.x, n.y - v.y) / v.range));
+      n.vapeSlow = Math.max(n.vapeSlowT > 0 ? n.vapeSlow : 0, V.slowFar + (V.slow - V.slowFar) * k);
+      n.vapeSlowT = 0.3;
+      const acc = (v.npcAcc.get(key) ?? 0) + dt;
+      if (acc >= V.npcHitEvery) {
+        v.npcAcc.set(key, 0);
+        hurt();
+      } else v.npcAcc.set(key, acc);
     }
   }
   // Lingering effects: slowed and choking while in it and a little after; dark a while longer.
   for (const p of w.order) {
     if (p.role !== 'survivor') continue;
     p.darkT = Math.max(0, p.darkT - dt);
+    if (p.vapeSlowT > 0) {
+      p.vapeSlowT = Math.max(0, p.vapeSlowT - dt);
+      p.move.slowT = Math.max(p.move.slowT, 0.1);
+      p.move.slowMul = Math.min(p.move.slowMul, 1 - p.vapeSlow);
+    }
     if (p.vapeT <= 0) continue;
     p.vapeT = Math.max(0, p.vapeT - dt);
-    p.move.slowT = Math.max(p.move.slowT, 0.1);
-    p.move.slowMul = Math.min(p.move.slowMul, 1 - p.vapeSlow);
     hurtSurvivor(w, p, p.vapeDps * dt, null, 'gas');
   }
 }

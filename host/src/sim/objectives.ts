@@ -4,17 +4,6 @@ import type { World } from './World';
 
 const O = BALANCE.objectives;
 
-/** Issues a timing minigame to a repairing survivor. */
-function issueSkillCheck(w: World, p: SimPlayer): void {
-  const sc = O.skillCheck;
-  const id = w.skillSeq++;
-  const delayMs = sc.warnMs;
-  const needleMs = sc.needleTime * 1000;
-  const zone = w.rng.range(sc.zoneStart[0], sc.zoneStart[1]);
-  p.skill = { id, issued: w.time, deadline: w.time + (delayMs + needleMs + sc.responseGraceMs) / 1000 };
-  w.emit([p.id], { k: 'skill', id, delayMs, zone, size: sc.zoneSize, great: sc.greatSize, needleMs });
-}
-
 /** Result of a skill check from the client (or a timeout, which counts as a miss). */
 export function skillCheckResult(w: World, p: SimPlayer, id: number, result: 'miss' | 'good' | 'great'): void {
   if (!p.skill || p.skill.id !== id) return;
@@ -43,7 +32,7 @@ export function updateObjectives(w: World, dt: number): void {
     g.workers = workers[gi];
     if (g.repaired) return;
     if (g.workers > 0 && !w.gate.powered) {
-      const mul = O.coopMul[Math.min(g.workers, O.coopMul.length) - 1];
+      const mul = 1 + O.coopStep * (g.workers - 1);
       g.progress += (mul / w.balance.repairTime) * dt;
       g.regressing = false;
     } else if (g.regressing) {
@@ -69,13 +58,6 @@ export function updateObjectives(w: World, dt: number): void {
       }
     }
   });
-
-  // Skill checks: issue while repairing; time out unanswered ones.
-  for (const p of w.order) {
-    if (p.role !== 'survivor') continue;
-    if (p.skill && w.time > p.skill.deadline) skillCheckResult(w, p, p.skill.id, 'miss');
-    if (p.action === Action.Repair && !p.skill && w.rng.chance(O.skillCheck.chancePerSec * dt)) issueSkillCheck(w, p);
-  }
 
   // Exit gate.
   if (w.gate.powered && !w.gate.open) {

@@ -353,7 +353,7 @@ export class GameClient {
     const m = this.match!;
     const s = this.self;
     const healthMul = m.role === 'hunter' && s ? hunterHealthMul(s.hp, s.downs) * hunterStakeMul(s.stakeBuff) : 1;
-    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul * healthMul, carrying: (s?.carrying ?? 0) > 0 };
+    return { role: m.role === 'hunter' ? 'hunter' : 'survivor', hunterSpeedMul: m.balance.hunterSpeedMul * healthMul, carrying: (s?.carrying ?? 0) > 0, lungeBonus: (s?.jadenBonus ?? 0) * BALANCE.hunter.jadenSlain.lunge, abilitiesLocked: (s?.abilityLockT ?? 0) > 0 };
   }
 
   private reconcile(snap: DecodedSnapshot): void {

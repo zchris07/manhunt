@@ -23,6 +23,7 @@ export function freshAmount(kind: ItemKind, golden = false): number {
   if (kind === ItemKind.Goggles) return I.goggles.meter;
   if (kind === ItemKind.Shotgun) return golden ? I.golden.shells : I.shotgun.shells;
   if (kind === ItemKind.Pistol) return I.pistol.shots;
+  if (kind === ItemKind.Sniper) return I.sniper.shots;
   return 0;
 }
 
