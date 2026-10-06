@@ -107,6 +107,7 @@ export class GameView {
   private sentReach = 0;
   private sentReachAt = 0;
   private xrayK = 0;
+  private repulsorKeys = new Set<string>();
   /** The see-through light being faded is the Hemp Battery's: it fades out as slowly as it fades in. */
   private xrayHemp = false;
   private lastReveal = 0;
@@ -542,6 +543,17 @@ export class GameView {
     const P = BALANCE.shane.steps;
     if (sh && Math.hypot(sh.x - lx, sh.y - ly) < P.far + 100) a.loop('shane', 'shane.steps', { x: sh.x, y: sh.y, volume: P.volume, radius: P.far, near: P.near });
     else a.loop('shane', null);
+    // Zach's Hemp Beam hums from the moment it starts charging until it ends, fading with distance from him.
+    const R = BALANCE.hunter.beam.audio;
+    const live = new Set<string>();
+    for (const e of ents) {
+      if (e.kind !== EntityKind.Beam || !(e.state & 4)) continue;
+      const key = `repulsor${e.id}`;
+      live.add(key);
+      a.loop(key, 'repulsor', { x: e.x, y: e.y, volume: R.volume, radius: R.radius, near: R.near, curve: R.curve, fromStart: true });
+    }
+    for (const key of this.repulsorKeys) if (!live.has(key)) a.loop(key, null);
+    this.repulsorKeys = live;
   }
 
   frame(dtMs: number, now: number): void {
@@ -688,7 +700,7 @@ export class GameView {
     // Marc Cortez's very faint light; Sexton's Hemp Beam lights its whole length.
     const marc = ents.find((e) => e.kind === EntityKind.Marc);
     if (marc) lights.push({ key: 'marc', x: marc.x, y: marc.y, radius: BALANCE.marc.light.radius, intensity: BALANCE.marc.light.intensity, static: false });
-    for (const beam of ents.filter((e) => e.kind === EntityKind.Beam && !(e.state & 1))) {
+    for (const beam of ents.filter((e) => e.kind === EntityKind.Beam && (e.state & 3) === 0)) {
       const BL = BALANCE.sexton.defense.light;
       const len = beam.extra * 8;
       for (const f of [0.15, 0.55, 0.97]) {

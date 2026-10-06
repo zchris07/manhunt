@@ -126,6 +126,8 @@ export interface SimPlayer {
   beamT: number;
   beamAng: number;
   beamLen: number;
+  beamTick: number;
+  beamFlinch: number;
   beamId: number;
   readonly beamHit: Set<string>;
   /** Penjamin charges (the cooldown `vapeCd` is the time to the next one). */
@@ -241,6 +243,8 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     beamT: 0,
     beamAng: 0,
     beamLen: 0,
+    beamTick: 0,
+    beamFlinch: 0,
     beamId: 0,
     beamHit: new Set<string>(),
     vapeCharges: BALANCE.hunter.vape.charges,

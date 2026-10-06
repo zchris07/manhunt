@@ -66,7 +66,8 @@
     "sexton.reel": { "file": "audio/reel.mp3" },
     "shane.steps": { "procedural": "pitterPatter" },
     "boom": { "file": "audio/vine-boom.mp3" },
-    "penjamin": { "file": "audio/penjamin.mp3", "duration": 4 }
+    "penjamin": { "file": "audio/penjamin.mp3", "duration": 4 },
+    "repulsor": { "file": "audio/repulsor.mp3" }
   },
   "images": {
     "ui.scare": { "file": "images/scare.webp" },

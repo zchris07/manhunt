@@ -457,7 +457,7 @@ export class Hud {
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
           (self.abilityLockT > 0 ? `<div class="warn">ABILITIES OFF ${self.abilityLockT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempLeft.toFixed(1)}s`}</div>` : '') +
-          (self.beamT > 0 ? `<div class="ok">HEMP BEAM ${self.beamT.toFixed(1)}s</div>` : '') +
+          (self.beamT > 0 ? `<div class="ok">HEMP BEAM ${self.beamT > BALANCE.sexton.defense.beamTime ? 'CHARGING' : `${self.beamT.toFixed(1)}s`}</div>` : '') +
           (self.gassed ? '<div class="purple">IN GALAXY GAS: slowed</div>' : '') +
           (self.immuneT > 0 && self.stunT <= 0 ? `<div class="dim">Stun immune ${self.immuneT.toFixed(1)}s</div>` : '');
       } else {

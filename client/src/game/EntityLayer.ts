@@ -1242,6 +1242,23 @@ export class EntityLayer {
 
   private drawBeam(e: InterpEntity, time: number): void {
     const g = this.beam;
+    if (e.state & 2) {
+      // Zach's Hemp Beam charging up: sparks spiral in to a growing white-green orb at his hand.
+      const k = e.action / 255;
+      const dx0 = Math.cos(e.facing);
+      const dy0 = Math.sin(e.facing);
+      const ox = e.x + dx0 * 36;
+      const oy = e.y + dy0 * 36;
+      g.circle(ox, oy, 8 + 26 * k).fill({ color: 0xd8ffd0, alpha: 0.18 + 0.3 * k });
+      g.circle(ox, oy, 4 + 12 * k).fill({ color: 0xeaffe4, alpha: 0.5 + 0.4 * k });
+      g.circle(ox, oy, 1.5 + 4 * k).fill({ color: 0xffffff, alpha: 0.95 });
+      for (let i = 0; i < 10; i++) {
+        const a = time * (6 + k * 10) + i * 0.628;
+        const r = (1 - ((time * 1.8 + i * 0.1) % 1)) * (46 - 30 * k) + 4;
+        g.circle(ox + Math.cos(a) * r, oy + Math.sin(a) * r, 1.6).fill({ color: 0xffffff, alpha: 0.4 + 0.5 * k });
+      }
+      return;
+    }
     const len = e.extra * 8;
     const fade = Math.min(1, (e.action / 255) * 12) * Math.min(1, (1 - e.action / 255) * 10 + 0.15);
     const dx = Math.cos(e.facing);

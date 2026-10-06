@@ -262,7 +262,11 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     for (const z of w.order) {
       if (z.role !== 'hunter' || z.beamT <= 0 || !z.beamId) continue;
       if (Math.hypot(z.move.x - v.move.x, z.move.y - v.move.y) > R + BALANCE.sexton.defense.beamRange) continue;
-      entities.push(quantizeEntity(z.beamId, EntityKind.Beam, z.move.x, z.move.y, z.beamAng, 0, Math.round(Math.min(1, 1 - z.beamT / BALANCE.sexton.defense.beamTime) * 255), Math.round(z.beamLen / 8)));
+      // state 4: Zach's beam; +2 while it is still charging (action = charge progress, then how far through the beam proper).
+      const D = BALANCE.sexton.defense;
+      const charging = z.beamT > D.beamTime;
+      const progress = charging ? 1 - (z.beamT - D.beamTime) / BALANCE.hunter.beam.windup : 1 - z.beamT / D.beamTime;
+      entities.push(quantizeEntity(z.beamId, EntityKind.Beam, z.move.x, z.move.y, z.beamAng, 4 | (charging ? 2 : 0), Math.round(Math.max(0, Math.min(1, progress)) * 255), Math.round(z.beamLen / 8)));
     }
     if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
       entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));

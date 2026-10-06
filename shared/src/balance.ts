@@ -203,9 +203,18 @@ export const BALANCE = {
     hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
     /**
      * Hemp Beam (R, from slaying Sexton Science): `charges` single-use charges, each channelled
-     * for as long as Sexton's own beam, then `cooldown` s before the next. No melee while it fires.
+     * for as long as Sexton's own beam (after its charge-up), then `cooldown` s before the next. No melee while it charges or fires.
      */
-    beam: { charges: 3, cooldown: 2 },
+    beam: {
+      charges: 3,
+      cooldown: 2,
+      /** It charges for `windup` s (a sound and an animation), then hits survivors `tickRate` times a second for `tickDamage` of their full health each. */
+      windup: 1,
+      tickRate: 10,
+      tickDamage: 0.03,
+      /** The sound (heard by everyone, fading with distance from Zach). */
+      audio: { radius: 1400, near: 200, curve: 1.5, volume: 1 },
+    },
     /** Slaying Jaden Nguyen: one more lunge charge and `rangeMul` times the melee reach, for good. */
     jadenSlain: { lunge: 1, rangeMul: 1.2 },
     /** The Grapes of Wrath switches off all of Zach's abilities for this long. */

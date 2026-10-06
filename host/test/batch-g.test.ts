@@ -39,20 +39,30 @@ const shoot = (_w: World, d: Driver, s: SimPlayer, aim = 0): void => {
 };
 
 describe('Zach melee and Hemp Beam', () => {
-  it('Hemp Beam: R channels it for as long as Sexton does, 2 s cooldown, no melee while it fires', () => {
+  it('Hemp Beam: R charges for 1 s, then fires for as long as Sexton does, 2 s cooldown, no melee throughout', () => {
     const { w, d, h, s } = lane();
     h.beamCharges = 3;
     d.tap(h.id, Btn.Beam, { aim: Math.PI });
     expect(h.beamCharges).toBe(2);
-    expect(h.beamT).toBeGreaterThan(BALANCE.sexton.defense.beamTime - 0.2);
-    // The beam hurts a survivor in its path once: a third of their health.
+    expect(h.beamT).toBeGreaterThan(H.beam.windup + BALANCE.sexton.defense.beamTime - 0.2);
+    // Charging: it does nothing yet, and the entity says so.
     d.run(secs(0.5), (p) => (p === h ? { aim: Math.PI } : undefined));
-    expect(s.hp).toBeCloseTo(1 - BALANCE.sexton.defense.beamDamage, 2);
-    // He can't swing while it fires.
+    expect(s.hp).toBe(1);
+    expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Beam && (e.state & 2) !== 0 && (e.state & 4) !== 0)).toBe(true);
+    // He can't swing while it charges or fires.
     d.tap(h.id, Btn.Primary, { aim: Math.PI });
     expect(h.chargeT).toBe(-1);
+    // Then ten ticks a second, each 3% of their full health.
+    d.run(secs(0.6), (p) => (p === h ? { aim: Math.PI } : undefined));
+    const lost = 1 - s.hp;
+    expect(lost).toBeGreaterThan(0);
+    const t0 = w.time;
+    const hp0 = s.hp;
+    d.run(secs(0.5), (p) => (p === h ? { aim: Math.PI } : undefined));
+    const perSec = (hp0 - s.hp) / (w.time - t0);
+    expect(perSec).toBeCloseTo(H.beam.tickRate * H.beam.tickDamage, 1);
     // Another R mid-beam does nothing; after it ends there is a 2 s cooldown.
-    d.run(secs(BALANCE.sexton.defense.beamTime), (p) => (p === h ? { aim: Math.PI } : undefined));
+    d.run(secs(BALANCE.sexton.defense.beamTime + 1), (p) => (p === h ? { aim: Math.PI } : undefined));
     expect(h.beamT).toBe(0);
     expect(h.beamCd).toBeGreaterThan(0);
     d.tap(h.id, Btn.Beam, { aim: Math.PI });
@@ -60,7 +70,19 @@ describe('Zach melee and Hemp Beam', () => {
     d.run(secs(H.beam.cooldown));
     d.tap(h.id, Btn.Beam, { aim: Math.PI });
     expect(h.beamCharges).toBe(1);
-    expect(w.players.get(2)!.hp).toBeLessThan(1);
+  });
+
+  it('after three uses the beam is gone for good', () => {
+    const { w, d, h } = lane();
+    h.beamCharges = 3;
+    for (let i = 0; i < 3; i++) {
+      d.tap(h.id, Btn.Beam, { aim: Math.PI });
+      d.run(secs(H.beam.windup + BALANCE.sexton.defense.beamTime + H.beam.cooldown + 0.3));
+    }
+    expect(h.beamCharges).toBe(0);
+    d.tap(h.id, Btn.Beam, { aim: Math.PI });
+    expect(h.beamT).toBe(0);
+    expect(w.players.get(1)!.beamCharges).toBe(0);
   });
 
   it('other abilities still work during the beam, and the beam is sent as an entity', () => {
@@ -69,7 +91,8 @@ describe('Zach melee and Hemp Beam', () => {
     d.tap(h.id, Btn.Beam, { aim: Math.PI });
     d.tap(h.id, Btn.Vape, { aim: 0 });
     expect(w.vapes.length).toBe(1);
-    expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Beam && e.state === 0)).toBe(true);
+    d.run(secs(H.beam.windup + 0.2), (p) => (p === h ? { aim: Math.PI } : undefined));
+    expect(buildView(w, s).entities.some((e) => e.kind === EntityKind.Beam && e.state === 4)).toBe(true);
   });
 
   it('slaying Jaden: one more lunge charge and +20% melee reach, for good', () => {

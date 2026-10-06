@@ -13,6 +13,8 @@ export interface LoopOptions {
    * curve is barely audible far out and swells very gradually to full volume close in.
    */
   curve?: number;
+  /** Start the file from its beginning (not joined partway through, as a continuous track is). */
+  fromStart?: boolean;
 }
 
 interface Loop {
@@ -329,7 +331,7 @@ export class AudioEngine {
     } else p.setPosition(o.x, 0, o.y);
     src.connect(gain).connect(p).connect(this.loopBus);
     // A long track keeps playing "continuously": join it where a clock started at 0 would be.
-    src.start(t, t % b.duration);
+    src.start(t, o.fromStart ? 0 : t % b.duration);
     this.loops.set(key, { id, src, gain, panner: p });
   }
 

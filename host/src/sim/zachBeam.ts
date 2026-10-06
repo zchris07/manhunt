@@ -17,7 +17,9 @@ export function tryBeam(w: World, h: SimPlayer, aim: number): void {
   if (h.role !== 'hunter' || h.beamCharges <= 0 || h.beamCd > 0 || h.beamT > 0 || !abilitiesOn(h) || h.carrying) return;
   if (!h.beamId) h.beamId = w.allocEntityId();
   if (!w.testMode) h.beamCharges--;
-  h.beamT = D.beamTime;
+  // The first second is the charge-up; the beam proper lasts as long as Sexton's.
+  h.beamT = HB.windup + D.beamTime;
+  h.beamTick = 0;
   h.beamAng = aim;
   h.beamLen = 0;
   h.beamHit.clear();
@@ -43,13 +45,24 @@ export function updateBeams(w: World, dt: number): void {
     while (da > Math.PI) da -= Math.PI * 2;
     while (da < -Math.PI) da += Math.PI * 2;
     h.beamAng += Math.max(-D.turnRate * dt, Math.min(D.turnRate * dt, da));
-    fire(w, h);
+    // Charging: no beam yet. Then it hits ten times a second.
+    if (h.beamT > D.beamTime) {
+      h.beamLen = 0;
+    } else {
+      h.beamTick += dt;
+      let ticks = 0;
+      while (h.beamTick >= 1 / HB.tickRate - 1e-9) {
+        h.beamTick -= 1 / HB.tickRate;
+        ticks++;
+      }
+      fire(w, h, ticks);
+    }
     if (h.beamT <= 0) h.beamCd = HB.cooldown;
   }
 }
 
 /** The beam runs until it meets something solid (walls, trees, glass) or a survivor, and hurts what it touches once each. */
-function fire(w: World, h: SimPlayer): void {
+function fire(w: World, h: SimPlayer, ticks: number): void {
   const dx = Math.cos(h.beamAng);
   const dy = Math.sin(h.beamAng);
   const sx = h.move.x + dx * (h.radius + 2);
@@ -73,10 +86,13 @@ function fire(w: World, h: SimPlayer): void {
     victim = p;
   }
   h.beamLen = vt + h.radius + 2;
-  if (victim && !h.beamHit.has(`p${victim.id}`)) {
-    // One hit per beam, as Sexton's: three take a survivor down.
-    h.beamHit.add(`p${victim.id}`);
-    hurtSurvivor(w, victim, D.beamDamage, h, 'beam');
+  // Ten ticks a second, each 3% of their full health, quietly; every third tick they visibly flinch.
+  if (victim) {
+    for (let i = 0; i < ticks; i++) {
+      h.beamFlinch++;
+      hurtSurvivor(w, victim, HB.tickDamage, h, h.beamFlinch % 3 === 0 ? 'beam' : 'gas');
+      if (victim.health === Health.Downed) break;
+    }
   }
   // NPCs in its way (it doesn't stop at them): each takes it once, like a light swipe.
   const ex = sx + dx * vt;
