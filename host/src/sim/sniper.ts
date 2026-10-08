@@ -24,14 +24,12 @@ export interface Bullet {
   by: number;
   hit: Set<unknown>;
   path: PathEvent[];
+  /** NPC rounds: how much of a survivor's health they take (and the other NPCs are spared). */
+  damage?: number;
 }
 
-/** Fires the 0.50 cal: a round that flies at `speed` through all material, no range limit. */
-export function fireSniper(w: World, p: SimPlayer, aim: number): void {
-  const dx = Math.cos(aim);
-  const dy = Math.sin(aim);
-  const x = p.move.x + dx * (p.radius + 2);
-  const y = p.move.y + dy * (p.radius + 2);
+/** Everything along a ray (from x,y along dx,dy) a 0.50 cal round breaks on its way. */
+function bulletPath(w: World, x: number, y: number, dx: number, dy: number): PathEvent[] {
   const path: PathEvent[] = [];
   const ms = w.geo.moveSeg;
   w.geo.windowSegs.forEach((m, i) => {
@@ -57,10 +55,24 @@ export function fireSniper(w: World, p: SimPlayer, aim: number): void {
     const t = rayCircle(x, y, dx, dy, g.x, g.y, 36);
     if (t < Infinity) path.push({ t, kind: 'gen', i });
   });
-  path.sort((a, b) => a.t - b.t);
-  w.snipes.push({ x, y, dx, dy, front: 0, by: p.id, hit: new Set(), path });
-  w.emit('all', { k: 'snipe', x: Math.round(x), y: Math.round(y), a: aim });
-  w.noise(p.move.x, p.move.y, 2400, 'shot');
+  return path.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Sends a round away from (ox,oy) along `aim`. `by` is the shooter's player id, or 0 for an NPC
+ * (Monique), whose rounds take `damage` of a survivor's health and spare the other NPCs.
+ */
+export function spawnBullet(w: World, ox: number, oy: number, aim: number, by: number, damage?: number): void {
+  const dx = Math.cos(aim);
+  const dy = Math.sin(aim);
+  w.snipes.push({ x: ox, y: oy, dx, dy, front: 0, by, hit: new Set(), path: bulletPath(w, ox, oy, dx, dy), damage });
+  w.emit('all', { k: 'snipe', x: Math.round(ox), y: Math.round(oy), a: aim });
+  w.noise(ox, oy, 2400, 'shot');
+}
+
+/** Fires the 0.50 cal: a round that flies at `speed` through all material, no range limit. */
+export function fireSniper(w: World, p: SimPlayer, aim: number): void {
+  spawnBullet(w, p.move.x + Math.cos(aim) * (p.radius + 2), p.move.y + Math.sin(aim) * (p.radius + 2), aim, p.id);
 }
 
 export function updateSnipes(w: World, dt: number): void {
@@ -111,7 +123,7 @@ export function updateSnipes(w: World, dt: number): void {
       if (q.role === 'survivor' && (q.health === Health.Healthy || q.health === Health.Wounded) && q.hideState !== 2) {
         b.hit.add(`p${q.id}`);
         // One shot downs a survivor outright.
-        hurtSurvivor(w, q, 10, shooter ?? null, 'bullet');
+        hurtSurvivor(w, q, b.damage ?? 10, shooter ?? null, 'bullet');
       } else if (q.role === 'hunter' && q.health !== Health.Eliminated) {
         b.hit.add(`p${q.id}`);
         hurtHunter(w, q, S.zachHp, shooter ?? null, 'bullet');
@@ -126,7 +138,7 @@ export function updateSnipes(w: World, dt: number): void {
         w.feed(`${shooter?.name ?? 'Someone'} hit ${q.name} with a 0.50 cal`);
       }
     }
-    if (shooter) {
+    if (shooter && b.damage === undefined) {
       for (const n of w.npcTargets()) {
         if (b.hit.has(n)) continue;
         const r = n.hitRadius + S.hitRadius;

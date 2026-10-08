@@ -138,7 +138,9 @@ export class Plasma implements NpcTarget {
   }
 
   stopAvenging(): void {
+    const was = this.avenging;
     this.avenging = false;
+    if (was && this.raging) this.calmDown();
   }
 
   /** A 0.50 cal round: it slays him in one shot, but only in beast form (otherwise it just sets him off). */

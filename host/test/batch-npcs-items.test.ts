@@ -46,6 +46,8 @@ describe('items', () => {
     setCount(s, ItemKind.Energy, 1);
     d.tap(s.id, Btn.Primary, { item: ItemKind.Energy });
     expect(s.move.stamina).toBeCloseTo(maxStamina('survivor', s.move.boostT), 1);
+    // Using it slows you for a moment; after that you're faster.
+    d.run(secs(BALANCE.items.useSlowTime + 0.2));
     const x0 = s.move.x;
     d.run(secs(1), (p) => (p === s ? { moveX: 1 } : undefined));
     const v = s.move.x - x0;

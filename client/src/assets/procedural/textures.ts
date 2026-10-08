@@ -821,7 +821,7 @@ export const survivor: CanvasGen = (variant) => {
   return c;
 };
 
-export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant === 23 ? JADEN_LOOK : variant === 24 ? WAZ_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
+export const survivorLegs: CanvasGen = (variant) => legCanvas(variant >= 31 ? CHRIS_LOOK : variant >= 30 ? SHANE_LOOK : variant === 21 ? MARC_LOOK : variant === 22 ? PLASMA_LOOK : variant === 23 ? JADEN_LOOK : variant === 24 ? WAZ_LOOK : variant === 25 ? NJAARON_LOOK : variant === 26 ? MONIQUE_LOOK : variant === 27 ? THOMAS_LOOK : variant === 28 ? SOHAM_LOOK : variant >= 20 ? SEXTON_LOOK : variant >= 10 ? HUNTER_LOOK : SURVIVOR_LOOKS[variant % SURVIVOR_LOOKS.length], variant >= 10 && variant < 20 ? 1.3 : 1);
 
 /** Downed survivor lying stretched out, head toward +x, in a small pool of blood. */
 export const survivorDowned: CanvasGen = (variant) => {
@@ -1019,7 +1019,39 @@ export const jaden: CanvasGen = () => {
   return c;
 };
 
+/** Njaaron: a navy hoodie, short dark hair. */
+const NJAARON_LOOK: Look = { skin: '#a9714a', hair: '#15110f', style: 'short', shirt: '#1f3a78', pants: '#2c2f38', shoes: '#f0f0f0', jacket: '#26468a' };
+/** Monique Bourgeois: long auburn hair, a cream blouse. */
+const MONIQUE_LOOK: Look = { skin: '#efc9a6', hair: '#7a3a1c', style: 'long', shirt: '#f0e8d8', pants: '#3a2a4a', shoes: '#5a3a2a' };
+/** Thomas Bourgeois: grey curls, a mustard cardigan. */
+const THOMAS_LOOK: Look = { skin: '#e4b894', hair: '#9a9a9a', style: 'curly', shirt: '#e8e4dc', pants: '#4a4a3a', shoes: '#3a2a1c', jacket: '#b88a2a' };
+/** Soham: a bright red hoodie, buzzed hair. */
+const SOHAM_LOOK: Look = { skin: '#b9825a', hair: '#161212', style: 'buzz', shirt: '#2a2a2a', pants: '#2a3a5a', shoes: '#e8e8e8', jacket: '#c8322a' };
 const CHACKO_LOOK: Look = { skin: '#b9825a', hair: '#161212', style: 'short', shirt: '#176a4a', pants: '#2a2e3a', shoes: '#d8d8d8' };
+
+export const njaaron: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, NJAARON_LOOK, 30, 32, 1);
+  return c;
+};
+
+export const monique: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, MONIQUE_LOOK, 30, 32, 1);
+  return c;
+};
+
+export const thomas: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, THOMAS_LOOK, 30, 32, 1, { glasses: true });
+  return c;
+};
+
+export const soham: CanvasGen = () => {
+  const [c, ctx] = canvas(64);
+  person(ctx, SOHAM_LOOK, 30, 32, 1);
+  return c;
+};
 
 /** Chacko: a green football jersey, arms forward holding a controller. */
 export const chacko: CanvasGen = () => {
@@ -1656,6 +1688,18 @@ export const itemSniper = itemCanvas((ctx) => {
   ctx.restore();
 });
 
+/** A jar of piss: a jam jar of murky yellow with a tin lid. */
+export const itemPiss = itemCanvas((ctx) => {
+  roundRect(ctx, 11, 12, 18, 22, 5);
+  fillInk(ctx, '#c9d6c8', 1.2);
+  ctx.fillStyle = '#e6c820';
+  ctx.fillRect(13, 18, 14, 14);
+  ctx.fillStyle = 'rgba(255,255,200,0.45)';
+  ctx.fillRect(15, 20, 3, 10);
+  roundRect(ctx, 10, 8, 20, 6, 2);
+  fillInk(ctx, '#6a6e74', 1.2);
+});
+
 export const itemPistol = itemCanvas((ctx) => {
   ctx.save();
   ctx.translate(20, 20);
@@ -1921,6 +1965,10 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   stake,
   note,
   chacko,
+  njaaron,
+  monique,
+  thomas,
+  soham,
   gate,
   barricade,
   door,
@@ -1933,6 +1981,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemBook,
   itemPistol,
   itemSniper,
+  itemPiss,
   itemBeastBar,
   itemShield,
   itemTrap,

@@ -1,4 +1,4 @@
-import { BALANCE, INV_SLOTS, ITEM_KIND_MAX, ItemKind, isWeapon, slotName } from '@manhunt/shared';
+import { BALANCE, INV_SLOTS, ITEM_KIND_MAX, ItemKind, invLimit, isWeapon, slotName } from '@manhunt/shared';
 import type { SimPlayer } from './player';
 import type { Drop, World } from './World';
 import { placeDrop } from './items';
@@ -76,9 +76,11 @@ export function addItem(w: World, p: SimPlayer, kind: ItemKind, amount?: number,
       return;
     }
   }
-  let i = p.inv.findIndex((s) => s.kind === ItemKind.None);
+  // A real match has eight slots (testing mode all of them).
+  const lim = invLimit(w.testMode);
+  let i = p.inv.findIndex((s, k) => k < lim && s.kind === ItemKind.None);
   if (i < 0) {
-    i = INV_SLOTS - 1;
+    i = lim - 1;
     dropSlot(w, p, i, true);
   }
   const s = p.inv[i];

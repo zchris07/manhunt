@@ -74,7 +74,7 @@ export type GameEvent =
   | { k: 'noise'; x: number; y: number; r: number; s: string }
   | { k: 'feed'; text: string }
   /** Someone took damage (they flinch). `w` is what hit them. */
-  | { k: 'hit'; victim: number; by: number; x: number; y: number; w?: 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet' | 'blast' }
+  | { k: 'hit'; victim: number; by: number; x: number; y: number; w?: 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet' | 'blast' | 'fist' }
   | { k: 'down'; victim: number }
   | { k: 'stun'; target: number; kind: string }
   | { k: 'staked'; victim: number; stage: number }
@@ -125,7 +125,7 @@ export type GameEvent =
   /** Chris Zelley speaks (a speech bubble over him). */
   | { k: 'chris'; say: string }
   /** Marc Cortez or Plasma.TTV speaks. */
-  | { k: 'npc'; who: 'marc' | 'plasma' | 'jaden' | 'waz' | 'chacko'; say: string }
+  | { k: 'npc'; who: 'marc' | 'plasma' | 'jaden' | 'waz' | 'chacko' | 'njaaron' | 'monique' | 'thomas' | 'soham'; say: string }
   /** Sexton hands a glowing tablet to a survivor. */
   | { k: 'tablet'; to: number; x: number; y: number }
   | { k: 'gas'; x: number; y: number }

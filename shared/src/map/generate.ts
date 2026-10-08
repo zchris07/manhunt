@@ -360,6 +360,12 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   // Cabins in three clearings.
   const cabins: Rect[] = [];
   const hidingSpots: Omit<HidingSpotDef, 'id'>[] = [];
+  // Items beside a trail sit 42 to 63 px off it (up to 50% further out than they used to), by a
+  // hash of the spot so no random numbers are used up.
+  const trailOffset = (x: number, y: number): number => {
+    const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return 42 * (1 + 0.5 * (h - Math.floor(h)));
+  };
   const lootCandidates: { x: number; y: number }[] = [...wh.lootSpots];
   const doorSpots: DoorSpot[] = [...wh.doors];
   const barricadeSpots: OpeningSpot[] = [...wh.barricadeSpots];
@@ -812,7 +818,10 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       const by = p.points[k + 3];
       const l = Math.hypot(bx - ax, by - ay) || 1;
       const side = rng.chance(0.5) ? 1 : -1;
-      lootCandidates.push({ x: ax - ((by - ay) / l) * 42 * side, y: ay + ((bx - ax) / l) * 42 * side });
+      {
+        const off = trailOffset(ax, ay);
+        lootCandidates.push({ x: ax - ((by - ay) / l) * off * side, y: ay + ((bx - ax) / l) * off * side });
+      }
     }
   }
   // More spots along the paths (from their own random stream, so the spots above stay put):
@@ -828,7 +837,10 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
       const by = p.points[k + 3];
       const l = Math.hypot(bx - ax, by - ay) || 1;
       const side = extraRng.chance(0.5) ? 1 : -1;
-      lootCandidates.push({ x: ax + (bx - ax) * t - ((by - ay) / l) * 42 * side, y: ay + (by - ay) * t + ((bx - ax) / l) * 42 * side });
+      {
+        const off = trailOffset(ax + (bx - ax) * t, ay + (by - ay) * t);
+        lootCandidates.push({ x: ax + (bx - ax) * t - ((by - ay) / l) * off * side, y: ay + (by - ay) * t + ((bx - ax) / l) * off * side });
+      }
     }
   }
   const pool = rng.shuffle(lootCandidates.filter((p) => p.x > 60 && p.y > 60 && p.x < W - 60 && p.y < W - 60));
@@ -836,11 +848,30 @@ function generateAttempt(params: MapParams, attempt: number): MapData {
   const loot: LootSpawnDef[] = [];
   const order: LootKind[] = [];
   for (const kind of LOOT_KINDS) for (let i = 0; i < params.loot[kind]; i++) order.push(kind);
+  // Some items turn up absolutely anywhere on the map (from their own random stream): never in
+  // water, under a tree's crown, or on a structure. The total number of items doesn't change.
+  const anyRng = rng.fork(18);
+  const anywhere: { x: number; y: number }[] = [];
+  for (let tries = 0; tries < 9000 && anywhere.length < 140; tries++) {
+    const x = anyRng.range(150, W - 150);
+    const y = anyRng.range(150, W - 150);
+    if (!lakeClear(x, y, 70) || world.geo.inWater(x, y)) continue;
+    if (overlapsCollider(world.geo, x, y, 32) || inRect(yard, x, y, 50) || inRect(warehouse, x, y, 70) || cabins.some((r) => inRect(r, x, y, 60))) continue;
+    if (trees.some((t) => Math.hypot(t.x - x, t.y - y) < t.r * 3.6 + 10)) continue;
+    if (bushes.some((b) => Math.hypot(b.x - x, b.y - y) < b.r + 24) || rocks.some((r) => Math.hypot(r.x - x, r.y - y) < r.r + 24)) continue;
+    anywhere.push({ x, y });
+  }
   for (const kind of order) {
-    let idx = clear.findIndex((p) => loot.every((l) => Math.hypot(l.x - p.x, l.y - p.y) > 160));
-    if (idx < 0) idx = clear.findIndex((p) => loot.every((l) => Math.hypot(l.x - p.x, l.y - p.y) > 60));
+    const wantAny = anyRng.chance(BALANCE.items.anywhereShare) && anywhere.length > 0;
+    let from = wantAny ? anywhere : clear;
+    let idx = from.findIndex((p) => loot.every((l) => Math.hypot(l.x - p.x, l.y - p.y) > 160));
+    if (idx < 0) idx = from.findIndex((p) => loot.every((l) => Math.hypot(l.x - p.x, l.y - p.y) > 60));
+    if (idx < 0) {
+      from = from === anywhere ? clear : anywhere;
+      idx = from.findIndex((p) => loot.every((l) => Math.hypot(l.x - p.x, l.y - p.y) > 60));
+    }
     if (idx < 0) break;
-    const p = clear.splice(idx, 1)[0];
+    const p = from.splice(idx, 1)[0];
     loot.push({ id: loot.length, x: p.x, y: p.y, item: kind });
   }
   // A neat row of supplies beside Chris Zelley's ambulance, just outside the ring he paces.

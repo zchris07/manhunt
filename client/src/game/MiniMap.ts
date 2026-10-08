@@ -19,6 +19,7 @@ const ITEM_COLORS: Record<string, string> = {
   beastbar: '#8a5a2a',
   shield: '#3aa8ff',
   sniper: '#ff2a2a',
+  piss: '#e6c820',
   trap: '#d06aff',
 };
 

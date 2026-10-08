@@ -5,6 +5,7 @@ import {
   GOLDEN_BIT,
   GenFlag,
   Health,
+  INV_LIMIT,
   INV_SLOTS,
   ItemKind,
   NPC_NAMES,
@@ -37,6 +38,7 @@ export const ITEM_ICON: Record<number, string> = {
   [ItemKind.BeastBar]: 'item.beastBar',
   [ItemKind.Shield]: 'item.shield',
   [ItemKind.Sniper]: 'item.sniper',
+  [ItemKind.Piss]: 'item.piss',
 };
 const slotIcon = (s: SlotState): string => (s.kind === ItemKind.Shotgun && s.golden ? 'item.goldenPump' : (ITEM_ICON[s.kind] ?? ''));
 const EMPTY_SLOT: SlotState = { kind: 0, n: 0, golden: false, amt: 0 };
@@ -289,7 +291,7 @@ export class Hud {
     if (!ed) return;
     const wrap = $(ed, '.inv-slots');
     wrap.innerHTML = '';
-    for (let i = 0; i < INV_SLOTS; i++) {
+    for (let i = 0; i < (self?.testMode === 1 ? INV_SLOTS : INV_LIMIT); i++) {
       const sl = self?.slots[i] ?? EMPTY_SLOT;
       const full = sl.n > 0;
       const s = el(
@@ -370,7 +372,7 @@ export class Hud {
     };
     if (role === 'survivor') {
       for (let i = 0; i < INV_SLOTS; i++) {
-        const s = slot(String(i + 1), '', '', 'item');
+        const s = slot(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='][i], '', '', 'item');
         // Click a slot to take that item in hand.
         s.root.addEventListener('pointerdown', (e) => {
           e.preventDefault();
@@ -385,6 +387,8 @@ export class Hud {
         e.preventDefault();
         e.stopPropagation();
       });
+      // Thomas Bourgeois's Hemp Beam, if you were the one he gave it to.
+      slot('R', 'Hemp Beam', 'item.hemp', 'ability beam');
     } else if (role === 'hunter') {
       const machete = slot('LMB', 'Machete Swipe', 'char.machete', 'ability');
       machete.icon.classList.add('rot');
@@ -455,6 +459,7 @@ export class Hud {
           (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +
+          (self.pissT > 0 ? `<div class="warn">SOAKED IN PISS: +50% damage ${self.pissT.toFixed(1)}s</div>` : '') +
           (self.abilityLockT > 0 ? `<div class="warn">ABILITIES OFF ${self.abilityLockT.toFixed(1)}s</div>` : '') +
           (self.hempT > 0 ? `<div class="ok">HEMP BATTERY ${test && self.hemp === 2 ? '∞' : `${self.hempLeft.toFixed(1)}s`}</div>` : '') +
           (self.beamT > 0 ? `<div class="ok">HEMP BEAM ${self.beamT > BALANCE.sexton.defense.beamTime ? 'CHARGING' : `${self.beamT.toFixed(1)}s`}</div>` : '') +
@@ -552,11 +557,18 @@ export class Hud {
           if (i === this.inventory.selected) cd = self.reloadT / I.sniper.reload;
         }
         if (test && n > 0 && !isWeapon(sl.kind)) count = '∞';
-        set(s, { on: n > 0, sel: i === this.inventory.selected, count, meter, cd, active: sl.kind === ItemKind.Goggles && i === this.inventory.selected && self.gogglesOn === 1 });
+        set(s, { on: n > 0, sel: i === this.inventory.selected, count, meter, cd, active: sl.kind === ItemKind.Goggles && i === this.inventory.selected && self.gogglesOn === 1, hidden: i >= INV_LIMIT && !test });
         this.sizeSlot(s, n > 0);
       }
       const j = self.jarvis;
       set(this.slots[INV_SLOTS], { on: j === 1 || j === 3, count: j === 3 ? '∞' : j === 2 ? 'used' : '', active: self.jarvisT > 0, hidden: j === 0 });
+      set(this.slots[INV_SLOTS + 1], {
+        on: self.beamCharges > 0 && self.beamCd <= 0 && self.beamT <= 0,
+        count: self.beamT > 0 ? `${self.beamT.toFixed(1)}s` : self.beamCd > 0 ? `${Math.ceil(self.beamCd)}s` : `${self.beamCharges}`,
+        cd: self.beamCd / BALANCE.hunter.beam.cooldown,
+        active: self.beamT > 0,
+        hidden: self.beamCharges <= 0 && self.beamT <= 0,
+      });
     } else if (role === 'hunter') {
       const H = BALANCE.hunter;
       const charge = self.chargeT >= 0 ? self.chargeT / H.attack.charge.max : null;
@@ -667,6 +679,7 @@ const LOOT_NAMES: Record<string, string> = {
   beastbar: 'Mr Beast bar',
   shield: 'mini shield',
   sniper: '0.50 cal',
+  piss: 'jar of piss',
 };
 
 /** Skill check: a needle sweeps a circle; press Space inside the zone. */

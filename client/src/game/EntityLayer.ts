@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { BALANCE, DIZZY_BIT, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, ChackoFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
+import { BALANCE, DIZZY_BIT, GOLDEN_BIT, NPC_NAMES, ChrisFlag, pointInPolygon, DEG, EF, EntityKind, GenFlag, Health, ItemKind, JadenFlag, MarcFlag, ChackoFlag, FolkFlag, PlasmaFlag, SextonFlag, ShaneFlag, WazFlag, type MapData, type MatchPlayerInfo, type WorldState } from '@manhunt/shared';
 import type { AssetManager } from '../assets/AssetManager';
 import type { InterpEntity } from '../net/GameClient';
 
@@ -29,6 +29,7 @@ const ITEM_TEX: Record<number, string> = {
   [ItemKind.BeastBar]: 'item.beastBar',
   [ItemKind.Shield]: 'item.shield',
   [ItemKind.Sniper]: 'item.sniper',
+  [ItemKind.Piss]: 'item.piss',
 };
 const itemTex = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'item.goldenPump' : ITEM_TEX[kind]);
 export const LOOT_TEX: Record<string, string> = {
@@ -42,6 +43,7 @@ export const LOOT_TEX: Record<string, string> = {
   beastbar: 'item.beastBar',
   shield: 'item.shield',
   sniper: 'item.sniper',
+  piss: 'item.piss',
 };
 
 /** Walk cycle: legs swing under the body in the direction of travel. */
@@ -445,7 +447,16 @@ class PlayerSprite {
   }
 }
 
-type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden' | 'waz' | 'chacko';
+/** Which entity kind speaks for each townsperson. */
+const FOLK_KIND: Record<'njaaron' | 'monique' | 'thomas' | 'soham', number> = { njaaron: EntityKind.Njaaron, monique: EntityKind.Monique, thomas: EntityKind.Thomas, soham: EntityKind.Soham };
+const FOLK_LOOK: Record<number, [string, number]> = {
+  [EntityKind.Njaaron]: ['char.njaaron', 25],
+  [EntityKind.Monique]: ['char.monique', 26],
+  [EntityKind.Thomas]: ['char.thomas', 27],
+  [EntityKind.Soham]: ['char.soham', 28],
+};
+
+type Speaker = 'sexton' | 'chris' | 'marc' | 'plasma' | 'jaden' | 'waz' | 'chacko' | 'njaaron' | 'monique' | 'thomas' | 'soham';
 
 interface Bubble {
   root: Container;
@@ -589,6 +600,8 @@ export class EntityLayer {
   private jaden: { npc: NpcSprite; gun: Graphics; mark: Text } | null = null;
   private waz: NpcSprite | null = null;
   private chacko: NpcSprite | null = null;
+  /** Njaaron, Monique, Thomas and Soham, by entity kind. */
+  private readonly folks = new Map<number, NpcSprite>();
   /** Shane's and Jaden's alert meters over their heads (above the vision mask: everyone sees them build). */
   private readonly meters = new Graphics();
   private plasma: { man: NpcSprite; beast: Sprite; aura: Graphics } | null = null;
@@ -742,6 +755,7 @@ export class EntityLayer {
     let jadenSeen = false;
     let wazSeen = false;
     let chackoSeen = false;
+    const folkSeen = new Set<number>();
     this.beam.clear();
     this.laser.clear();
     for (const e of ents) {
@@ -766,6 +780,9 @@ export class EntityLayer {
       } else if (e.kind === EntityKind.Plasma) {
         plasmaSeen = true;
         this.drawPlasma(e, dt, time);
+      } else if (e.kind === EntityKind.Njaaron || e.kind === EntityKind.Monique || e.kind === EntityKind.Thomas || e.kind === EntityKind.Soham) {
+        folkSeen.add(e.kind);
+        this.drawFolk(e, dt, time);
       } else if (e.kind === EntityKind.Chacko) {
         chackoSeen = true;
         this.drawChacko(e, dt, time);
@@ -789,6 +806,7 @@ export class EntityLayer {
     if (this.jaden) this.jaden.npc.root.visible = jadenSeen;
     if (this.waz) this.waz.root.visible = wazSeen;
     if (this.chacko) this.chacko.root.visible = chackoSeen;
+    for (const [kind, n] of this.folks) n.root.visible = folkSeen.has(kind);
 
     for (const [id, s] of this.players) if (!seen.has(id)) s.root.visible = false;
     this.drawWakes(ents, self, time, dt);
@@ -803,7 +821,7 @@ export class EntityLayer {
     // Dialogue bubble pops in above whoever is speaking.
     if (this.bubble) {
       const b = this.bubble;
-      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : b.who === 'waz' ? this.waz : b.who === 'chacko' ? this.chacko : this.sexton;
+      const speaker = b.who === 'chris' ? this.chris : b.who === 'marc' ? this.marc : b.who === 'plasma' ? this.plasma?.man : b.who === 'jaden' ? this.jaden?.npc : b.who === 'waz' ? this.waz : b.who === 'chacko' ? this.chacko : b.who === 'sexton' ? this.sexton : this.folks.get(FOLK_KIND[b.who]);
       if (time > b.until || !speaker) {
         b.root.destroy({ children: true });
         this.bubble = null;
@@ -892,6 +910,10 @@ export class EntityLayer {
       [EntityKind.Jaden]: 5,
       [EntityKind.Waz]: 6,
       [EntityKind.Chacko]: 7,
+      [EntityKind.Njaaron]: 8,
+      [EntityKind.Monique]: 9,
+      [EntityKind.Thomas]: 10,
+      [EntityKind.Soham]: 11,
     };
     const live = new Set<number>();
     const mg = this.meters;
@@ -941,7 +963,7 @@ export class EntityLayer {
     g.clear();
     const people: { id: number; x: number; y: number }[] = [];
     for (const e of ents) {
-      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden || e.kind === EntityKind.Waz || e.kind === EntityKind.Chacko) {
+      if (e.kind === EntityKind.Player || e.kind === EntityKind.Shane || e.kind === EntityKind.Sexton || e.kind === EntityKind.Chris || e.kind === EntityKind.Marc || e.kind === EntityKind.Plasma || e.kind === EntityKind.Jaden || e.kind === EntityKind.Waz || e.kind === EntityKind.Chacko || e.kind === EntityKind.Njaaron || e.kind === EntityKind.Monique || e.kind === EntityKind.Thomas || e.kind === EntityKind.Soham) {
         if (self && e.id === self.id) continue;
         people.push(e);
       }
@@ -1329,6 +1351,37 @@ export class EntityLayer {
     }
   }
 
+  /** Njaaron, Monique, Thomas and Soham: wander; Njaaron punches, Monique raises a rifle, Soham's fuse flashes. */
+  private drawFolk(e: InterpEntity, dt: number, time: number): void {
+    let n = this.folks.get(e.kind);
+    if (!n) {
+      const [tex, legs] = FOLK_LOOK[e.kind];
+      n = new NpcSprite(this.assets, tex, legs, this.root);
+      this.folks.set(e.kind, n);
+    }
+    const fleeing = (e.state & FolkFlag.Fleeing) !== 0;
+    n.step(e, dt, fleeing ? 46 : 34, fleeing ? 400 : 160);
+    n.fx.clear();
+    const hurt = (e.state & FolkFlag.Hurt) !== 0;
+    let tint = hurt && Math.sin(time * 40) > 0 ? 0xff7a6a : 0xffffff;
+    n.body.position.set(hurt ? Math.sin(time * 60) * 2 : 0, 0);
+    const a = e.facing;
+    if (e.state & FolkFlag.Fuse) {
+      // Soham: flashing red faster and faster, a spark on his head.
+      const f = Math.sin(time * 22) > 0;
+      tint = f ? 0xff5a4a : 0xffd0c0;
+      n.fx.circle(0, -14, 3 + (f ? 2 : 0)).fill({ color: 0xffd23a });
+    }
+    if (e.state & FolkFlag.Angry && e.kind === EntityKind.Njaaron) tint = Math.sin(time * 9) > 0 ? 0xffb0a0 : 0xffffff;
+    if (e.state & FolkFlag.Punching) n.fx.circle(Math.cos(a) * 24, Math.sin(a) * 24, 6).fill({ color: 0xe0a880 }).stroke({ width: 2, color: INK });
+    if (e.state & FolkFlag.Armed) {
+      // Monique's 0.50 cal.
+      n.fx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6).lineTo(Math.cos(a) * 46, Math.sin(a) * 46).stroke({ width: 5, color: 0x1c1c20 });
+      n.fx.circle(Math.cos(a) * 46, Math.sin(a) * 46, 2.2).fill({ color: 0xff4040 });
+    }
+    n.body.tint = tint;
+  }
+
   /** Chacko: sits on the couch with a controller, eyes on the TV; flinches when hit; a gory mess when he's gone. */
   private drawChacko(e: InterpEntity, dt: number, time: number): void {
     this.chacko ??= new NpcSprite(this.assets, 'char.chacko', 24, this.root);
@@ -1417,7 +1470,7 @@ export class EntityLayer {
       c = new Container();
       if (e.kind === EntityKind.Bottle) {
         // state 1: The Grapes of Wrath rather than a bottle.
-        const s = new Sprite(this.assets.getTexture(e.state & 1 ? 'item.book' : 'item.bottle'));
+        const s = new Sprite(this.assets.getTexture(e.state & 1 ? 'item.book' : e.state & 2 ? 'item.piss' : 'item.bottle'));
         s.anchor.set(0.5);
         s.scale.set(0.6);
         c.addChild(s);

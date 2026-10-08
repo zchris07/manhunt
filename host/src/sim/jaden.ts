@@ -88,14 +88,10 @@ export class Jaden extends Shane {
   }
 
   /** Chacko was slain by `p`: he hunts them wherever they are, shooting until they're downed. */
-  avenge(p: SimPlayer): void {
+  override avenge(p: SimPlayer): void {
     if (!this.alive || !this.targetable(p)) return;
     this.alert(p);
     this.avenging = true;
-  }
-
-  stopAvenging(): void {
-    this.avenging = false;
   }
 
   /** A 0.50 cal round: one shot slays him. */

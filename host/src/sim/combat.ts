@@ -102,6 +102,18 @@ function resolveAttack(w: World, h: SimPlayer): void {
     // Six points (3 heavy swipes, or 6 light) kill him; each hit shoves him back and stuns him briefly.
     w.jaden.slashHit(h, power);
     hit = true;
+  } else if (w.njaaron.solid && inSwipe(h, w.njaaron.x, w.njaaron.y, BALANCE.njaaron.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.njaaron.x, w.njaaron.y)) {
+    w.njaaron.slashHit(h, power);
+    hit = true;
+  } else if (w.monique.solid && inSwipe(h, w.monique.x, w.monique.y, BALANCE.monique.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.monique.x, w.monique.y)) {
+    w.monique.hit(h);
+    hit = true;
+  } else if (w.thomas.solid && inSwipe(h, w.thomas.x, w.thomas.y, BALANCE.thomas.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.thomas.x, w.thomas.y)) {
+    w.thomas.hit(h);
+    hit = true;
+  } else if (w.soham.solid && inSwipe(h, w.soham.x, w.soham.y, BALANCE.soham.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.soham.x, w.soham.y)) {
+    w.soham.itemHit();
+    hit = true;
   } else if (w.chacko.solid && inSwipe(h, w.chacko.x, w.chacko.y, BALANCE.chacko.radius) && w.geo.hasLineOfSight(h.move.x, h.move.y, w.chacko.x, w.chacko.y)) {
     // One hit and he blows up.
     w.chacko.hit(h);
@@ -220,6 +232,17 @@ export function lungeContact(w: World, h: SimPlayer, fromX: number, fromY: numbe
     lungeLanded(h);
     return;
   }
+  for (const [n, r, act] of [
+    [w.njaaron, BALANCE.njaaron.radius, () => w.njaaron.slashHit(h, 1)],
+    [w.monique, BALANCE.monique.radius, () => w.monique.hit(h)],
+    [w.thomas, BALANCE.thomas.radius, () => w.thomas.hit(h)],
+  ] as const) {
+    if (n.solid && pointSegDist2(n.x, n.y, fromX, fromY, h.move.x, h.move.y) <= (reach + r) ** 2) {
+      act();
+      lungeLanded(h);
+      return;
+    }
+  }
   const ch = w.chacko;
   if (ch.solid && pointSegDist2(ch.x, ch.y, fromX, fromY, h.move.x, h.move.y) <= (reach + BALANCE.chacko.radius) ** 2) {
     ch.hit(h);
@@ -243,7 +266,7 @@ function lungeLanded(h: SimPlayer): void {
   h.move.slowMul = H.attack.hitSlowMul;
 }
 
-export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet' | 'blast';
+export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet' | 'blast' | 'fist';
 
 /**
  * Takes `amount` hp (out of his 100) off Zach. At zero he goes down for a while; Plasma's
@@ -251,6 +274,8 @@ export type HitKind = 'slash' | 'bottle' | 'pellet' | 'beam' | 'punch' | 'bullet
  */
 export function hurtHunter(w: World, h: SimPlayer, amount: number, by: SimPlayer | null, kind: HitKind | 'gas'): void {
   if (h.role !== 'hunter' || h.health === Health.Eliminated || h.knockT > 0 || amount <= 0) return;
+  // Soaked in piss, he takes half again as much.
+  if (h.pissT > 0 && kind !== 'gas') amount *= BALANCE.items.piss.mul;
   h.hp = Math.max(0, h.hp - amount / H.health.max);
   if (kind !== 'gas') w.emit('all', { k: 'hit', victim: h.id, by: by?.id ?? 0, x: Math.round(h.move.x), y: Math.round(h.move.y), w: kind });
   if (h.hp > 1e-4) return;
@@ -384,7 +409,7 @@ export function updateCombat(w: World, dt: number): void {
           w.feed(`${p.name} got back up`);
         }
       } else if (p.health !== Health.Eliminated) {
-        p.hp = Math.min(1, p.hp + (dt / H.health.regenTime) * (1 + H.stakeRegen * p.stakeBuff));
+        p.hp = Math.min(1, p.hp + (dt / H.health.regenTime) * (1 + H.stakeRegen * p.stakeBuff) * (p.njaaronRegen ? BALANCE.njaaron.regenMul : 1));
       }
       if (p.chargeT >= 0) {
         const C = H.attack.charge;

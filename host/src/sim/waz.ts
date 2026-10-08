@@ -102,7 +102,8 @@ export class Waz implements NpcTarget {
     this.alive = false;
     this.moving = false;
     by.fovMul *= by.role === 'hunter' ? 1 + Z.fovBonus : 1 - Z.fovPenalty;
-    w.emit([by.id], { k: 'wazSlain' });
+    // Everyone in the lobby sees the flash.
+    w.emit('all', { k: 'wazSlain' });
     w.emit([by.id], { k: 'item', text: by.role === 'hunter' ? 'Slew Waz: you see 10% more' : 'Slew Waz: you see 10% less' });
     w.feed(`${by.name} slew Waz`);
   }

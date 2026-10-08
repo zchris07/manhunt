@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, Btn, EntityKind, Health, INV_SLOTS, ItemKind, Prompt, hunterHealthMul } from '@manhunt/shared';
+import { BALANCE, Btn, EntityKind, Health, INV_LIMIT, ItemKind, Prompt, hunterHealthMul } from '@manhunt/shared';
 import { Driver, clearLane, countOf, give, makeWorld, parkChris, parkSexton, parkShane, place, runUntil, slotOf } from './worldHelpers';
 import { createHarness, idle, move, startMatch } from './harness';
 import { buildView, visionFor } from '../src/sim/view';
@@ -53,11 +53,11 @@ describe('inventory: eight free slots', () => {
     const kinds = [ItemKind.Bottle, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Energy, ItemKind.Trap, ItemKind.Book, ItemKind.Confit, ItemKind.Pistol];
     for (const k of kinds) give(w, s, k);
     give(w, s, ItemKind.Bottle, 2);
-    expect(s.inv.every((sl) => sl.n > 0)).toBe(true);
-    expect(s.inv[INV_SLOTS - 1].kind).toBe(ItemKind.Pistol);
+    expect(s.inv.slice(0, INV_LIMIT).every((sl) => sl.n > 0)).toBe(true);
+    expect(s.inv[INV_LIMIT - 1].kind).toBe(ItemKind.Pistol);
     // Another shotgun is a ninth item: the pistol goes on the ground.
     addItem(w, s, ItemKind.Shotgun);
-    expect(s.inv[INV_SLOTS - 1].kind).toBe(ItemKind.Shotgun);
+    expect(s.inv[INV_LIMIT - 1].kind).toBe(ItemKind.Shotgun);
     expect(w.drops.map((d) => d.kind)).toEqual([ItemKind.Pistol]);
     // More bottles still stack.
     give(w, s, ItemKind.Bottle);
@@ -374,16 +374,19 @@ describe('Mr Beast bars and mini shields', () => {
     // Full: the fifth wasn't drunk.
     expect(countOf(s, ItemKind.Shield)).toBe(2);
     expect(buildView(w, s).self.shield).toBeCloseTo(1, 2);
-    // Moving cancels a drink.
+    // Moving doesn't cancel a drink: it completes, at half speed.
     s.shield = 0.5;
     d.tap(s.id, Btn.Primary, { item: slot });
+    const x0 = s.move.x;
     d.run(secs(1), (p) => (p === s ? { item: slot, moveX: 1 } : undefined));
+    expect(s.move.x - x0).toBeLessThan(BALANCE.survivor.walk * 0.6);
+    expect(s.move.x - x0).toBeGreaterThan(BALANCE.survivor.walk * 0.3);
     d.run(secs(2), (p) => (p === s ? { item: slot } : undefined));
-    expect(s.shield).toBe(0.5);
+    expect(s.shield).toBe(0.75);
     // Damage: the shield goes first.
-    hurtSurvivor(w, s, 0.7, null, 'bottle');
+    hurtSurvivor(w, s, 0.9, null, 'bottle');
     expect(s.shield).toBe(0);
-    expect(s.hp).toBeCloseTo(0.8, 5);
+    expect(s.hp).toBeCloseTo(0.85, 5);
   });
 });
 

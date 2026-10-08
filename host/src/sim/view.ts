@@ -186,6 +186,16 @@ function selfState(w: World, p: SimPlayer, v: SimPlayer | undefined): SelfState 
   s.abilityLockT = p.abilityLockT;
   s.jadenBonus = p.jadenBonus;
   s.nic = p.nic ? 1 : 0;
+  s.pissT = p.pissT;
+  // Monique's arrow: the way and the distance to Zach.
+  s.arrowT = p.arrowT;
+  if (p.arrowT > 0) {
+    const z = w.order.find((h) => h.role === 'hunter' && h.health !== Health.Eliminated);
+    if (z) {
+      s.arrowAng = Math.atan2(z.move.y - m.y, z.move.x - m.x);
+      s.arrowDist = Math.hypot(z.move.x - m.x, z.move.y - m.y);
+    }
+  }
   return s;
 }
 
@@ -223,7 +233,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     for (const b of w.bottles) {
       if (Math.hypot(b.x - v.move.x, b.y - v.move.y) > 900) continue;
-      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), b.book ? 1 : 0, 0, Math.min(255, Math.round(b.travelled / 4))));
+      entities.push(quantizeEntity(b.id, EntityKind.Bottle, b.x, b.y, Math.atan2(b.dy, b.dx), b.book ? 1 : b.piss ? 2 : 0, 0, Math.min(255, Math.round(b.travelled / 4))));
     }
     for (const t of w.traps) {
       if (Math.hypot(t.x - v.move.x, t.y - v.move.y) > R) continue;
@@ -260,7 +270,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     }
     // Zach's Hemp Beam glows the same way.
     for (const z of w.order) {
-      if (z.role !== 'hunter' || z.beamT <= 0 || !z.beamId) continue;
+      if (z.role === 'spectator' || z.beamT <= 0 || !z.beamId) continue;
       if (Math.hypot(z.move.x - v.move.x, z.move.y - v.move.y) > R + BALANCE.sexton.defense.beamRange) continue;
       // state 4: Zach's beam; +2 while it is still charging (action = charge progress, then how far through the beam proper).
       const D = BALANCE.sexton.defense;
@@ -271,7 +281,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     if (sx.beaming && Math.hypot(sx.x - v.move.x, sx.y - v.move.y) <= R + BALANCE.sexton.defense.beamRange) {
       entities.push(quantizeEntity(sx.beamId, EntityKind.Beam, sx.x, sx.y, sx.beamAng, 0, Math.round(Math.min(1, sx.beamAge / BALANCE.sexton.defense.beamTime) * 255), Math.round(sx.beamLen / 8)));
     }
-    for (const n of [w.marc, w.plasma, w.chacko, ...(w.waz.alive ? [w.waz] : [])]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= npcR) entities.push(n.record());
+    for (const n of [w.marc, w.plasma, w.chacko, ...[w.njaaron, w.monique, w.thomas, w.soham].filter((f) => f.alive), ...(w.waz.alive ? [w.waz] : [])]) if (Math.hypot(n.x - v.move.x, n.y - v.move.y) <= npcR) entities.push(n.record());
     for (const d of w.drops) {
       if (Math.hypot(d.x - v.move.x, d.y - v.move.y) <= R) entities.push(quantizeEntity(d.id, EntityKind.Drop, d.x, d.y, 0, 0, 0, d.kind | (d.golden ? GOLDEN_BIT : 0)));
     }
@@ -327,7 +337,7 @@ export function buildView(w: World, peerPlayer: SimPlayer): PlayerView {
     shaneDir: v && v.role === 'hunter' && w.shane.chasing ? Math.atan2(w.shane.y - v.move.y, w.shane.x - v.move.x) : null,
     // Testing mode: where every NPC is (the map shows them all), in NPC_NAMES order.
     npcs: w.testMode
-      ? [w.sexton.alive ? w.sexton : null, w.shane, w.chris.gone ? null : w.chris, w.marc, w.plasma, w.jaden.alive ? w.jaden : null, w.waz.alive ? w.waz : null, w.chacko.alive ? w.chacko : null].flatMap((n, k) => (n ? [{ k, x: n.x, y: n.y }] : []))
+      ? [w.sexton.alive ? w.sexton : null, w.shane, w.chris.gone ? null : w.chris, w.marc, w.plasma, w.jaden.alive ? w.jaden : null, w.waz.alive ? w.waz : null, w.chacko.alive ? w.chacko : null, w.njaaron.alive ? w.njaaron : null, w.monique.alive ? w.monique : null, w.thomas.alive ? w.thomas : null, w.soham.alive ? w.soham : null].flatMap((n, k) => (n ? [{ k, x: n.x, y: n.y }] : []))
       : [],
   };
   return { self: selfState(w, peerPlayer, v), entities, world };
