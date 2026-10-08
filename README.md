@@ -130,12 +130,13 @@ are instant.
 | Shotgun (4) | 6 shells, 2 s reload. 8 pellets with random bloom in the same cone; each flies until it hits something solid or someone, shattering windows and flying on through. Any pellet on Zach stuns him for 2.1 s (1.5× a bottle) and blasts him back; a full blast (all 8 pellets) takes 25 hp, 3.125 hp a pellet. Each pellet on a survivor takes 15% of their health (enough can down them outright). |
 | 0.50 cal (2, survivors only) | A sniper rifle: 3 shots. The bullet flies at twice the speed of a shotgun pellet through every material, with no range limit. It downs a survivor outright, takes 25% of Zach's health, shoves him back hard and switches off his sprint for 3 s, slays Jaden Nguyen, Waz and a raging Plasma.TTV, smashes windows, doors and barricades in its path and takes 30% off a generator's progress. While you hold it a faint red laser runs out from the muzzle that everyone, Zach included, can see. |
 | Golden pump (from Plasma.TTV) | A gold tactical shotgun: 5 shells, 1 s reload. A weapon of its own, in its own slot. |
-| P250 (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health. |
+| P250 (from Jaden Nguyen's body) | 10 shots, one a click (0.35 s apart). 10 hp a shot on Zach, 10% of a survivor's health; every hit shoves the target back and stuns them for 0.1 s. |
+| Jar of piss (6) | Thrown like a bottle. On Zach it doesn't stun, but he takes 50% more damage for 5 s. An NPC treats it as a stun item. |
 | Doctor Pepper (8) | A red can. Fills your sprint meter at once. For 20 s it refills 1.5× faster, holds 2 s more, and you walk and run up to 15% faster, all fading over the 20 s. |
 | Galaxy gas trap (8) | A Galaxy Gas canister. Planting takes 2 s (moving cancels it). It's hard for Zach to spot (the gas cloud is 35% smaller than it first was). When Zach, an alerted Shane Jeans or a raging Plasma.TTV comes near it bursts into gas that slows Zach a lot and burns 2 hp a second while he's in it, makes Shane give up his chase, stuns Jaden, slows Sexton, and blinds and slows Plasma. |
 | Duck confit (6, plus 1 by the ambulance) | Eat it to heal to full health. It no longer revives anyone. |
-| Mr Beast bar (15, plus 2 by the ambulance) | A chocolate bar. Eat it for a fifth of your health back. |
-| Mini shield (20, plus 2 by the ambulance) | A small blue shield potion. Drinking takes 2 s (moving cancels it) and adds a quarter of a health bar to a blue shield bar shown above your green health bar, up to a full extra bar (four). Any damage takes the shield first. Zach can't drink them. |
+| Mr Beast bar (15, plus 2 by the ambulance) | A chocolate bar. Eat it for a fifth of your health back. Like duck confit, Doctor Pepper and mini shields it can be used on the move: you walk at half speed while you do. |
+| Mini shield (20, plus 2 by the ambulance) | A small blue shield potion. Drinking takes 2 s (you can walk while you do, at half speed) and adds a quarter of a health bar to a blue shield bar shown above your green health bar, up to a full extra bar (four). Any damage takes the shield first. Zach can't drink them. |
 
 Beside Chris Zelley's ambulance, 2 mini shields, 2 Mr Beast bars and a duck confit are set out in
 a neat row.
@@ -149,7 +150,7 @@ a neat row.
 | F | Soundcloud Burst (12 s): aim a purple wave of sound (a slightly concave lens of fixed width) that flies across the whole map through every wall at 1700 u/s. Every survivor it passes is jump-scared for 2.5 s (the image and a snippet of the song fade in and out), and an aggressive NPC it passes (an alerted Jaden Nguyen, a raging Plasma.TTV, a defending Sexton Science) is stunned for 2.5 s. Only you hear it go out: a very quiet snippet of GMajor from a random point in the song. |
 | Q | **Hemp Battery** (in your kit): toggle it on and off; while on, a wider view, light through walls and +10% speed. 10 s of use; it takes 40 s to refill from empty, and drained dry it can't be used for 5 s. Its announcement plays and shows only the very first time you ever use it |
 | R | **Hemp Beam** (drops when you slay Sexton Science): charges for 1 s (an orb gathers at your hand, and a repulsor hum starts that everyone hears, fading with distance from you and lasting while the beam does), then channels Sexton's own beam (3 s) along your aim: a survivor it touches takes 3% of their full health ten times a second, and each NPC in its way takes a light swipe's hit every half second. 3 single-use charges (spend all three and it leaves your ability bar), 2 s between, no melee while it charges or fires but every other ability still works |
-| Space | **Penjamin** (2 charges like the lunge, 25 s for each to come back): a narrow (10°) cone of translucent yellow vape gas toward the cursor. It rolls out in 0.6 s to 1.1× the distance from you to the corner of your screen (it never visibly stops on screen), widens naturally with distance, passes through walls, hangs for 4 s and fades over 1 s. A survivor with at least half their body in it hears a muffled loop (the first 4 seconds of a sound clip, fading in and out as they enter and leave the gas), and is slowed (60% close to the source, down to 30% at the far end; the strongest it got holds while they're in it, and for 3 s after, and walking toward the source raises it) and loses health (5% of the bar a second close up, down to 1%), for as long as they're in it and 2 s more, with a dizzy marker over their head. Their flashlight beam narrows by 60% and everything outside their light goes pitch black, easing in and out, while they're in it and for 6 s after. NPCs who react to being attacked react to the gas, and the ones that can be hurt are slowed by it (the same 60%-to-30% falloff) and take a light machete hit every 1.5 s they stand in it: Sexton, Chris Zelley and Waz run, Marc protests, Plasma.TTV rages at you and Jaden Nguyen turns his gun on you. |
+| Space | **Penjamin** (2 charges like the lunge, 25 s for each to come back): a narrow (10°) cone of translucent yellow vape gas toward the cursor. It rolls out in 0.6 s to 1.1× the distance from you to the corner of your screen (it never visibly stops on screen), widens naturally with distance, passes through walls, hangs for 4 s and fades over 1 s. A survivor with at least half their body in it hears a muffled loop (the first 4 seconds of a sound clip, fading in and out as they enter and leave the gas), and is slowed (45% close to the source, down to 15% at the far end; the strongest it got holds while they're in it, and for 3 s after, and walking toward the source raises it) and loses health (5% of the bar a second close up, down to 1%), for as long as they're in it and 2 s more, with a dizzy marker over their head. Their flashlight beam narrows by 60% and everything outside their light goes pitch black, easing in and out, while they're in it and for 6 s after. NPCs who react to being attacked react to the gas, and the ones that can be hurt are slowed by it (the same 60%-to-30% falloff) and take a light machete hit every 1.5 s they stand in it: Sexton, Chris Zelley and Waz run, Marc protests, Plasma.TTV rages at you and Jaden Nguyen turns his gun on you. |
 | E | Pick up, stake, search a hiding spot (instant), damage a generator, open and close doors, talk to Plasma.TTV |
 | Golden pump | From Plasma.TTV: it replaces your machete (left click fires it) for 10 shots. Each pellet takes 9% of a survivor's health, stuns them for 0.1 s and shoves them away from the blast. |
 | M | Full map. Zach knows the whole map and every stake. |
@@ -234,10 +235,28 @@ only be hurt once he's fully a beast, and he keeps two separate health bars (sho
 1, a heavy swing 2). The damage stays when he turns back human. Slain, he drops a golden pump.
 Talk to him (either side) and he says *"ggs"* and hands you a golden pump, once each.
 
+**Townsfolk.** Four more NPCs wander the map. **Njaaron** asks *"you wanna go to the Y later?"*;
+anyone he asks can answer **Y** or **N**. Yes as a survivor and he follows you, and takes on Zach (a
+10 hp punch with knockback, every 0.9 s) when you're hurt or Zach comes within 380 u. No as a
+survivor and he says *"cmon man"* and attacks you for 10 s (you can talk to him again after). Yes
+as Zach and Zach's health recovers 20% faster for good; no and he attacks Zach for 10 s. Four
+light machete hits (a heavy swipe counts two), three stunning item hits or one firearm shot kill
+him, and however he dies he explodes: up to 20 hp to Zach and up to half a bar to a survivor,
+less the farther they are (240 u at most). **Soham** says *Hi* and two seconds later explodes
+the same way. **Monique Bourgeois** (survivors only) says *spoiler alert* and gives the first
+survivor to talk to her a 40 s arrow (with the distance and "ZACH") pointing at Zach; later
+survivors get *Hi there* and a Mr Beast bar. She can't be slain; Zach attacking her sends her
+fleeing at twice Sexton's speed, a survivor attacking her makes her pull out a 0.50 cal with
+infinite shots and shoot them for 10 s (40% of a survivor's health a shot). **Thomas Bourgeois**
+hands one player, survivor or Zach, a full Hemp Beam (*this is neat!*); a survivor fires it with
+**R** at Zach (1% of his health a tick) and NPCs. He can't be slain and runs from anyone who hits
+him. Slaying Chacko as a survivor now also alerts Shane Jeans, and the hunters give up after
+30 s if they haven't downed you.
+
 **Chacko** (one, always in the lounge: a room in the warehouse with a TV on its north wall and a
 couch facing it) sits watching Madden. Talk to him as a survivor and he gives you a Doctor Pepper
 (once each). Talk to him as Zach and he hands over **50 Nic** (once), which replaces Penjamin: the
-same ability and charges with 50% more reach (the same falloff, worked out over the longer range)
+same ability and charges with 10% more reach (the same falloff, worked out over the longer range)
 and a blue vapor instead of yellow. One hit of any item from a survivor kills him, and then Jaden
 Nguyen and Plasma.TTV both hunt that survivor, wherever they are, until they are downed once; the
 hunt ends early if either of the two is slain, and if anyone else attacks either of them they turn
@@ -401,7 +420,7 @@ anywhere to teleport there. Survivors see their own scent trail. The **Test effe
 (left side) play any stun or flash on yourself (Zach has no ability cooldowns in testing mode): the Soundcloud Burst scare, the Grapes of Wrath
 flash (and its 3 s stun as Zach), the Waz flash, a stun, a shotgun blast, galaxy gas, and being
 knocked down, and Penjamin gas (as Zach, a cloud from where you stand; as a survivor, its
-effects at full strength). The testing kit holds 8 kinds of item (there are 10; pick the rest up on the map).
+effects at full strength). The testing kit has 12 slots (keys 1-9, 0, - and =): the shotgun, the golden pump, the P250 and the 0.50 cal, then a bottle, a jar of piss, the Grapes of Wrath, goggles, a mini shield, a beast bar, a trap and Doctor Pepper (`confit` gives duck confit).
 A lobby owner can also tick
 **Testing mode** in the lobby settings.
 

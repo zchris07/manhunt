@@ -255,14 +255,19 @@ describe('Zach vs aggressive NPCs', () => {
     const c = clearLane(w, 450);
     place(h, c.x - 300, c.y);
     h.viewReach = 700;
-    w.sexton.x = c.x;
-    w.sexton.y = c.y;
-    const hp0 = w.sexton.hp;
+    w.jaden.x = c.x;
+    w.jaden.y = c.y;
+    let hits = 0;
+    const orig = w.jaden.slashHit.bind(w.jaden);
+    w.jaden.slashHit = (by, power) => {
+      hits++;
+      orig(by, power);
+    };
     d.tap(h.id, Btn.Vape, { aim: 0 });
     d.run(secs(0.8));
-    expect(w.sexton.vapeSlow).toBeGreaterThan(0.25);
-    d.run(secs(1.2));
-    expect(w.sexton.hp).toBeLessThan(hp0);
+    expect(w.jaden.vapeSlow).toBeGreaterThan(0.14);
+    d.run(secs(1.6));
+    expect(hits).toBeGreaterThan(0);
   });
 
   it('the Hemp Beam keeps hurting an NPC it touches', () => {

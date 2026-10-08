@@ -25,6 +25,9 @@ export const Btn = {
   Vape: 1 << 9,
   /** R (Zach): channel the Hemp Beam. */
   Beam: 1 << 10,
+  /** Y / N: answer Njaaron. */
+  Yes: 1 << 11,
+  No: 1 << 12,
 } as const;
 
 export interface InputCmd {

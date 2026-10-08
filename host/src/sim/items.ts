@@ -68,11 +68,13 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
   if (!s || p.action !== Action.None || !canAct(p)) return;
   switch (s.kind) {
     case ItemKind.Bottle:
+    case ItemKind.Piss:
     case ItemKind.Book: {
       const dx = Math.cos(cmd.aim);
       const dy = Math.sin(cmd.aim);
       const book = s.kind === ItemKind.Book;
-      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, owner: p.id, book });
+      const piss = s.kind === ItemKind.Piss;
+      w.bottles.push({ id: w.allocEntityId(), x: p.move.x + dx * (p.radius + 4), y: p.move.y + dy * (p.radius + 4), dx, dy, travelled: 0, owner: p.id, book, piss });
       consumeSlot(w, s);
       break;
     }
@@ -101,6 +103,7 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
       break;
     }
     case ItemKind.Energy: {
+      useSlow(p);
       p.move.boostT = I.energy.duration;
       // The (now longer) sprint meter fills up at once.
       p.move.stamina = maxStamina('survivor', p.move.boostT);
@@ -115,6 +118,7 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
         w.emit([p.id], { k: 'item', text: 'Already at full health' });
         return;
       }
+      useSlow(p);
       restoreSurvivor(p, 1);
       consumeSlot(w, s);
       w.emit([p.id], { k: 'item', text: 'Duck confit: healed to full' });
@@ -125,6 +129,7 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
         w.emit([p.id], { k: 'item', text: 'Already at full health' });
         return;
       }
+      useSlow(p);
       restoreSurvivor(p, p.hp + I.beastBar.heal);
       consumeSlot(w, s);
       w.emit([p.id], { k: 'item', text: 'Mr Beast bar: +20% health' });
@@ -146,6 +151,12 @@ export function useItem(w: World, p: SimPlayer, cmd: InputCmd): void {
 }
 
 /** The drink finished: a quarter bar of shield (up to a full extra bar). */
+/** Healing and boost items can be used on the move, at half speed for a moment. */
+export function useSlow(p: SimPlayer, seconds: number = I.useSlowTime): void {
+  p.move.slowT = Math.max(p.move.slowT, seconds);
+  p.move.slowMul = Math.min(p.move.slowMul || 1, I.useSlow);
+}
+
 export function drinkShield(w: World, p: SimPlayer): void {
   const s = p.inv.find((x) => x.kind === ItemKind.Shield && x.n > 0);
   if (!s || p.role !== 'survivor') return;
@@ -199,6 +210,17 @@ function firePistol(w: World, p: SimPlayer, aim: number): void {
     hurtHunter(w, hitP, G.zachDamage, p, 'bullet');
     w.feed(`${p.name} shot ${hitP.name}`);
   } else if (hitP) hurtSurvivor(w, hitP, G.damage, p, 'bullet');
+  // A P250 hit shoves the target back and stuns them for a moment.
+  if (hitP) {
+    const away = Math.atan2(hitP.move.y - p.move.y, hitP.move.x - p.move.x);
+    if (hitP.role === 'hunter') stunHunter(w, hitP, G.stun, 'bullet', p, true);
+    else hitP.stunT = Math.max(hitP.stunT, G.stun);
+    hitP.move.kbT = G.kbDuration;
+    hitP.move.kbDur = G.kbDuration;
+    hitP.move.kbPeak = G.kbPeak;
+    hitP.move.kbAng = away;
+    hitP.move.lungeT = 0;
+  }
 }
 
 /** Zach's golden pump (it replaces his machete until the shots run out). */
@@ -367,7 +389,7 @@ export function updateItems(w: World, dt: number): void {
   const npcs = w.npcTargets();
   const keep: typeof w.bottles = [];
   for (const b of w.bottles) {
-    const B = b.book ? I.book : I.bottle;
+    const B = b.book ? I.book : b.piss ? { ...I.bottle, speed: I.piss.speed, hitRadius: I.piss.hitRadius, damage: 0, zachDamage: 0 } : I.bottle;
     const step = B.speed * dt;
     const ang = Math.atan2(b.dy, b.dx);
     const free = Math.min(w.geo.raycastVision(b.x, b.y, ang, step + 1), windowHit(w, b.x, b.y, b.dx, b.dy, step + 1));
@@ -403,6 +425,7 @@ export function updateItems(w: World, dt: number): void {
     const owner = w.players.get(b.owner);
     if (hitN) {
       w.noise(nx, ny, 900, b.book ? 'book' : 'glass');
+      // A jar of piss is a stun item to an NPC, like a bottle.
       if (owner) hitN.itemHit(owner, 'bottle');
       continue;
     }
@@ -410,7 +433,12 @@ export function updateItems(w: World, dt: number): void {
     if (hitP?.role === 'hunter') {
       w.noise(nx, ny, 900, sound);
       if (b.book) bookHit(w, hitP, owner);
-      else if (stunHunter(w, hitP, I.bottle.stun, 'bottle', owner)) w.feed(`${owner?.name ?? 'Someone'} smashed a bottle on ${hitP.name}`);
+      else if (b.piss) {
+        // No stun: he just takes more damage for a while.
+        hitP.pissT = I.piss.time;
+        w.emit([hitP.id], { k: 'item', text: `Soaked: +${Math.round((I.piss.mul - 1) * 100)}% damage for ${I.piss.time} s` });
+        w.feed(`${owner?.name ?? 'Someone'} threw piss on ${hitP.name}`);
+      } else if (stunHunter(w, hitP, I.bottle.stun, 'bottle', owner)) w.feed(`${owner?.name ?? 'Someone'} smashed a bottle on ${hitP.name}`);
       hurtHunter(w, hitP, B.zachDamage, owner ?? null, 'bottle');
       continue;
     }
@@ -464,7 +492,10 @@ export function updateItems(w: World, dt: number): void {
   });
 
   for (const p of w.order) {
-    if (p.role === 'hunter') p.bookT = Math.max(0, p.bookT - dt);
+    if (p.role === 'hunter') {
+      p.bookT = Math.max(0, p.bookT - dt);
+      p.pissT = Math.max(0, p.pissT - dt);
+    }
     if (p.role !== 'survivor') continue;
     p.reloadT = Math.max(0, p.reloadT - dt);
     p.scareT = Math.max(0, p.scareT - dt);
@@ -495,7 +526,7 @@ export function bookHit(w: World, h: SimPlayer, by: SimPlayer | undefined): void
   stunHunter(w, h, B.stun, 'book', by, true);
   // Every ability is switched off for a while; a running Hemp Battery or Beam stops.
   h.abilityLockT = BALANCE.hunter.bookAbilityLock;
-  w.emit([h.id], { k: 'book', img: w.rng.int(0, B.images - 1) });
+  w.emit([h.id], { k: 'book', img: w.nextBookImage() });
   w.emit(w.near(h.move.x, h.move.y, BALANCE.net.maxSensingRadius), { k: 'boom', x: Math.round(h.move.x), y: Math.round(h.move.y) });
   w.feed(`${by?.name ?? 'Someone'} threw The Grapes of Wrath at ${h.name}`);
 }

@@ -9,6 +9,7 @@ import type { SimPlayer } from '../src/sim/player';
 const secs = (s: number): number => Math.ceil(s * 30);
 const H = BALANCE.hunter;
 const S = BALANCE.items.sniper;
+const V = BALANCE.hunter.vape;
 
 function quiet(w: World): void {
   parkSexton(w);
@@ -236,19 +237,19 @@ describe('the 0.50 cal', () => {
 });
 
 describe('Penjamin slow', () => {
-  it('60% close to the source down to 30% far away; the strongest holds while in the gas and 3 s after', () => {
+  it('45% close to the source down to 15% far away; the strongest holds while in the gas and 3 s after', () => {
     const { d, h, s } = lane();
     h.viewReach = 1000;
     place(s, h.move.x + 1100 * 0.98, h.move.y);
     d.tap(h.id, Btn.Vape, { aim: 0 });
     d.run(secs(1));
-    expect(s.vapeSlow).toBeCloseTo(0.3, 1);
+    expect(s.vapeSlow).toBeCloseTo(V.slowFar, 1);
     // Walking toward the source raises it (actively recalculated).
     place(s, h.move.x + 300, h.move.y);
     d.run(secs(0.3));
     const near = s.vapeSlow;
-    expect(near).toBeGreaterThan(0.5);
-    expect(near).toBeLessThanOrEqual(0.6 + 1e-6);
+    expect(near).toBeGreaterThan(0.3);
+    expect(near).toBeLessThanOrEqual(V.slow + 1e-6);
     // Out of the gas: it holds for 3 s, then ends.
     place(s, h.move.x + 400, h.move.y + 700);
     d.run(secs(2.5));

@@ -97,6 +97,12 @@ export interface SelfState {
   jadenBonus: number;
   /** Zach: he has '50 Nic' in place of Penjamin. */
   nic: number;
+  /** Zach: seconds left soaked in piss. */
+  pissT: number;
+  /** Monique's arrow: seconds left, the bearing to Zach (radians) and the distance (units). */
+  arrowT: number;
+  arrowAng: number;
+  arrowDist: number;
 }
 
 /**
@@ -187,6 +193,10 @@ export function emptySelf(id = 0): SelfState {
     abilityLockT: 0,
     jadenBonus: 0,
     nic: 0,
+    pissT: 0,
+    arrowT: 0,
+    arrowAng: 0,
+    arrowDist: 0,
   };
 }
 
@@ -233,6 +243,23 @@ export const WazFlag = {
   Fleeing: 1,
   Hurt: 2,
   Talking: 4,
+} as const;
+
+/** State bits shared by Njaaron, Monique, Thomas and Soham. */
+export const FolkFlag = {
+  Hurt: 1,
+  Talking: 2,
+  Fleeing: 4,
+  /** Monique has her 0.50 cal out. */
+  Armed: 8,
+  /** Njaaron is swinging. */
+  Punching: 16,
+  /** Njaaron is following someone. */
+  Following: 32,
+  /** Soham's fuse is lit. */
+  Fuse: 64,
+  /** Njaaron is angry (attacking). */
+  Angry: 128,
 } as const;
 
 /** Chacko's state bits. */
@@ -476,6 +503,7 @@ export function decodeWorld(bytes: Uint8Array): WorldState {
 
 const ms = (s: number): number => Math.max(0, Math.min(65535, Math.round(s * 1000)));
 const unit = (v: number): number => Math.max(0, Math.min(255, Math.round(v * 255)));
+const hundredths = (s: number): number => Math.max(0, Math.min(65535, Math.round(s * 100)));
 const tenths = (s: number): number => Math.max(0, Math.min(65535, Math.round(s * 10)));
 const ANG = 65535 / TAU;
 const angQ = (a: number): number => Math.round((((a % TAU) + TAU) % TAU) * ANG) & 0xffff;
@@ -500,8 +528,8 @@ function writeSelf(w: ByteWriter, s: SelfState): void {
   w.u8(s.jarvis).u16(tenths(s.jarvisT)).u16(tenths(s.scareT)).u8(s.gassed).u8(s.testMode);
   w.u8(unit(s.noise)).u8(s.spectating);
   w.u16(Math.round(Math.max(0, Math.min(1, s.hp)) * 65535)).u8(s.pump).u8(s.downs).u16(tenths(s.bookT)).u16(Math.round(s.fovMul * 1000)).u8(unit(s.shield));
-  w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd)).u16(tenths(s.hempLeft)).u8(Math.min(255, s.stakeBuff));
-  w.u16(tenths(s.hempLock)).u8(s.beamCharges).u16(tenths(s.beamCd)).u16(tenths(s.beamT)).u8(s.vapeCharges).u16(tenths(s.abilityLockT)).u8(s.jadenBonus).u8(s.nic);
+  w.u16(tenths(s.vapeT)).u16(tenths(s.darkT)).u16(tenths(s.vapeCd)).u16(hundredths(s.hempLeft)).u8(Math.min(255, s.stakeBuff));
+  w.u16(tenths(s.hempLock)).u8(s.beamCharges).u16(tenths(s.beamCd)).u16(tenths(s.beamT)).u8(s.vapeCharges).u16(tenths(s.abilityLockT)).u8(s.jadenBonus).u8(s.nic).u16(tenths(s.pissT)).u16(tenths(s.arrowT)).u16(Math.round((((s.arrowAng % TAU) + TAU) % TAU) * 10000)).u16(Math.min(65535, Math.round(s.arrowDist)));
 }
 
 function readSelf(r: ByteReader): SelfState {
@@ -576,7 +604,7 @@ function readSelf(r: ByteReader): SelfState {
   s.vapeT = r.u16() / 10;
   s.darkT = r.u16() / 10;
   s.vapeCd = r.u16() / 10;
-  s.hempLeft = r.u16() / 10;
+  s.hempLeft = r.u16() / 100;
   s.stakeBuff = r.u8();
   s.hempLock = r.u16() / 10;
   s.beamCharges = r.u8();
@@ -586,6 +614,10 @@ function readSelf(r: ByteReader): SelfState {
   s.abilityLockT = r.u16() / 10;
   s.jadenBonus = r.u8();
   s.nic = r.u8();
+  s.pissT = r.u16() / 10;
+  s.arrowT = r.u16() / 10;
+  s.arrowAng = r.u16() / 10000;
+  s.arrowDist = r.u16();
   return s;
 }
 

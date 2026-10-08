@@ -150,6 +150,19 @@ export class Shane implements NpcTarget {
     this.modeT = next === 'flee' ? S.fleeTime : this.w.rng.range(2, 5);
   }
 
+  /** Chacko was slain by `p`: he hunts them wherever they are, until they're downed or the hunt is called off. */
+  avenge(p: SimPlayer): void {
+    if (!this.eligible(p)) return;
+    this.alert(p);
+    this.avenging = true;
+  }
+
+  /** The hunt is over: back to normal (he stops chasing). */
+  stopAvenging(): void {
+    if (this.avenging && this.mode === 'chase') this.endChase('walk');
+    this.avenging = false;
+  }
+
   protected alert(p: SimPlayer): void {
     this.avenging = false;
     this.mode = 'chase';

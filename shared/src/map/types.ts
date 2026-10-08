@@ -60,8 +60,8 @@ export interface HidingSpotDef {
   exitY: number;
 }
 
-export type LootKind = 'bottle' | 'goggles' | 'confit' | 'shotgun' | 'energy' | 'trap' | 'book' | 'beastbar' | 'shield' | 'sniper';
-export const LOOT_KINDS: readonly LootKind[] = ['goggles', 'shotgun', 'confit', 'energy', 'trap', 'bottle', 'book', 'beastbar', 'shield', 'sniper'];
+export type LootKind = 'bottle' | 'goggles' | 'confit' | 'shotgun' | 'energy' | 'trap' | 'book' | 'beastbar' | 'shield' | 'sniper' | 'piss';
+export const LOOT_KINDS: readonly LootKind[] = ['goggles', 'shotgun', 'confit', 'energy', 'trap', 'bottle', 'book', 'beastbar', 'shield', 'sniper', 'piss'];
 
 export interface LootSpawnDef {
   id: number;

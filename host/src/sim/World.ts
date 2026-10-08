@@ -39,6 +39,7 @@ import { Marc } from './marc';
 import { Plasma } from './plasma';
 import { Waz } from './waz';
 import { Chacko } from './chacko';
+import { Monique, Njaaron, Soham, Thomas } from './folk';
 import { updateVapes, type VapeCloud } from './vape';
 import { addItem, emptySlot } from './inventory';
 import type { NpcTarget } from './npc';
@@ -60,6 +61,8 @@ export interface ThrownBottle {
   owner: number;
   /** The Grapes of Wrath rather than a bottle. */
   book: boolean;
+  /** A jar of piss. */
+  piss?: boolean;
 }
 
 /** An item a survivor dropped (G) for a teammate. `amount`: goggle meter or shells left. */
@@ -160,20 +163,41 @@ export class World {
   snipes: Bullet[] = [];
   /** The survivor Jaden and Plasma are hunting for Chacko's sake (0 = nobody). */
   vengeance = 0;
+  /** Seconds left of the hunt (the NPCs give up when it runs out). */
+  vengeanceT = 0;
+  /** The Grapes of Wrath pictures still to show this round, so one never repeats back to back. */
+  private bookDeck: number[] = [];
+  private lastBookImg = -1;
+
+  /** The next Grapes of Wrath picture: a shuffled cycle, never the same twice in a row. */
+  nextBookImage(): number {
+    const n = BALANCE.items.book.images;
+    if (this.bookDeck.length === 0) {
+      const deck = this.rng.shuffle(Array.from({ length: n }, (_, i) => i));
+      if (n > 1 && deck[deck.length - 1] === this.lastBookImg) deck.unshift(deck.pop()!);
+      this.bookDeck = deck;
+    }
+    this.lastBookImg = this.bookDeck.pop()!;
+    return this.lastBookImg;
+  }
   vapes: VapeCloud[] = [];
   trails: TrailRecord[] = [];
   trailSeq = 1;
   /** Per hunter: scent trail ids already sent. */
   readonly trailSent = new Map<number, Set<number>>();
   hempDrop: { id: number; x: number; y: number } | null = null;
-  readonly sexton: Sexton;
-  readonly shane: Shane;
-  readonly jaden: Jaden;
-  readonly chris: Chris;
-  readonly marc: Marc;
-  readonly plasma: Plasma;
-  readonly waz: Waz;
-  readonly chacko: Chacko;
+  sexton: Sexton;
+  shane: Shane;
+  jaden: Jaden;
+  chris: Chris;
+  marc: Marc;
+  plasma: Plasma;
+  waz: Waz;
+  chacko: Chacko;
+  njaaron: Njaaron;
+  monique: Monique;
+  thomas: Thomas;
+  soham: Soham;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -223,6 +247,29 @@ export class World {
     // Last, so the NPCs above keep their seeded spawn points.
     this.waz = new Waz(this);
     this.chacko = new Chacko(this);
+    this.njaaron = new Njaaron(this);
+    this.monique = new Monique(this);
+    this.thomas = new Thomas(this);
+    this.soham = new Soham(this);
+  }
+
+  /** Testing mode: every townsperson comes back (new, unhurt, at their spawn points). */
+  respawnNpcs(): void {
+    this.sexton = new Sexton(this);
+    this.shane = new Shane(this);
+    this.jaden = new Jaden(this);
+    this.chris = new Chris(this);
+    this.marc = new Marc(this);
+    this.plasma = new Plasma(this);
+    this.waz = new Waz(this);
+    this.chacko = new Chacko(this);
+    this.njaaron = new Njaaron(this);
+    this.monique = new Monique(this);
+    this.thomas = new Thomas(this);
+    this.soham = new Soham(this);
+    this.vengeance = 0;
+    this.vengeanceT = 0;
+    this.hempDrop = null;
   }
 
   get geo() {
@@ -241,9 +288,11 @@ export class World {
   fillTestKit(p: SimPlayer): void {
     if (p.role === 'survivor') {
       p.inv = Array.from({ length: INV_SLOTS }, emptySlot);
-      for (const k of [ItemKind.Bottle, ItemKind.Book, ItemKind.Goggles, ItemKind.Shotgun, ItemKind.Pistol, ItemKind.Shield, ItemKind.BeastBar, ItemKind.Trap]) addItem(this, p, k);
-      p.inv[0].n = 9;
-      p.inv[1].n = 9;
+      // Every weapon first (a shotgun, the golden pump, the P250 and the 0.50 cal), then the rest.
+      addItem(this, p, ItemKind.Shotgun);
+      addItem(this, p, ItemKind.Shotgun, undefined, true);
+      for (const k of [ItemKind.Pistol, ItemKind.Sniper, ItemKind.Bottle, ItemKind.Piss, ItemKind.Book, ItemKind.Goggles, ItemKind.Shield, ItemKind.BeastBar, ItemKind.Trap, ItemKind.Energy]) addItem(this, p, k);
+      for (const s of p.inv) if (s.kind === ItemKind.Bottle || s.kind === ItemKind.Piss || s.kind === ItemKind.Book) s.n = 9;
       p.jarvis = 3;
     } else if (p.role === 'hunter') {
       p.hemp = 2;
@@ -399,6 +448,11 @@ export class World {
     this.plasma.update(dt);
     this.waz.update(dt);
     this.chacko.update(dt);
+    this.njaaron.update(dt);
+    this.monique.update(dt);
+    this.thomas.update(dt);
+    this.soham.update(dt);
+    for (const p of this.order) if (p.arrowT > 0) p.arrowT = Math.max(0, p.arrowT - dt);
     this.updateVengeance();
     updateObjectives(this, dt);
     updateSenses(this, dt);
@@ -437,7 +491,7 @@ export class World {
     handlePresses(this, p, cmd, pressed);
 
     // Moving cancels survivor interactions.
-    if ((cmd.moveX || cmd.moveY) && p.role === 'survivor' && p.action !== Action.None && p.action !== Action.HideEnter && p.action !== Action.HideExit && p.action !== Action.Talk) {
+    if ((cmd.moveX || cmd.moveY) && p.role === 'survivor' && p.action !== Action.None && p.action !== Action.HideEnter && p.action !== Action.HideExit && p.action !== Action.Talk && p.action !== Action.Drink) {
       this.cancelAction(p);
     }
 
@@ -506,11 +560,15 @@ export class World {
     this.marc.unstick();
     this.plasma.unstick();
     this.waz.unstick();
+    this.njaaron.unstick();
+    this.monique.unstick();
+    this.thomas.unstick();
+    this.soham.unstick();
   }
 
   /** NPCs that bottles and pellets can hit right now. */
   npcTargets(): NpcTarget[] {
-    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma, this.waz, this.chacko].filter((n) => n.solid);
+    return [this.sexton, this.shane, this.jaden, this.chris, this.marc, this.plasma, this.waz, this.chacko, this.njaaron, this.monique, this.thomas, this.soham].filter((n) => n.solid);
   }
 
   /**
@@ -519,18 +577,22 @@ export class World {
    */
   avenge(target: SimPlayer): void {
     this.vengeance = target.id;
+    this.vengeanceT = BALANCE.chacko.vengeanceSec;
     this.jaden.avenge(target);
     this.plasma.avenge(target);
+    this.shane.avenge(target);
   }
 
   private updateVengeance(): void {
     if (this.vengeance === 0) return;
     const t = this.players.get(this.vengeance);
     const downed = !t || (t.health !== Health.Healthy && t.health !== Health.Wounded);
-    if (downed || !this.jaden.alive || !this.plasma.alive) {
+    this.vengeanceT -= 1 / BALANCE.net.tickHz;
+    if (downed || this.vengeanceT <= 0 || !this.jaden.alive || !this.plasma.alive) {
       this.vengeance = 0;
       this.jaden.stopAvenging();
       this.plasma.stopAvenging();
+      this.shane.stopAvenging();
     }
   }
 

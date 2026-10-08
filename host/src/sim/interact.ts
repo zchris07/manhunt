@@ -2,7 +2,7 @@ import { Action, BALANCE, BarricadeState, Btn, GOLDEN_BIT, Health, ItemKind, Pro
 import { canAct, type SimPlayer } from './player';
 import type { World } from './World';
 import { carrySurvivor, startCharge, damageSurvivor, restoreSurvivor, stakeSurvivor } from './combat';
-import { dropBarricade, drinkShield, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem } from './items';
+import { dropBarricade, drinkShield, dropItem, fireZachPump, pickUpDrop, plantTrap, useItem, useSlow } from './items';
 import { addItem } from './inventory';
 import { tryBurst, tryHemp, tryJarvis } from './abilities';
 import { tryBeam } from './zachBeam';
@@ -67,6 +67,7 @@ export const LOOT_TO_ITEM: Record<LootKind, ItemKind> = {
   beastbar: ItemKind.BeastBar,
   shield: ItemKind.Shield,
   sniper: ItemKind.Sniper,
+  piss: ItemKind.Piss,
 };
 
 /** Zach next to an NPC or an item gets its name (survivors see them in their prompts). */
@@ -81,6 +82,10 @@ function nameNear(w: World, p: SimPlayer): void {
     w.jaden.alive ? w.jaden : null,
     w.waz.solid ? w.waz : null,
     w.chacko.solid ? w.chacko : null,
+    w.njaaron.solid ? w.njaaron : null,
+    w.monique.solid ? w.monique : null,
+    w.thomas.solid ? w.thomas : null,
+    w.soham.solid ? w.soham : null,
   ];
   let best = -1;
   let bd: number = R.npcName;
@@ -149,6 +154,11 @@ function survivorPrompts(w: World, p: SimPlayer): void {
     p.promptTarget = target;
     return true;
   };
+  // Njaaron waiting for your answer comes first.
+  if (w.njaaron.awaiting(p)) {
+    set(Prompt.NjaaronAsk, 0);
+    return;
+  }
   // Sexton waiting for you to keep listening comes before anything else.
   if (w.sexton.awaiting(p)) {
     set(Prompt.SextonMore, 0);
@@ -180,6 +190,10 @@ function survivorPrompts(w: World, p: SimPlayer): void {
   if (p.prompt === Prompt.None && w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
   if (p.prompt === Prompt.None && w.waz.canTalk(p)) set(Prompt.TalkWaz, 0);
   if (p.prompt === Prompt.None && w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
+  if (p.prompt === Prompt.None && w.njaaron.canTalk(p)) set(Prompt.TalkNjaaron, 0);
+  if (p.prompt === Prompt.None && w.monique.canTalk(p)) set(Prompt.TalkMonique, 0);
+  if (p.prompt === Prompt.None && w.thomas.canTalk(p)) set(Prompt.TalkThomas, 0);
+  if (p.prompt === Prompt.None && w.soham.canTalk(p)) set(Prompt.TalkSoham, 0);
   if (p.prompt === Prompt.None) {
     const ni = nearestIndex(w.map.notes, x, y, R.note, () => true);
     if (ni >= 0) set(Prompt.ReadNote, ni);
@@ -222,6 +236,10 @@ function hunterPrompts(w: World, p: SimPlayer): void {
     p.prompt = prompt;
     p.promptTarget = target;
   };
+  if (w.njaaron.awaiting(p)) {
+    set(Prompt.NjaaronAsk, 0);
+    return;
+  }
   if (p.carrying) {
     const si = nearestIndex(w.map.stakes, x, y, R.stake, (_s, i) => w.stakes[i] === 0);
     if (si >= 0) set(Prompt.Stake, si);
@@ -239,6 +257,9 @@ function hunterPrompts(w: World, p: SimPlayer): void {
     if (target) set(Prompt.PickUp, target.id);
     else if (w.plasma.canTalk(p)) set(Prompt.TalkPlasma, 0);
     else if (w.chacko.canTalk(p)) set(Prompt.TalkChacko, 0);
+    else if (w.njaaron.canTalk(p)) set(Prompt.TalkNjaaron, 0);
+    else if (w.thomas.canTalk(p)) set(Prompt.TalkThomas, 0);
+    else if (w.soham.canTalk(p)) set(Prompt.TalkSoham, 0);
     else if (nearestIndex(w.map.notes, x, y, R.note, () => true) >= 0) set(Prompt.ReadNote, nearestIndex(w.map.notes, x, y, R.note, () => true));
     else if (w.hempDrop && Math.hypot(w.hempDrop.x - x, w.hempDrop.y - y) < R.pickup) set(Prompt.TakeHemp, 0);
     else {
@@ -262,6 +283,9 @@ function hunterPrompts(w: World, p: SimPlayer): void {
 const HOLD_PROMPTS: readonly Prompt[] = [Prompt.Repair, Prompt.Heal, Prompt.Revive, Prompt.Unstake, Prompt.OpenGate];
 
 export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: number): void {
+  // Y and N answer Njaaron, for anyone he asked.
+  if (pressed & Btn.Yes) w.njaaron.answer(p, true);
+  if (pressed & Btn.No) w.njaaron.answer(p, false);
   if (p.role === 'survivor') {
     // Holding E starts hold-to-act interactions as soon as they become available.
     const heldStart = cmd.buttons & Btn.Interact && p.action === Action.None && p.hideState === 0 && HOLD_PROMPTS.includes(p.prompt);
@@ -270,6 +294,7 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
     if (pressed & Btn.Primary && canAct(p)) useItem(w, p, cmd);
     if (pressed & Btn.Drop) dropItem(w, p);
     if (pressed & Btn.Ability) tryJarvis(w, p);
+    if (pressed & Btn.Beam) tryBeam(w, p, cmd.aim);
     return;
   }
   if (p.role !== 'hunter' || !canAct(p)) return;
@@ -309,6 +334,15 @@ export function handlePresses(w: World, p: SimPlayer, cmd: InputCmd, pressed: nu
         break;
       case Prompt.TalkChacko:
         w.chacko.talk(p);
+        break;
+      case Prompt.TalkNjaaron:
+        w.njaaron.talk(p);
+        break;
+      case Prompt.TalkThomas:
+        w.thomas.talk(p);
+        break;
+      case Prompt.TalkSoham:
+        w.soham.talk(p);
         break;
       case Prompt.ReadNote:
         w.emit([p.id], { k: 'note', n: p.promptTarget });
@@ -397,6 +431,18 @@ function survivorInteract(w: World, p: SimPlayer): void {
     case Prompt.TalkChacko:
       w.chacko.talk(p);
       break;
+    case Prompt.TalkNjaaron:
+      w.njaaron.talk(p);
+      break;
+    case Prompt.TalkMonique:
+      w.monique.talk(p);
+      break;
+    case Prompt.TalkThomas:
+      w.thomas.talk(p);
+      break;
+    case Prompt.TalkSoham:
+      w.soham.talk(p);
+      break;
     case Prompt.ReadNote:
       w.emit([p.id], { k: 'note', n: p.promptTarget });
       break;
@@ -476,6 +522,8 @@ export function updateInteractions(w: World, dt: number): void {
           continue;
         }
         p.actionT += dt;
+        // Drinking on the move is allowed, at half speed.
+        useSlow(p, 0.15);
         if (p.actionT < p.actionDur) continue;
         p.action = Action.None;
         drinkShield(w, p);
@@ -544,6 +592,7 @@ const ITEM_TEXT: Record<LootKind, string> = {
   beastbar: 'Mr Beast bar',
   shield: 'mini shield',
   sniper: '0.50 cal',
+  piss: 'jar of piss',
 };
 
 export function exitHiding(w: World, p: SimPlayer, _forced: boolean): void {

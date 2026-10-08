@@ -139,6 +139,12 @@ export interface SimPlayer {
   abilityLockT: number;
   /** Zach: slew Jaden Nguyen (one more lunge charge, longer reach). */
   jadenBonus: number;
+  /** Zach: Njaaron said yes: his health comes back faster. */
+  njaaronRegen: boolean;
+  /** Seconds left of Monique's arrow to Zach. */
+  arrowT: number;
+  /** Zach: seconds left soaked in piss (he takes more damage). */
+  pissT: number;
   /** Zach: he has '50 Nic' (from Chacko) in place of Penjamin. */
   nic: boolean;
   /** A survivor's sniper laser entity id. */
@@ -254,6 +260,9 @@ export function createPlayer(id: number, name: string, role: Role, tint: number,
     jadenBonus: 0,
     laserId: 0,
     nic: false,
+    pissT: 0,
+    njaaronRegen: false,
+    arrowT: 0,
     noise: 0,
     prompt: Prompt.None,
     promptTarget: -1,

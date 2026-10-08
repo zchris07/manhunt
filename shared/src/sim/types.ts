@@ -104,6 +104,12 @@ export const Prompt = {
   TalkWaz: 35,
   ReadNote: 36,
   TalkChacko: 37,
+  TalkNjaaron: 38,
+  /** Njaaron asked you something: Y for yes, N for no. */
+  NjaaronAsk: 39,
+  TalkMonique: 40,
+  TalkThomas: 41,
+  TalkSoham: 42,
 } as const;
 export type Prompt = (typeof Prompt)[keyof typeof Prompt];
 
@@ -135,10 +141,15 @@ export const PROMPT_LABELS: Record<number, string> = {
   35: 'Press E to talk to Waz',
   36: 'Press E to read the note',
   37: 'Press E to talk to Chacko',
+  38: 'Press E to talk to Njaaron',
+  39: 'Y: yes     N: no',
+  40: 'Press E to talk to Monique Bourgeois',
+  41: 'Press E to talk to Thomas Bourgeois',
+  42: 'Press E to talk to Soham',
 };
 
 /** NPC names, indexed by the NameNpc prompt target. */
-export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen', 'Waz', 'Chacko'];
+export const NPC_NAMES = ['Sexton Science', 'Shane Jeans', 'Chris Zelley', 'Marc Cortez', 'Plasma.TTV', 'Jaden Nguyen', 'Waz', 'Chacko', 'Njaaron', 'Monique Bourgeois', 'Thomas Bourgeois', 'Soham'];
 
 /**
  * Survivor items. Everything goes in one of the `INV_SLOTS` free slots: identical items
@@ -164,10 +175,15 @@ export const ItemKind = {
   Shield: 10,
   /** The 0.50 cal sniper rifle. */
   Sniper: 11,
+  /** A jar of piss: thrown at Zach, he takes more damage for a while (no stun). */
+  Piss: 12,
 } as const;
 export type ItemKind = (typeof ItemKind)[keyof typeof ItemKind];
-export const ITEM_KIND_MAX = 11;
-export const INV_SLOTS = 8;
+export const ITEM_KIND_MAX = 12;
+/** Storage and wire size of an inventory; a real match uses the first `INV_LIMIT` of them, testing mode all of them. */
+export const INV_SLOTS = 12;
+export const INV_LIMIT = 8;
+export const invLimit = (testMode: boolean): number => (testMode ? INV_SLOTS : INV_LIMIT);
 /** Golden pump flag in a slot or drop byte (item kinds fit in the low 4 bits). */
 export const GOLDEN_BIT = 16;
 /** A survivor's entity `aux`: dizzy in Penjamin gas. */
@@ -185,6 +201,7 @@ export const ITEM_NAMES: Record<number, string> = {
   9: 'Mr Beast bar',
   10: 'Mini shield',
   11: '0.50 cal',
+  12: 'Jar of piss',
 };
 /** A slot's display name (a golden shotgun is Plasma's golden pump). */
 export const slotName = (kind: number, golden: boolean): string => (kind === ItemKind.Shotgun && golden ? 'Golden pump' : (ITEM_NAMES[kind] ?? ''));
@@ -211,6 +228,11 @@ export const EntityKind = {
   Waz: 13,
   /** Chacko: state = ChackoFlag. */
   Chacko: 14,
+  /** Njaaron, Monique, Thomas and Soham: state = FolkFlag. */
+  Njaaron: 15,
+  Monique: 16,
+  Thomas: 17,
+  Soham: 18,
 } as const;
 export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 

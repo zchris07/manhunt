@@ -1,4 +1,4 @@
-import { Container, Graphics, type Application } from 'pixi.js';
+import { Container, Graphics, Text, type Application } from 'pixi.js';
 import {
   Action,
   BALANCE,
@@ -10,6 +10,7 @@ import {
   GOLDEN_BIT,
   Gait,
   Health,
+  INV_LIMIT,
   INV_SLOTS,
   JadenFlag,
   PlasmaFlag,
@@ -119,6 +120,7 @@ export class GameView {
   private chargeLock = false;
   /** Zach: an arrow toward Shane Jeans while he's chasing someone. */
   private readonly shaneArrow = new Graphics();
+  private readonly arrowLabel = new Text({ text: '', style: { fontFamily: 'monospace', fontSize: 13, fill: 0xf2e6d0, stroke: { color: 0x300008, width: 3 } } });
   private readonly resize = (w: number, h: number): void => this.vision.resize(w, h);
   private readonly teleport = (x: number, y: number): void => this.o.client.send({ t: 'teleport', x: Math.round(x), y: Math.round(y) });
   readonly roleIsHunter: boolean;
@@ -135,7 +137,7 @@ export class GameView {
     this.entityWorld.addChild(this.overlays.scentRoot, this.entities.root, this.particles.root);
     this.entityViewport.addChild(this.entityWorld);
     this.viewport.addChild(this.world, this.entityViewport);
-    this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow);
+    this.senses.addChild(this.overlays.senses, this.entities.overlay, this.shaneArrow, this.arrowLabel);
     this.entities.bubbleCheck = (x, y) => Math.hypot(x - this.renderPos.x, y - this.renderPos.y) < 360 && m.mw.geo.hasLineOfSight(this.renderPos.x, this.renderPos.y, x, y);
     o.app.stage.addChild(this.viewport, this.senses);
 
@@ -234,13 +236,16 @@ export class GameView {
     if (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight')) b |= Btn.Run;
     if (inp.isDown('KeyE') || L('KeyE')) b |= Btn.Interact;
     if (inp.isDown('KeyQ') || L('KeyQ')) b |= Btn.Ability;
+    // R: the Hemp Beam (Zach's from Sexton, or a survivor's from Thomas); Y and N answer Njaaron.
+    if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Beam;
+    if (inp.isDown('KeyY') || L('KeyY')) b |= Btn.Yes;
+    if (inp.isDown('KeyN') || L('KeyN')) b |= Btn.No;
     if (!menus && (inp.buttons[0] || L('Mouse0'))) b |= Btn.Primary;
     if (this.roleIsHunter) {
       // Right click lunges; F fires the Soundcloud Burst.
       if (!menus && (inp.buttons[2] || L('Mouse2'))) b |= Btn.Lunge;
       if (inp.isDown('KeyF') || L('KeyF')) b |= Btn.Secondary;
       if (inp.isDown('Space') || L('Space')) b |= Btn.Vape;
-      if (inp.isDown('KeyR') || L('KeyR')) b |= Btn.Beam;
       // Hold left click to charge the swipe, release to strike.
       const s = this.self;
       const now = performance.now();
@@ -573,7 +578,9 @@ export class GameView {
     if (inp.wasPressed('KeyT') && s0?.testMode) c.send({ t: 'switchRole' });
     if (!this.roleIsHunter && s0 && !this.spectating()) {
       if (inp.wasPressed('Tab')) this.hud.toggleEditor(s0);
-      for (let i = 0; i < INV_SLOTS; i++) if (inp.wasPressed(`Digit${i + 1}`)) this.o.inventory.select(i);
+      // 1-9, 0, - and = pick slots (the last four only exist in testing mode).
+      const keys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
+      for (let i = 0; i < INV_SLOTS; i++) if (inp.wasPressed(keys[i]) && (i < INV_LIMIT || s0.testMode)) this.o.inventory.select(i);
       const wheel = inp.takeWheel();
       if (wheel !== 0 && !this.hud.editorOpen) this.o.inventory.scroll(wheel > 0 ? 1 : -1, s0.slots);
     } else inp.takeWheel();
@@ -714,6 +721,10 @@ export class GameView {
       ['plasma', EntityKind.Plasma, BALANCE.plasma.light],
       ['waz', EntityKind.Waz, BALANCE.npcLight],
       ['chacko', EntityKind.Chacko, BALANCE.chacko.light],
+      ['njaaron', EntityKind.Njaaron, BALANCE.npcLight],
+      ['monique', EntityKind.Monique, BALANCE.npcLight],
+      ['thomas', EntityKind.Thomas, BALANCE.npcLight],
+      ['soham', EntityKind.Soham, BALANCE.npcLight],
     ] as const) {
       const n = ents.find((e) => e.kind === kind && !(kind === EntityKind.Plasma && e.state & PlasmaFlag.Dead));
       if (n) lights.push({ key, x: n.x, y: n.y, radius: cfg.radius, intensity: cfg.intensity, static: false });
@@ -793,6 +804,18 @@ export class GameView {
       const pt = (f: number, s: number): [number, number] => [cx + Math.cos(a) * f - Math.sin(a) * s, cy + Math.sin(a) * f + Math.cos(a) * s];
       arrow.poly([...pt(16, 0), ...pt(-8, 11), ...pt(-3, 0), ...pt(-8, -11)]).fill({ color: 0x4a6a9a, alpha: 0.9 }).stroke({ width: 2, color: 0xd9d3c1, alpha: 0.9 });
     }
+    // Monique's arrow: a red arrow toward Zach with the distance and his name.
+    if (s.arrowT > 0 && !spect) {
+      const a = s.arrowAng;
+      const r = 84 + Math.sin(this.time * 5) * 4;
+      const cx = this.renderPos.x + Math.cos(a) * r;
+      const cy = this.renderPos.y + Math.sin(a) * r;
+      const pt = (f: number, sd: number): [number, number] => [cx + Math.cos(a) * f - Math.sin(a) * sd, cy + Math.sin(a) * f + Math.cos(a) * sd];
+      arrow.poly([...pt(20, 0), ...pt(-10, 13), ...pt(-4, 0), ...pt(-10, -13)]).fill({ color: 0xd8283a, alpha: 0.92 }).stroke({ width: 2, color: 0xf2e6d0, alpha: 0.9 });
+      this.arrowLabel.visible = true;
+      this.arrowLabel.text = `ZACH · ${Math.round(s.arrowDist / 10)} m`;
+      this.arrowLabel.position.set(cx + Math.cos(a) * 34 - this.arrowLabel.width / 2, cy + Math.sin(a) * 34 - 8);
+    } else this.arrowLabel.visible = false;
     this.skill.draw(now);
     if (this.skill.isActive && s.action !== Action.Repair) this.skill.cancel();
     this.hud.update(s, ws);

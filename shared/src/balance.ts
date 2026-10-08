@@ -187,8 +187,8 @@ export const BALANCE = {
       fadeTime: 1,
       coverage: 0.5,
       /** Slow: `slow` point blank down to `slowFar` at the far end; the strongest it got holds while in the gas and `slowAfter` s after. */
-      slow: 0.6,
-      slowFar: 0.3,
+      slow: 0.45,
+      slowFar: 0.15,
       slowAfter: 3,
       /** NPCs in the gas are slowed by the same falloff and take a light machete hit every `npcHitEvery` s. */
       npcHitEvery: 1.5,
@@ -204,7 +204,7 @@ export const BALANCE = {
      * Hemp Battery (Q, toggled; part of his kit): `duration` s of use, `recover` s to refill from
      * empty, and drained dry it can't be used for `lockout` s. The zoom is `zoomRate` times as fast as 1 s.
      */
-    hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
+    hemp: { regenBoost: 0.1, sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
     /**
      * Hemp Beam (R, from slaying Sexton Science): `charges` single-use charges, each channelled
      * for as long as Sexton's own beam (after its charge-up), then `cooldown` s before the next. No melee while it charges or fires.
@@ -214,6 +214,8 @@ export const BALANCE = {
       cooldown: 2,
       /** It charges for `windup` s (a sound and an animation), then hits survivors `tickRate` times a second for `tickDamage` of their full health each. */
       windup: 1,
+    /** A survivor's Hemp Beam (from Thomas) takes this fraction of Zach's full health a tick. */
+    zachTickDamage: 0.01,
       /** NPCs it touches take a light machete hit every `npcHitEvery` s. */
       npcHitEvery: 0.5,
       tickRate: 10,
@@ -258,7 +260,7 @@ export const BALANCE = {
 
   items: {
     /** Items spread over the whole map. */
-    counts: { sniper: 2, bottle: 20, goggles: 3, confit: 6, shotgun: 4, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 },
+    counts: { piss: 6, sniper: 2, bottle: 20, goggles: 3, confit: 6, shotgun: 4, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 },
     /** Set out in a row beside Chris Zelley's ambulance (on top of `counts`). */
     ambulanceKit: ['shield', 'shield', 'beastbar', 'beastbar', 'confit'] as readonly ('shield' | 'beastbar' | 'confit')[],
     /** Mr Beast bar: eating it gives back this fraction of your health. */
@@ -288,7 +290,15 @@ export const BALANCE = {
      */
     shotgun: { shells: 6, reload: 2, range: BEAM_RANGE, spreadDeg: 9, pellets: 8, pelletDamage: 0.15, stun: 2.1, kbPeak: 520, kbDuration: 0.3, zachBlastDamage: 25 },
     /** Jaden's P250, once he's dead: one bullet a click, `zachDamage` hp on Zach. */
-    pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10 },
+    /** A P250 hit knocks the target back and stuns for `stun` s. */
+    pistol: { shots: 10, reload: 0.35, range: BEAM_RANGE, spreadDeg: 1.5, damage: 0.1, zachDamage: 10, stun: 0.1, kbPeak: 300, kbDuration: 0.2 },
+    /** A jar of piss: Zach takes `mul` times the damage for `time` s after it breaks on him; no stun, no damage. An NPC treats it as a stun item. */
+    piss: { speed: 760, hitRadius: 10, mul: 1.5, time: 5 },
+    /** Share of items that turn up anywhere on the map (not water, under a tree or on a structure) rather than beside a trail. */
+    anywhereShare: 0.3,
+    /** Mini shields, beast bars, confit and Doctor Pepper can be used on the move, at this fraction of speed for `useSlowTime` s. */
+    useSlow: 0.5,
+    useSlowTime: 0.8,
     /** Plasma's golden pump: a survivor's takes the shotgun slot, 5 shells and half the reload. */
     golden: { shells: 5, reload: 1 },
     /**
@@ -525,12 +535,64 @@ export const BALANCE = {
     radius: 14,
     reach: 70,
     explosion: 0.5,
-    nicRangeMul: 1.5,
+    nicRangeMul: 1.1,
+    /** Slain by a survivor, the NPCs hunting them give up after this long if they haven't downed them. */
+    vengeanceSec: 30,
     light: { radius: 130, intensity: 0.3 },
     lineSurvivor: 'Take a Dr Pepper, bro. Madden is on.',
     lineZach: "Here. 50 Nic. Don't tell anyone.",
     lineHit: 'Not during the game!',
   },
+
+  /**
+   * Njaaron: "you wanna go to the Y later?" Yes as a survivor and he follows you, taking on Zach
+   * (10 hp a punch, with knockback) if you're hurt or Zach closes within `zachClose`. No as a
+   * survivor and he attacks you for `angrySec` s. Yes as Zach: his health regenerates `regenMul`
+   * times as fast; no and he attacks Zach for `angrySec` s. `hp` of light hits (a heavy swipe is 2)
+   * kill him, as do three stunning item hits or one firearm shot. However he dies he explodes:
+   * `zachBlast` hp to Zach, up to `survivorBlast` of a survivor's health, falling off with
+   * distance over `blastRadius`.
+   */
+  njaaron: {
+    radius: 14,
+    reach: 70,
+    walk: 70,
+    run: 175,
+    hp: 4,
+    stunHits: 3,
+    stun: 1.2,
+    angrySec: 10,
+    punchHp: 10,
+    survivorPunch: 0.1,
+    punchRange: 40,
+    punchCooldown: 0.9,
+    kbPeak: 300,
+    kbDuration: 0.25,
+    zachClose: 380,
+    zachLose: 800,
+    regenMul: 1.2,
+    askSec: 8,
+    zachBlast: 20,
+    survivorBlast: 0.5,
+    blastRadius: 240,
+    lineAsk: 'you wanna go to the Y later?',
+    lineYes: "Let's go!",
+    lineNo: 'cmon man',
+  },
+
+  /** Soham: says Hi, then his fuse burns `fuse` s and he explodes like Njaaron. */
+  soham: { radius: 14, reach: 70, walk: 60, fuse: 2, line: 'Hi' },
+
+  /**
+   * Monique Bourgeois (survivors only): the first survivor to talk to her gets an arrow to Zach for
+   * `arrowSec` s; any other gets "Hi there" and a Mr Beast bar. Attacked by Zach she bolts at
+   * `fleeMul` times Sexton's fleeing speed. Attacked by a survivor she pulls out a 0.50 cal (infinite
+   * shots, `shotDamage` of a survivor's health a shot) and shoots them for `attackSec` s.
+   */
+  monique: { radius: 14, reach: 70, walk: 60, fleeMul: 2, fleeTime: 6, arrowSec: 40, attackSec: 10, shotDamage: 0.4, reload: 1.2, lineArrow: 'spoiler alert', lineHi: 'Hi there' },
+
+  /** Thomas Bourgeois: hands one player (survivor or Zach) a full Hemp Beam. Can't be slain; runs like Monique. */
+  thomas: { radius: 14, reach: 70, walk: 60, fleeMul: 2, fleeTime: 6, line: 'this is neat!', lineAfter: "I'm all out" },
 
   /** Every NPC carries a faint light (client only). Shane, Jaden and Marc have their own, below. */
   npcLight: { radius: 120, intensity: 0.3 },
@@ -706,8 +768,14 @@ export function hunterStakeMul(stakes: number): number {
 
 export function hunterHealthMul(hp: number, downs: number): number {
   const Hh = BALANCE.hunter.health;
-  const steps = Math.floor((1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep + 1e-6);
-  return Math.max(0.1, 1 - steps * Hh.speedPerStep - Math.min(Hh.downPenaltyMax, downs * Hh.downPenalty));
+  // Continuous: every point of health lost costs speed in proportion (10% per 25% of the bar).
+  const lost = (1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep;
+  return Math.max(0.1, 1 - lost * Hh.speedPerStep - Math.min(Hh.downPenaltyMax, downs * Hh.downPenalty));
+}
+
+/** Health recovery multiplier from the Hemp Battery: +`regenBoost` x the fraction of its charge left. */
+export function hempRegenMul(charge: number): number {
+  return 1 + BALANCE.hunter.hemp.regenBoost * Math.max(0, Math.min(1, charge));
 }
 
 /**

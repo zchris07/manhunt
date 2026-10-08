@@ -35,7 +35,7 @@ describe('auto-balance formula (pressure P = survivors / hunters, P0 = 4)', () =
     expect(BALANCE.hunter.burst.width).toBe(BALANCE.hunter.radius * 2 * 6);
     expect(BALANCE.hunter.burst.scareTime).toBe(2.5);
     expect(BALANCE.hunter.hemp).toMatchObject({ duration: 10, zoomOut: 1.2, speedMul: 1.1 });
-    expect(BALANCE.items.counts).toEqual({ sniper: 2, bottle: 20, goggles: 3, confit: 6, shotgun: 4, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 });
+    expect(BALANCE.items.counts).toEqual({ piss: 6, sniper: 2, bottle: 20, goggles: 3, confit: 6, shotgun: 4, energy: 8, trap: 8, book: 4, beastbar: 15, shield: 20 });
     expect(BALANCE.items.goggles).toMatchObject({ meter: 15, coneMul: 1.2 });
     expect(BALANCE.items.shotgun).toMatchObject({ shells: 6, reload: 2, stun: 2.1 });
     expect(BALANCE.items.shotgun.stun).toBeCloseTo(BALANCE.items.bottle.stun * 1.5, 6);

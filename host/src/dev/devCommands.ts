@@ -74,9 +74,13 @@ export function devCommand(w: World, playerId: number, cmd: string, args: number
     }
     case 'marc':
     case 'plasma':
+    case 'njaaron':
+    case 'monique':
+    case 'thomas':
+    case 'soham':
     case 'waz': {
-      // Bring Marc Cortez, Plasma.TTV or Waz next to this player.
-      const n = cmd === 'marc' ? w.marc : cmd === 'waz' ? w.waz : w.plasma;
+      // Bring Marc Cortez, Plasma.TTV, Waz or one of the townsfolk next to this player.
+      const n = { marc: w.marc, waz: w.waz, plasma: w.plasma, njaaron: w.njaaron, monique: w.monique, thomas: w.thomas, soham: w.soham }[cmd];
       n.x = p.move.x + (args[0] ?? 60);
       n.y = p.move.y + (args[1] ?? 0);
       n.unstick();
