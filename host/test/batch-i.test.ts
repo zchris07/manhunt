@@ -413,7 +413,7 @@ describe('Soham, Monique and Thomas', () => {
     w.monique.y = 3000;
     place(h, 100, 100);
     place(s, 3200, 3000);
-    w.monique.itemHit(s, 'bottle');
+    w.monique.itemHit(s);
     expect(w.monique.armed).toBe(true);
     d.run(secs(2));
     expect(s.hp).toBeLessThan(0.7);
