@@ -1508,7 +1508,7 @@ export class EntityLayer {
         glow.tint = 0x6dff6a;
         glow.blendMode = 'add';
         glow.scale.set(0.9);
-        const s = new Sprite(this.assets.getTexture('item.hemp'));
+        const s = new Sprite(this.assets.getTexture('item.leaf'));
         s.anchor.set(0.5);
         c.addChild(glow, s);
       }

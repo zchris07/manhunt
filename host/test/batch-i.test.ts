@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, Btn, EntityKind, INV_LIMIT, INV_SLOTS, ItemKind, Prompt } from '@manhunt/shared';
+import { BALANCE, Btn, EntityKind, INV_LIMIT, INV_SLOTS, ItemKind, Prompt, hempRegenMul, hunterHealthMul } from '@manhunt/shared';
 import { Driver, clearLane, give, makeWorld, parkChris, parkSexton, parkShane, place, slotOf } from './worldHelpers';
 import { buildView } from '../src/sim/view';
 import type { World } from '../src/sim/World';
@@ -475,5 +475,26 @@ describe('piss on Zach', () => {
     h.pissT = 5;
     hurtHunter(w, h, 10, null, 'bottle');
     expect((1 - h.hp) / plain).toBeCloseTo(1.5, 3);
+  });
+});
+
+describe('continuous health slow, hemp recovery, npc respawn', () => {
+  it('slow is continuous in health', () => {
+    expect(hunterHealthMul(0.9, 0)).toBeCloseTo(0.96, 6);
+    expect(hunterHealthMul(0.5, 0)).toBeCloseTo(0.8, 6);
+    expect(hunterHealthMul(0.123, 0)).toBeCloseTo(1 - 0.877 * 0.4, 6);
+  });
+
+  it('hemp charge scales recovery by 10% x charge', () => {
+    expect(hempRegenMul(1)).toBeCloseTo(1.1, 6);
+    expect(hempRegenMul(0.5)).toBeCloseTo(1.05, 6);
+    expect(hempRegenMul(0)).toBe(1);
+  });
+
+  it('testing mode brings slain NPCs back', () => {
+    const w = makeWorld({ survivors: 1, testMode: true });
+    w.jaden.alive = false;
+    w.respawnNpcs();
+    expect(w.jaden.alive).toBe(true);
   });
 });

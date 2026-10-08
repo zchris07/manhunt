@@ -326,6 +326,9 @@ export class GameHost {
       case 'teleport':
         if (this.phase === 'match') this.world?.teleport(lp.id, msg.x, msg.y);
         break;
+      case 'respawnNpcs':
+        if (this.phase === 'match' && this.world?.testMode) this.world.respawnNpcs();
+        break;
       case 'dev':
         if (this.opts.dev && this.world) devCommand(this.world, lp.id, msg.cmd, msg.args);
         break;

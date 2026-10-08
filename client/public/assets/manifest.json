@@ -60,6 +60,7 @@
     "item.confit": { "procedural": "itemConfit" },
     "item.tablet": { "procedural": "itemTablet" },
     "item.hemp": { "procedural": "itemHemp" },
+    "item.leaf": { "procedural": "itemLeaf" },
     "fx.blood": { "procedural": "blood", "variants": 3 },
     "fx.glow": { "procedural": "glow" },
     "fx.puff": { "procedural": "puff", "variants": 3 },

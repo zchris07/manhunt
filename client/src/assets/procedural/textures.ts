@@ -1861,6 +1861,50 @@ export const itemHemp = itemCanvas((ctx) => {
   }
 });
 
+/** A marijuana leaf: seven serrated fingers fanned from the stem. */
+export const itemLeaf = itemCanvas((ctx) => {
+  ctx.save();
+  ctx.translate(20, 27);
+  const fingers: [number, number][] = [
+    [-90, 17],
+    [-58, 14],
+    [-122, 14],
+    [-28, 10.5],
+    [-152, 10.5],
+    [-8, 7],
+    [-172, 7],
+  ];
+  ctx.fillStyle = '#3fae3a';
+  ctx.strokeStyle = '#143212';
+  ctx.lineWidth = 1.2;
+  for (const [deg, len] of fingers) {
+    ctx.save();
+    ctx.rotate((deg * Math.PI) / 180);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len * 0.3, -2.6);
+    ctx.lineTo(len * 0.5, -1.6);
+    ctx.lineTo(len * 0.62, -3.4);
+    ctx.lineTo(len * 0.8, -1.8);
+    ctx.lineTo(len, 0);
+    ctx.lineTo(len * 0.8, 1.8);
+    ctx.lineTo(len * 0.62, 3.4);
+    ctx.lineTo(len * 0.5, 1.6);
+    ctx.lineTo(len * 0.3, 2.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = '#143212';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 9);
+  ctx.stroke();
+  ctx.restore();
+});
+
 // ---------------------------------------------------------------------------------------
 // Effects
 // ---------------------------------------------------------------------------------------
@@ -1989,6 +2033,7 @@ export const TEXTURE_GENERATORS: Record<string, CanvasGen> = {
   itemConfit,
   itemTablet,
   itemHemp,
+  itemLeaf,
   blood,
   glow,
   puff,

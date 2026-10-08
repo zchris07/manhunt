@@ -12,6 +12,7 @@ import {
   PROMPT_LABELS,
   Prompt,
   isWeapon,
+  hempRegenMul,
   hunterHealthMul,
   maxStamina,
   slotName,
@@ -177,6 +178,13 @@ export class Hud {
       });
       this.fxPanel.appendChild(b);
     }
+    const rb = el('button', '', 'Respawn NPCs');
+    rb.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.client.send({ t: 'respawnNpcs' });
+    });
+    this.fxPanel.appendChild(rb);
     this.fxPanel.style.display = 'none';
     this.root.appendChild(this.fxPanel);
   }
@@ -388,7 +396,7 @@ export class Hud {
         e.stopPropagation();
       });
       // Thomas Bourgeois's Hemp Beam, if you were the one he gave it to.
-      slot('R', 'Hemp Beam', 'item.hemp', 'ability beam');
+      slot('R', 'Hemp Beam', 'item.leaf', 'ability beam');
     } else if (role === 'hunter') {
       const machete = slot('LMB', 'Machete Swipe', 'char.machete', 'ability');
       machete.icon.classList.add('rot');
@@ -451,11 +459,14 @@ export class Hud {
       if (span.textContent !== label) span.textContent = label;
       if (hunter) {
         const Hh = BALANCE.hunter.health;
-        const slow = Math.round((1 - hunterHealthMul(self.hp, self.downs)) * 100);
+        const slow = (1 - hunterHealthMul(self.hp, self.downs)) * 100;
+        const charge = self.hemp === 0 ? 0 : self.hemp === 2 ? 1 : self.hempLeft / BALANCE.hunter.hemp.duration;
+        const regen = hempRegenMul(charge);
         status =
           `<div class="who hunter">ZACH BRANCH${self.carrying ? ` <span>carrying ${esc(m.players.get(self.carrying)?.name ?? '')}</span>` : ''}</div>` +
           `<div class="zach-hp"><div style="width:${(self.hp * 100).toFixed(1)}%"></div><span>${Math.ceil(self.hp * Hh.max)} / ${Hh.max}</span></div>` +
-          (slow > 0 && self.health !== Health.Downed ? `<div class="dim">${slow}% slower${self.downs ? ` (${Math.min(Hh.downPenaltyMax * 100, self.downs * Hh.downPenalty * 100)}% for good)` : ''}</div>` : '') +
+          (self.health !== Health.Downed ? `<div class="dim">Speed -${slow.toFixed(2)}% from health${self.downs ? ` (${Math.min(Hh.downPenaltyMax * 100, self.downs * Hh.downPenalty * 100)}% for good)` : ''}</div>` : '') +
+          (self.hemp > 0 ? `<div class="ok">Recovery x${regen.toFixed(4)} (hemp ${(charge * 100).toFixed(2)}%)</div>` : '') +
           (self.health === Health.Downed ? `<div class="warn">DOWN: getting back up...</div>` : '') +
           (self.pump > 0 ? `<div class="gold">GOLDEN PUMP ${test ? '∞' : `${self.pump} shots`}</div>` : '') +
           (self.stunT > 0 ? `<div class="warn">STUNNED ${self.stunT.toFixed(1)}s</div>` : '') +

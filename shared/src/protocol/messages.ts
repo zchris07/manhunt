@@ -155,6 +155,8 @@ export type ClientMessage =
   | { t: 'view'; r: number }
   /** Testing mode: play a stun or flash effect on yourself. */
   | { t: 'testFx'; fx: TestFx }
+  /** Testing mode: bring every slain or departed NPC back. */
+  | { t: 'respawnNpcs' }
   /** Reorder the inventory: swap two slots. */
   | { t: 'moveSlot'; from: number; to: number }
   /** Dev/test commands; only honoured by a host started in dev mode (?dev=1). */
@@ -260,6 +262,8 @@ export function parseClientMessage(v: unknown): ClientMessage | null {
       return isNum(v.r, 0, 10000) ? { t: 'view', r: v.r } : null;
     case 'testFx':
       return typeof v.fx === 'string' && (TEST_FX as readonly string[]).includes(v.fx) ? { t: 'testFx', fx: v.fx as TestFx } : null;
+    case 'respawnNpcs':
+      return { t: 'respawnNpcs' };
     case 'moveSlot':
       return isInt(v.from, 0, 7) && isInt(v.to, 0, 7) ? { t: 'moveSlot', from: v.from, to: v.to } : null;
     case 'teleport':

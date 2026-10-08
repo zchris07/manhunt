@@ -138,10 +138,10 @@ describe("Zach's 100 hp", () => {
 
   it('every 25% of the bar gone is 10% slower, walking and sprinting', () => {
     expect(hunterHealthMul(1, 0)).toBe(1);
-    expect(hunterHealthMul(0.8, 0)).toBe(1);
+    expect(hunterHealthMul(0.8, 0)).toBeCloseTo(0.92, 5);
     expect(hunterHealthMul(0.75, 0)).toBeCloseTo(0.9, 5);
-    expect(hunterHealthMul(0.4, 0)).toBeCloseTo(0.8, 5);
-    expect(hunterHealthMul(0.2, 2)).toBeCloseTo(0.6, 5);
+    expect(hunterHealthMul(0.4, 0)).toBeCloseTo(0.76, 5);
+    expect(hunterHealthMul(0.2, 2)).toBeCloseTo(0.58, 5);
     const { d, h } = arena(200);
     const walk = (): number => {
       const x0 = h.move.x;

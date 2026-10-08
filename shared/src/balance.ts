@@ -204,7 +204,7 @@ export const BALANCE = {
      * Hemp Battery (Q, toggled; part of his kit): `duration` s of use, `recover` s to refill from
      * empty, and drained dry it can't be used for `lockout` s. The zoom is `zoomRate` times as fast as 1 s.
      */
-    hemp: { sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
+    hemp: { regenBoost: 0.1, sprintDrainMul: 0.8, sprintRefillMul: 1.2, duration: 10, recover: 40, lockout: 5, zoomOut: 1.2, speedMul: 1.1, zoomRate: 1.5, grace: 0.3 },
     /**
      * Hemp Beam (R, from slaying Sexton Science): `charges` single-use charges, each channelled
      * for as long as Sexton's own beam (after its charge-up), then `cooldown` s before the next. No melee while it charges or fires.
@@ -768,8 +768,14 @@ export function hunterStakeMul(stakes: number): number {
 
 export function hunterHealthMul(hp: number, downs: number): number {
   const Hh = BALANCE.hunter.health;
-  const steps = Math.floor((1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep + 1e-6);
-  return Math.max(0.1, 1 - steps * Hh.speedPerStep - Math.min(Hh.downPenaltyMax, downs * Hh.downPenalty));
+  // Continuous: every point of health lost costs speed in proportion (10% per 25% of the bar).
+  const lost = (1 - Math.max(0, Math.min(1, hp))) / Hh.speedStep;
+  return Math.max(0.1, 1 - lost * Hh.speedPerStep - Math.min(Hh.downPenaltyMax, downs * Hh.downPenalty));
+}
+
+/** Health recovery multiplier from the Hemp Battery: +`regenBoost` x the fraction of its charge left. */
+export function hempRegenMul(charge: number): number {
+  return 1 + BALANCE.hunter.hemp.regenBoost * Math.max(0, Math.min(1, charge));
 }
 
 /**

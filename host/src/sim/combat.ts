@@ -1,6 +1,12 @@
-import { Action, BALANCE, BarricadeState, Btn, DEG, Health, angleDiff, closestOnSeg, pointSegDist2, resolveOverlaps } from '@manhunt/shared';
+import { Action, BALANCE, BarricadeState, Btn, DEG, Health, angleDiff, closestOnSeg, hempRegenMul, pointSegDist2, resolveOverlaps } from '@manhunt/shared';
 import { HISTORY_TICKS, type SimPlayer } from './player';
 import { eliminate, type World } from './World';
+
+/** Zach's health recovery from the Hemp Battery: scaled by the charge he has left, on or off. */
+function hempRegen(p: SimPlayer): number {
+  if (p.hemp === 0) return 1;
+  return hempRegenMul(p.hemp === 2 ? 1 : p.hempLeft / BALANCE.hunter.hemp.duration);
+}
 
 const H = BALANCE.hunter;
 
@@ -409,7 +415,7 @@ export function updateCombat(w: World, dt: number): void {
           w.feed(`${p.name} got back up`);
         }
       } else if (p.health !== Health.Eliminated) {
-        p.hp = Math.min(1, p.hp + (dt / H.health.regenTime) * (1 + H.stakeRegen * p.stakeBuff) * (p.njaaronRegen ? BALANCE.njaaron.regenMul : 1));
+        p.hp = Math.min(1, p.hp + (dt / H.health.regenTime) * (1 + H.stakeRegen * p.stakeBuff) * (p.njaaronRegen ? BALANCE.njaaron.regenMul : 1) * hempRegen(p));
       }
       if (p.chargeT >= 0) {
         const C = H.attack.charge;

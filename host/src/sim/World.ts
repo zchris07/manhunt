@@ -186,18 +186,18 @@ export class World {
   /** Per hunter: scent trail ids already sent. */
   readonly trailSent = new Map<number, Set<number>>();
   hempDrop: { id: number; x: number; y: number } | null = null;
-  readonly sexton: Sexton;
-  readonly shane: Shane;
-  readonly jaden: Jaden;
-  readonly chris: Chris;
-  readonly marc: Marc;
-  readonly plasma: Plasma;
-  readonly waz: Waz;
-  readonly chacko: Chacko;
-  readonly njaaron: Njaaron;
-  readonly monique: Monique;
-  readonly thomas: Thomas;
-  readonly soham: Soham;
+  sexton: Sexton;
+  shane: Shane;
+  jaden: Jaden;
+  chris: Chris;
+  marc: Marc;
+  plasma: Plasma;
+  waz: Waz;
+  chacko: Chacko;
+  njaaron: Njaaron;
+  monique: Monique;
+  thomas: Thomas;
+  soham: Soham;
   /** Seconds left of a JARVIS reveal: everyone sees everything on screen. */
   revealT = 0;
   events: OutEvent[] = [];
@@ -251,6 +251,25 @@ export class World {
     this.monique = new Monique(this);
     this.thomas = new Thomas(this);
     this.soham = new Soham(this);
+  }
+
+  /** Testing mode: every townsperson comes back (new, unhurt, at their spawn points). */
+  respawnNpcs(): void {
+    this.sexton = new Sexton(this);
+    this.shane = new Shane(this);
+    this.jaden = new Jaden(this);
+    this.chris = new Chris(this);
+    this.marc = new Marc(this);
+    this.plasma = new Plasma(this);
+    this.waz = new Waz(this);
+    this.chacko = new Chacko(this);
+    this.njaaron = new Njaaron(this);
+    this.monique = new Monique(this);
+    this.thomas = new Thomas(this);
+    this.soham = new Soham(this);
+    this.vengeance = 0;
+    this.vengeanceT = 0;
+    this.hempDrop = null;
   }
 
   get geo() {
